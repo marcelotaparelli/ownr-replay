@@ -1,8 +1,22 @@
-# Repo Replay — engineering principles
+# OWNR — product vision and engineering principles
 
-Product goal: give a developer technical ownership of an existing repository as fast as possible. Every change must answer "which real problem does this solve?" — if the answer is vague, don't do it.
+OWNR (formerly "Repo Replay") helps developers acquire **verified technical ownership** of unfamiliar code. Current wedge: codebase ownership. Product goal today: the shortest path from "I don't know this" to "I understand it, can rebuild it, can navigate it and can safely change it". Every change must answer "which real problem does this solve?" — if the answer is vague, don't do it.
 
 Philosophy (Arch-inspired): simple, minimal, explicit, performant, secure, observable, reliable, understandable. Minimal = the least code, dependencies, abstractions and infrastructure needed for a *robust* solution — not improvised code.
+
+## Product vision (reference for decisions — NOT a build list)
+Internal statement: *OWNR is the engineering cockpit for the agentic software era. It helps developers acquire verified technical ownership of unfamiliar code today, and evolves toward an environment where humans direct software agents inside measurable constraints for architecture, security, reliability, performance, testing and observability.* Taglines: "Own the code. Direct the agents." · "From generated code to owned software." Thesis: AI made producing code cheaper; OWNR makes owning software cheaper.
+
+- **Pilot analogy**: the developer sets destination, trajectory and limits and monitors instruments; automation (agents) executes; the human stays responsible — understands, decides, detects anomalies, intervenes. Progressive disclosure: normal → essential, warning → attention, critical → intervention; overview → module → function → line on demand.
+- **Engineering flight envelope** (future): agents work inside verifiable constraints — architecture (dependency direction, module boundaries), clean-code signals, tests, security, performance budgets, reliability (timeouts, retries, idempotency), observability as the aircraft's instruments, resource limits. Distinguish HARD constraints (MUST NOT expose secrets) from GUIDELINES (prefer short functions); never become an architectural prison.
+- **Deterministic envelope around probabilistic agents**: schemas, types, tests, rules, metrics, limits, sandboxes, human checkpoints. **The agent that implements does not decide it succeeded**: independent verifiers do. **Evidence-driven**: claims come with evidence (p95 = 34 ms, not "fast"; unit ✓ integration ✓, not "works"). **Flight recorder**: goal, agent, context, changes, decisions, checks, approvals — auditability and accountability.
+- **Ownership proof ladder**: UNDERSTAND → REBUILD → NAVIGATE (find it in the real system) → CHANGE (a **novel** requirement never seen before, e.g. "tickets with 'data leak' get strong SECURITY evidence" — evidence of transfer, not repetition).
+- **Planning is goal-directed**: `plan(repository, goal, existingKnowledge)` → the minimal cognitive route (a route, not a course). Two graphs: a Software Graph (calls, implements, imports, reads, writes…) and a **Knowledge Graph** (what must be understood before X). Future inputs include bugs, issues and PR reviews, not only "learn everything".
+- **Real assets**: the pedagogical compiler, knowledge graph, ownership graph, verifiable engineering constraints, evidence graph, learning telemetry. Chat/LLM/RAG are commodities.
+- **North Star: Time To Verified Ownership** — not lines generated, prompts, time spent or lessons completed.
+- Future autonomy levels (1 agent suggests … 5 routine autonomous maintenance) must remain possible; nothing today should block that path.
+
+**Current priority (in order)**: 1) make Module 1 pedagogically excellent; 2) validate with a real human; 3) convert more modules; 4) test different goals; 5) test external users; 6) only then automate Analyzer/Planner. **Not now**: agent runtime, enterprise policies, SAST platform, Kubernetes, CI platform, complex observability platform, organization management, agent orchestration. Meta-rule: OWNR's own code must demonstrate ownership, simplicity, constraints and evidence.
 
 ## Stack
 Bun + TypeScript strict, `Bun.serve`, `bun:sqlite`, `bun:test`, Web APIs, HTML + CSS + vanilla TS (bundled with `Bun.build`), Docker only for real isolation. Before adding a dependency: does Bun/TS/the Web Platform already solve it? A dependency must buy complexity reduction, security, reliability, maintainability, performance or interoperability. Runtime deps today: `zod` (boundary validation) and `typescript` (its native `tsc`, used only to verify stages that teach types).
@@ -49,13 +63,14 @@ security → correctness → simplicity → clarity → testability → performa
 - `bunx tsc --noEmit` — typecheck
 - `bun run size` — frontend bundle size (gzip)
 
-## Pedagogy (Repo Replay's core algorithm)
+## Pedagogy (OWNR's core algorithm)
 - Before any stage ask: "what is the smallest problem I must teach NOW so that, after several trivial evolutions, the learner arrives naturally at this part of the repo?" If it can be decomposed further without losing meaning, decompose.
 - Micro stage = ONE new idea (two only if inseparable), understandable in 30 s–2 min, born from the previous stage's perceptible limitation: problem → minimal solution (green = ONLY the real line delta from the previous step) → understand → evolve the learner's OWN code (the task says WHAT, never HOW) → tests → next limitation.
 - **Cumulative workspace**: a module's micro stages evolve one program. Stage N starts from the learner's accepted code of stage N−1 (never silently replaced by the reference; if they skipped, the reference is used and the UI says so). The first micro stage and every module checkpoint start from an empty editor; the checkpoint rebuilds everything, then compares yours ↔ replay ↔ real code.
 - **Novelty budget**: prefer 1 concept + 1–5 relevant new lines per micro stage; more than 10 fails validation unless `noveltyException` justifies it — the answer is usually "decompose again".
 - **Everything shown as correct code is executably correct**: solutions pass their tests (and tsc when types are taught), examples are executed, toolbox/explanation snippets type-check, shown code equals validated code, no HTML entities. Enforced by `bun test`, never by manual review.
-- Journeys are planned from `repository + learning goal` (`PlanRequest`); "learn everything" is one goal among several.
+- Journeys are planned from `repository + learning goal` (`PlanRequest`; conceptually also existing knowledge); "learn everything" is one goal among several. The output is a route to verified ownership, not a course.
+- Terminology: "Replay" names the simplified pedagogical version of real code (Replay ↔ Real Code); the product is OWNR.
 - **Progressive scaffolding**: complexity not yet taught may be hidden (auto `import`/`export`, previously rebuilt code as read-only support files, non-strict typechecking), but must be explicitly handed back to the learner — and rebuilt by them — when it becomes the concept being taught (e.g. modules/imports once modularization appears).
 - When a concept is verifiable, verify it for real (e.g. stages teaching types run the actual TypeScript checker via `exercise.typecheck`).
 - The tutor answers at the learner's current level; skipping (a step or a whole module) is always one click.

@@ -134,7 +134,7 @@ async function showStage(journey: JourneyOutline, store: ProgressStore, order: n
   renderNav(nav, journey, store, stage.id);
   tutor.setStage(stage, suggestionsFor(journey, stage));
   renderToolbox(toolboxRoot, stage.toolbox, (question) => tutor.ask(question));
-  document.title = `${stage.title} · Repo Replay`;
+  document.title = `${stage.title} · OWNR`;
 
   // Next stage is one click away: fetch it now so navigation feels instant.
   const next = journey.stages.find((s) => s.order === order + 1);
@@ -208,7 +208,7 @@ function idleSidebar(): void {
 
 function setCrumb(journey: JourneyOutline, tail?: string): void {
   crumb.replaceChildren(h("a", { href: `#/j/${journey.id}` }, journey.title), tail ? ` / ${tail}` : "");
-  document.title = tail ? `${tail} · Repo Replay` : `${journey.title} · Repo Replay`;
+  document.title = tail ? `${tail} · OWNR` : `${journey.title} · OWNR`;
 }
 
 type Stopwatch = { elapsed(): number; stop(): void };

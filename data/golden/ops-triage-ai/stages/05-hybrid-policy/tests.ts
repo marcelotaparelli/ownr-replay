@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { ClassifierTimeoutError } from "./classifier-errors.ts";
 import { HybridPolicy } from "./hybrid-policy.ts";
 import { DecisionSource, HumanReviewReason } from "./triage-decision.ts";

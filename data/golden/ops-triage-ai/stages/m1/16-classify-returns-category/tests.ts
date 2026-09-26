@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { Category, classify } from "./classify.ts";
 
 test("classify devolve membros de Category", () => {

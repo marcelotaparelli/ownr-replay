@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { ClassifierInvalidResponseError, ClassifierTimeoutError, ClassifierUnavailableError } from "./classifier-errors.ts";
 import { handleTriage, type TriageService } from "./http.ts";
 import { parseTicketInput } from "./triage-request.ts";

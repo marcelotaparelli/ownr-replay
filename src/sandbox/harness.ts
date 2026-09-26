@@ -1,6 +1,6 @@
 /**
  * Minimal test runtime shared by every runner (browser worker, Docker image,
- * curriculum validator). Stage tests import it as `replay:test`.
+ * curriculum validator). Stage tests import it as `ownr:test`.
  * No dependencies: it must run in a Web Worker and in a bare Bun container.
  */
 

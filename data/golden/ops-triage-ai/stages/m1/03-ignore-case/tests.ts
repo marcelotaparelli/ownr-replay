@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { classify } from "./classify.ts";
 
 test('"Production DOWN" → INCIDENT', () => expect(classify("Production DOWN")).toBe("INCIDENT"));

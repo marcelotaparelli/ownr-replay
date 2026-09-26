@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { ClassifierTimeoutError } from "./classifier-errors.ts";
 import { InMemoryTriageRuns } from "./in-memory-runs.ts";
 import { PersistedTriageService, type TriageUseCase } from "./persisted-triage-service.ts";

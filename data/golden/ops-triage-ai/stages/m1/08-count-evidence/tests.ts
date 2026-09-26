@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { scoreCategory } from "./classify.ts";
 
 test("duas pistas de ACCESS", () => expect(scoreCategory("ACCESS", "cannot login after password reset")).toBe(2));

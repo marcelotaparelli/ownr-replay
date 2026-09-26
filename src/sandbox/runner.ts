@@ -23,4 +23,4 @@ export interface SandboxRunner {
 }
 
 /** Specifier stage tests use to reach the shared harness. */
-export const HARNESS_SPECIFIER = "replay:test";
+export const HARNESS_SPECIFIER = "ownr:test";

@@ -220,7 +220,7 @@ const P16 = join2(ENUM, RULES_REGEX, SCORE_REGEX, TIE_BREAK_ENUM, best("TIE_BREA
 const P17 = join2(ENUM, RULES_ENUM, SCORE_REGEX, TIE_BREAK_ENUM, best("TIE_BREAK", "Category", "Category.OTHER"));
 
 // ---------- tests ----------
-const T = (names: string, body: string) => `import { test, expect } from "replay:test";\nimport { ${names} } from "./${FILE}";\n\n${body.trim()}\n`;
+const T = (names: string, body: string) => `import { test, expect } from "ownr:test";\nimport { ${names} } from "./${FILE}";\n\n${body.trim()}\n`;
 const TICKETS = `const t = (title: string, description = "") => classify({ title, description });\n`;
 
 // ---------- architecture snapshots (only what has been learned) ----------

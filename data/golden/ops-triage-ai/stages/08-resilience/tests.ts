@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { Metrics, logLine, metricKey } from "./observability.ts";
 import { ConcurrencyLimiter, withTimeout } from "./resilience.ts";
 

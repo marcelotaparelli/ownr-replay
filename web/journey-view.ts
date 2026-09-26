@@ -94,7 +94,7 @@ export function renderOverview(journey: JourneyOutline, store: ProgressStore): H
   return h(
     "article",
     { class: "overview" },
-    h("p", { class: "eyebrow" }, "Repo Replay"),
+    h("p", { class: "eyebrow" }, "OWNR"),
     h("h1", {}, journey.title),
     h("p", { class: "subtitle" }, journey.description),
     h("p", { class: "muted" },
@@ -282,8 +282,9 @@ export function renderHome(journeys: JourneyCard[], resume: { journey: JourneyCa
   return h(
     "article",
     { class: "home" },
-    h("h1", {}, "Repo Replay"),
-    h("p", { class: "subtitle" }, "Entenda um repositório real reconstruindo-o em passos pequenos."),
+    h("h1", {}, "OWNR"),
+    h("p", { class: "subtitle" }, "Propriedade técnica sobre código que você não conhece: o menor caminho até entender, reconstruir e mudar com segurança."),
+    h("p", { class: "muted tagline" }, "Own the code. Direct the agents."),
     resume
       ? h("aside", { class: "resume" }, h("p", {}, "Continuar ", h("strong", {}, resume.journey.title), ` — ${resume.label}`), h("a", { class: "btn primary", href: `#/j/${resume.journey.id}` }, "Continuar"))
       : null,

@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { ClassifierInvalidResponseError, ClassifierTimeoutError, ClassifierUnavailableError } from "./classifier-errors.ts";
 import { LlmTriageClassifier, type HttpFetch } from "./llm-triage-classifier.ts";
 import { Category, Priority, Risk, SuggestedTeam } from "./triage.ts";

@@ -103,7 +103,7 @@ for (const journey of journeys) {
           const body = stage.examples
             .map((ex, i) => `test(${JSON.stringify(`exemplo ${i + 1}: ${ex.expr}`)}, () => expect(${ex.expr}).toEqual(${ex.equals}));`)
             .join("\n");
-          const testFile = { path: "examples.ts", content: `import { test, expect } from "replay:test";\nimport { ${names.join(", ")} } from "./${main.path}";\n${body}\n` };
+          const testFile = { path: "examples.ts", content: `import { test, expect } from "ownr:test";\nimport { ${names.join(", ")} } from "./${main.path}";\n${body}\n` };
           const result = await executeModules(await prepareModules(completed, testFile));
           expect(result.tests.filter((t) => !t.passed)).toEqual([]);
           expect(result.tests.length).toBe(stage.examples.length);

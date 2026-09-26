@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { Category, type TicketInput } from "./triage.ts";
 import type { TriageClassifier } from "./triage-classifier.ts";
 import { DeterministicTriageClassifier } from "./deterministic-triage-classifier.ts";

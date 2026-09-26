@@ -349,3 +349,4 @@ pre.snippet { font: 12.5px/1.6 var(--mono); background: var(--code-bg); border: 
 .requirements { margin: 4px 0 0; padding-left: 18px; font-size: 14px; }
 .requirements li { margin: 2px 0; }
 .diagnostic summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.tagline { margin-top: 2px; font-size: 13px; letter-spacing: 0.02em; }

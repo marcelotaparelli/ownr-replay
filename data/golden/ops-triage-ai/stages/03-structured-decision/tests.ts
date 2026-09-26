@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { Category, Priority, Risk, SuggestedTeam, type ClassifierResult } from "./triage.ts";
 import { suggestedTeamForCategory } from "./suggested-team.ts";
 import { DecisionSource, HumanReviewReason, decideSingle } from "./triage-decision.ts";

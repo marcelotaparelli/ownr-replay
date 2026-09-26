@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { classify } from "./classify.ts";
 
 test('"down" na descrição → INCIDENT', () => expect(classify({ title: "Checkout", description: "the site is down" })).toBe("INCIDENT"));

@@ -37,7 +37,7 @@ export function systemPrompt(context: TutorContext): string {
     .map((s) => `- ${s.order}. "${s.title}": ${s.summary ? `adicionou ${s.summary.added.join(", ")} — ${s.summary.why}` : s.goal}`)
     .join("\n");
 
-  return `Você é o tutor do Repo Replay. O desenvolvedor está reconstruindo o repositório ${journey.repo.owner}/${journey.repo.name} etapa por etapa para adquirir propriedade técnica sobre ele.
+  return `Você é o tutor do OWNR. O desenvolvedor está adquirindo propriedade técnica (technical ownership) sobre o repositório ${journey.repo.owner}/${journey.repo.name}, reconstruindo-o etapa por etapa.
 
 Regras:
 - Responda em português, curto e direto (em geral 2 a 6 frases; código só se ajudar).

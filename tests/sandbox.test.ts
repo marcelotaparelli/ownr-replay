@@ -5,7 +5,7 @@ import { createHarness } from "../src/sandbox/harness.ts";
 import { ModuleError, prepareExercise, prepareModules } from "../src/sandbox/modules.ts";
 import { golden } from "./helpers.ts";
 
-const tests = (body: string) => ({ path: "tests.ts", content: `import { test, expect } from "replay:test";\nimport { value } from "./a.ts";\n${body}` });
+const tests = (body: string) => ({ path: "tests.ts", content: `import { test, expect } from "ownr:test";\nimport { value } from "./a.ts";\n${body}` });
 
 async function rejection(promise: Promise<unknown>): Promise<ModuleError> {
   try {
@@ -22,7 +22,7 @@ describe("prepareModules", () => {
     // Regression: separate blob: modules importing each other fail in Firefox module workers.
     const set = await prepareModules([{ path: "a.ts", content: "export const value: number = 1;" }], tests(`test("v", () => expect(value).toBe(1));`));
     expect(set.code).not.toMatch(/^\s*(import|export)\b/m);
-    expect(set.code).not.toContain("replay:test");
+    expect(set.code).not.toContain("ownr:test");
     expect((await executeModules(set)).tests).toEqual([{ name: "v", passed: true }]);
   });
 

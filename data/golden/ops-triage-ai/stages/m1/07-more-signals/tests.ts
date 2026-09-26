@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { classify, RULES } from "./classify.ts";
 
 const t = (title: string, description = "") => classify({ title, description });

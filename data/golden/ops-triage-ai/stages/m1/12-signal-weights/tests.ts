@@ -1,4 +1,4 @@
-import { test, expect } from "replay:test";
+import { test, expect } from "ownr:test";
 import { scoreCategory } from "./classify.ts";
 
 test("pista fraca no título: 1 × 2", () => expect(scoreCategory("BUG", "error", "")).toBe(2));

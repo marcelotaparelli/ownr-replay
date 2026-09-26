@@ -1,6 +1,12 @@
-# Repo Replay
+# OWNR
 
-Transforma um repositório real em uma reconstrução pedagógica incremental, para dar **propriedade técnica** a um desenvolvedor o mais rápido possível. Golden sample: [`marcelotaparelli/ops-triage-ai`](https://github.com/marcelotaparelli/ops-triage-ai) @ `840b2bf`, em 8 stages.
+**Own the code. Direct the agents.**
+
+> AI made producing code cheaper. OWNR makes owning software cheaper.
+
+OWNR é o cockpit de engenharia para a era de software feito com agentes. Hoje: dar a um desenvolvedor **propriedade técnica verificada** sobre código que ele não conhece, pelo menor caminho cognitivo — entender, reconstruir, navegar no código real e mudá-lo com segurança. Visão: um ambiente em que humanos dirigem agentes dentro de restrições mensuráveis de arquitetura, segurança, confiabilidade, performance, testes e observabilidade (ver `CLAUDE.md` → Product vision).
+
+Estágio atual: **ownership learning engine** sobre um golden sample curado — [`marcelotaparelli/ops-triage-ai`](https://github.com/marcelotaparelli/ops-triage-ai) @ `840b2bf`. Module 1 está decomposto em micro etapas; os módulos 2–8 ainda são capítulos.
 
 ```bash
 bun install
@@ -34,11 +40,11 @@ Tudo que aparece como código correto é validado por `bun test`: soluções pas
 
 - Module 1 é gerado por `scripts/author-golden-m1.ts` (edite lá e rode `bun scripts/author-golden-m1.ts`).
 - Os módulos 2–8 ainda são capítulos não decompostos (`kind: "chapter"`, com starter).
-- Layout de uma stage: `stage.json`, `reference/` (solução mostrada), `given/` (arquivos fornecidos), `tests.ts` (importa `replay:test`); capítulos também têm `starter/`. `bun test` recusa a jornada se uma solução não passar, se o ponto de partida já passar, se uma micro etapa tiver starter ou não nomear sua limitação.
+- Layout de uma stage: `stage.json`, `reference/` (solução mostrada), `given/` (arquivos fornecidos), `tests.ts` (importa `ownr:test`); capítulos também têm `starter/`. `bun test` recusa a jornada se uma solução não passar, se o ponto de partida já passar, se uma micro etapa tiver starter ou não nomear sua limitação.
 
 ## Execução de código
 
 - `RUNNER=browser` (padrão): o servidor só *transpila* (sem executar) e o código roda num Web Worker descartável no navegador do próprio aluno, com timeout. **Não é uma fronteira de segurança** — é o runner de desenvolvimento.
 - `RUNNER=docker`: `DockerSandboxRunner` executa em container efêmero sem rede, com CPU/RAM/PIDs limitados, FS read-only e tmpfs. Imagem: `docker build -f sandbox-images/typescript/Dockerfile -t repo-replay-sandbox-ts:latest .` — **ainda não verificado** (sem Docker no ambiente de desenvolvimento).
 
-Princípios de engenharia: ver `CLAUDE.md`.
+Visão do produto, princípios pedagógicos e de engenharia: ver `CLAUDE.md`.
