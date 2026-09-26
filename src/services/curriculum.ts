@@ -231,11 +231,39 @@ function continueMicroStages(stages: Stage[]): Stage[] {
   });
 }
 
-const HTML_ENTITY = /&(?:#x?[0-9a-f]+|[a-z]+);/i;
+const HTML_ENTITY = /&(?:#x?[0-9a-f]+|[a-z][a-z0-9]*);/i;
+
+/**
+ * Every string of pedagogical content, with its location. Content is plain Unicode; HTML
+ * escaping belongs to rendering only. The one exception is the verbatim excerpt of the
+ * real repository (third-party code, shown exactly as it is).
+ */
+function* contentStrings(value: unknown, path: string): Generator<[string, string]> {
+  if (typeof value === "string") {
+    yield [path, value];
+  } else if (Array.isArray(value)) {
+    for (const [i, item] of value.entries()) yield* contentStrings(item, `${path}[${i}]`);
+  } else if (typeof value === "object" && value !== null) {
+    for (const [key, item] of Object.entries(value)) {
+      if (key === "snippet" || key === "url") continue;
+      yield* contentStrings(item, path ? `${path}.${key}` : key);
+    }
+  }
+}
+
+export function entityProblems(where: string, value: unknown): string[] {
+  const problems: string[] = [];
+  for (const [path, text] of contentStrings(value, "")) {
+    const entity = HTML_ENTITY.exec(text)?.[0];
+    if (entity) problems.push(`${where}: HTML entity "${entity}" in ${path}`);
+  }
+  return problems;
+}
 
 /** Cross-stage invariants the schema alone cannot express. */
 export function validateJourney(journey: Journey): string[] {
   const problems: string[] = [];
+  problems.push(...entityProblems(journey.id, { title: journey.title, description: journey.description, concepts: journey.concepts, modules: journey.modules }));
   const conceptIds = new Set(journey.concepts.map((concept) => concept.id));
   const introducedAt = new Map<string, number>();
 
@@ -273,11 +301,8 @@ export function validateJourney(journey: Journey): string[] {
         if (solution.get(file.path) !== file.content) problems.push(`${where}: shown code ${file.path} differs from the validated solution`);
       }
     }
-    // Code on screen must look like code: serialized HTML never belongs in content.
-    const texts = [stage.title, stage.problem, stage.goal, stage.limitation ?? "", ...stage.requirements, ...stage.referenceCode.map((f) => f.content),
-      ...stage.explanation.flatMap((b) => [b.quick, b.normal ?? "", b.deep ?? ""]), ...stage.toolbox.flatMap((t) => [t.example, t.summary]),
-      ...stage.examples.flatMap((e) => [e.expr, e.equals]), ...stage.lineNotes.map((n) => n.note)];
-    if (texts.some((text) => HTML_ENTITY.test(text))) problems.push(`${where}: content contains an HTML entity`);
+    // Text and code must be plain Unicode in every field, in every kind of stage.
+    problems.push(...entityProblems(where, stage));
     if (stage.kind === "micro" && !stage.limitation && stage.order < journey.stages.length) {
       problems.push(`${where}: micro stages must name the limitation that motivates the next step`);
     }

@@ -330,11 +330,11 @@ pre.snippet { font: 12.5px/1.6 var(--mono); background: var(--code-bg); border: 
 .goal-form input[type="url"], .goal-form input[type="text"], .goal-form select, .goal-form textarea { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); width: 100%; }
 .goal-form fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
 .goal-form legend { margin-bottom: 6px; }
-.goal { display: grid; grid-template-columns: 20px 1fr; gap: 8px; align-items: start; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); cursor: pointer; }
-.goal:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-.goal input { margin-top: 4px; }
-.goal strong { display: block; font-size: 14.5px; }
-.goal .muted { font-size: 13px; }
+.goal-option { display: grid; grid-template-columns: 20px 1fr; gap: 8px; align-items: start; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); cursor: pointer; }
+.goal-option:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.goal-option input { margin-top: 4px; }
+.goal-option strong { display: block; font-size: 14.5px; }
+.goal-option .muted { font-size: 13px; }
 .goal-form .btn.primary { justify-self: start; }
 .goal-message:empty { display: none; }
 .goal-message { border-radius: var(--radius); background: var(--warn-soft); padding: 10px 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }

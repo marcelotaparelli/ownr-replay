@@ -230,7 +230,7 @@ export function renderHome(journeys: JourneyCard[], resume: { journey: JourneyCa
   const options = GOALS.map((goal, index) =>
     h(
       "label",
-      { class: "goal" },
+      { class: "goal-option" },
       h("input", { type: "radio", name: "goal", value: goal.kind, checked: index === 0 }),
       h("span", {}, h("strong", {}, goal.title), h("span", { class: "muted" }, goal.hint)),
     ),
