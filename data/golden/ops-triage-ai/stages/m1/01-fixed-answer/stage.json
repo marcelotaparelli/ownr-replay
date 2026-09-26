@@ -4,7 +4,12 @@
   "subtitle": "Entra um texto, sai uma categoria",
   "goal": "Ter uma função que recebe o texto de um ticket e devolve uma categoria.",
   "problem": "Queremos classificar o ticket **\"production down\"** como **INCIDENT**.\n\nQual é o programa mais simples possível que faz isso?",
-  "example": "classify(\"production down\")\n→ \"INCIDENT\"",
+  "examples": [
+    {
+      "expr": "classify(\"production down\")",
+      "equals": "\"INCIDENT\""
+    }
+  ],
   "estimatedMinutes": 1,
   "introduces": [
     "function-io"
@@ -82,15 +87,15 @@
     {
       "id": "function",
       "name": "function",
-      "signature": "function nome(param) { ... }",
-      "summary": "Declara uma função: recebe parâmetros, devolve um valor com return.",
-      "example": "function double(n: number): number {\n  return n * 2;\n}"
+      "signature": "function nome(param: Tipo): Tipo { ... }",
+      "summary": "Declara uma função: recebe parâmetros e devolve um valor com return.",
+      "example": "function double(n: number): number {\n  return n * 2;\n}\n\ndouble(21); // 42"
     },
     {
       "id": "return",
       "name": "return",
-      "summary": "Encerra a função e devolve o valor.",
-      "example": "return \"pronto\";"
+      "summary": "Dentro de uma função: encerra e devolve o valor.",
+      "example": "function greet(name: string): string {\n  return \"oi \" + name;\n}"
     }
   ],
   "limitation": "Mas agora **\"lunch menu\"** também vira INCIDENT."

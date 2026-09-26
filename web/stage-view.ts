@@ -1,15 +1,16 @@
 import type { JourneyOutline, StageOutline } from "../src/domain/journey.ts";
 import type { RunResult } from "../src/domain/progress.ts";
-import type { CodeFile, Concept, ExplanationBlock, Module, OriginalCodeReference } from "../src/domain/stage.ts";
+import type { CodeFile, Concept, ExplanationBlock, IoExample, Module, OriginalCodeReference } from "../src/domain/stage.ts";
 import type { TutorSelection } from "../src/domain/tutor.ts";
 import { api, type StageDetail } from "./api.ts";
 import { architectureView } from "./arch.ts";
-import { addedLines, codeView, selectionFromCodeView } from "./code-view.ts";
+import { addedLines } from "../src/domain/line-diff.ts";
+import { codeView, selectionFromCodeView } from "./code-view.ts";
 import { h } from "./dom.ts";
 import { createEditor, type Editor } from "./editor.ts";
 import { md } from "./md.ts";
 import { runExercise } from "./runner.ts";
-import { drafts, reportSyncFailure, type ProgressStore } from "./store.ts";
+import { acceptedCode, drafts, reportSyncFailure, type ProgressStore } from "./store.ts";
 
 export type StageActions = {
   complete(): void;
@@ -57,6 +58,7 @@ function renderMicro(deps: StageViewDeps): MountedStage {
       )
     : null;
   const exercise = buildExercise(deps, {
+    start: startingPoint(deps),
     onPass: () => {
       if (!limitation) return;
       limitation.hidden = false;
@@ -98,7 +100,7 @@ function renderMicro(deps: StageViewDeps): MountedStage {
     "article",
     { class: "stage micro", "aria-labelledby": "stage-title" },
     microHeader(deps),
-    section("problema", "Problema", h("div", { class: "problem", html: md(stage.problem) }), exampleBox(stage.example)),
+    section("problema", "Problema", h("div", { class: "problem", html: md(stage.problem) }), examplesBox(stage.examples)),
     study,
     rebuild ? startRebuild : null,
     rebuild,
@@ -127,22 +129,28 @@ function microHeader(deps: StageViewDeps): HTMLElement {
   );
 }
 
+/** The previous micro stage of the same module: the state this step changes. */
+function previousMicro({ stage, previous }: StageViewDeps): StageDetail | undefined {
+  return previous?.kind === "micro" && previous.moduleId === stage.moduleId ? previous : undefined;
+}
+
 function solution(deps: StageViewDeps): HTMLElement {
-  const { stage, previous } = deps;
-  const sameModule = previous?.moduleId === stage.moduleId ? previous : undefined;
+  const { stage } = deps;
+  const before = previousMicro(deps);
   const note = h("p", { class: "line-note", "aria-live": "polite" }, "Clique em uma linha para ver o que ela faz.");
   const tabs = stage.referenceCode.map((file) => ({
     label: file.path,
     render: () =>
       codeView(file.path, file.content, {
-        newLines: addedLines(sameModule?.referenceCode.find((f) => f.path === file.path)?.content ?? (sameModule ? "" : undefined), file.content),
+        // Green = the real delta from the previous step's solution (the first step is all new).
+        newLines: new Set(addedLines(before?.referenceCode.find((f) => f.path === file.path)?.content ?? "", file.content)),
         onLine: (line, text) => {
           const match = stage.lineNotes.find((n) => text.includes(n.match));
           note.innerHTML = match ? md(`**Linha ${line}.** ${match.note}`) : `Linha ${line}.`;
         },
       }),
   }));
-  return h("div", {}, fileTabs(tabs), note, sameModule ? h("p", { class: "muted legend" }, h("span", { class: "dot-new" }), " linhas novas nesta etapa") : null);
+  return h("div", {}, fileTabs(tabs), note, h("p", { class: "muted legend" }, h("span", { class: "dot-new" }), before ? " só o que mudou em relação à etapa anterior" : " o programa inteiro é novo nesta primeira etapa"));
 }
 
 function architectureIfChanged({ stage, previous }: StageViewDeps): HTMLElement | null {
@@ -155,8 +163,35 @@ function architectureIfChanged({ stage, previous }: StageViewDeps): HTMLElement 
   return unchanged ? null : architectureView(stage.architecture, before);
 }
 
-function exampleBox(example: string | undefined): HTMLElement | null {
-  return example ? h("div", { class: "example" }, h("p", { class: "eyebrow" }, "Exemplo"), h("pre", {}, example)) : null;
+/** Examples are executed against the solution by the curriculum validator: they are true by construction. */
+function examplesBox(examples: IoExample[]): HTMLElement | null {
+  if (examples.length === 0) return null;
+  const text = examples.map((e) => `${e.expr}\n→ ${e.equals}`).join("\n\n");
+  return h("div", { class: "example" }, h("p", { class: "eyebrow" }, examples.length > 1 ? "Exemplos" : "Exemplo"), h("pre", {}, text));
+}
+
+function requirementsBox(requirements: string[]): HTMLElement | null {
+  if (requirements.length === 0) return null;
+  return h("div", { class: "example" }, h("p", { class: "eyebrow" }, "Requisitos"), h("ul", { class: "requirements" }, ...requirements.map((r) => h("li", { html: md(r).replace(/^<p>|<\/p>$/g, "") }))));
+}
+
+type StartingPoint = { files: CodeFile[]; origin: "empty" | "own" | "reference"; referenceFiles?: CodeFile[] };
+
+/**
+ * Micro stages continue the learner's own program: the code they got accepted in the previous
+ * step. Only when there is none (the step was skipped) do we fall back to that step's
+ * reference solution — and say so, never silently.
+ */
+function startingPoint(deps: StageViewDeps): StartingPoint | undefined {
+  const exercise = deps.stage.exercise;
+  const before = previousMicro(deps);
+  if (!exercise || !before) return undefined;
+  const accepted = acceptedCode(before.id);
+  const own = exercise.starterFiles.map((f) => ({ path: f.path, content: accepted.load(f.path) }));
+  if (own.every((f) => f.content !== undefined)) {
+    return { files: own.map((f) => ({ path: f.path, content: f.content ?? "" })), origin: "own", referenceFiles: exercise.starterFiles };
+  }
+  return { files: exercise.starterFiles, origin: "reference" };
 }
 
 function isLastOfModule({ stage, moduleStages }: StageViewDeps): boolean {
@@ -188,7 +223,7 @@ function renderCheckpoint(deps: StageViewDeps): MountedStage {
       h("h1", { id: "stage-title" }, stage.title),
       stage.subtitle ? h("p", { class: "subtitle" }, stage.subtitle) : null,
     ),
-    section("problema", "Problema", h("div", { class: "problem", html: md(stage.problem) }), exampleBox(stage.example)),
+    section("problema", "Problema", h("div", { class: "problem", html: md(stage.problem) }), requirementsBox(stage.requirements), examplesBox(stage.examples)),
     exercise ? section("reconstrua", "Reconstrua do zero", exercise.element) : null,
     compare,
     actionBar(deps, "✓ Concluir módulo"),
@@ -428,14 +463,42 @@ type ExerciseView = {
   selection(): TutorSelection | undefined;
 };
 
-function buildExercise({ stage, store }: StageViewDeps, options: { onPass?: () => void; allowSolution?: boolean } = {}): ExerciseView | undefined {
+function buildExercise(
+  { stage, store }: StageViewDeps,
+  options: { onPass?: () => void; allowSolution?: boolean; start?: StartingPoint | undefined } = {},
+): ExerciseView | undefined {
   const exercise = stage.exercise;
   if (!exercise) return undefined;
   const saved = drafts(stage.id);
+  const start = options.start?.files ?? exercise.starterFiles;
+  const startOf = (path: string): string => start.find((f) => f.path === path)?.content ?? "";
+  const artifacts = h("p", { class: "notice small", hidden: true });
   const editors = new Map<string, Editor>();
   for (const file of exercise.starterFiles) {
-    editors.set(file.path, createEditor(file.path, saved.load(file.path) ?? file.content, { onChange: (src) => saved.save(file.path, src) }));
+    const editor = createEditor(file.path, saved.load(file.path) ?? startOf(file.path), {
+      onChange: (src) => {
+        saved.save(file.path, src);
+        showArtifacts(src);
+      },
+    });
+    editors.set(file.path, editor);
   }
+  // Text copied from rendered pages (chat, docs) can carry markdown/HTML artifacts; offer an explicit cleanup.
+  const showArtifacts = (src: string): void => {
+    const found = pasteArtifacts(src);
+    artifacts.hidden = found === 0;
+    if (found === 0) return;
+    artifacts.replaceChildren(
+      `Parece que o texto colado trouxe artefatos de formatação (${found}: &#x20;, \\ no fim da linha, entidades HTML). `,
+      h("button", {
+        type: "button",
+        class: "link",
+        onclick: () => {
+          for (const [, editor] of editors) editor.setValue(cleanArtifacts(editor.value()));
+        },
+      }, "Limpar"),
+    );
+  };
   let active = exercise.starterFiles[0]?.path ?? "";
   let running = false;
 
@@ -461,13 +524,22 @@ function buildExercise({ stage, store }: StageViewDeps, options: { onPass?: () =
       class: "link",
       onclick: () => {
         for (const file of exercise.starterFiles) {
-          editors.get(file.path)?.setValue(file.content);
+          editors.get(file.path)?.setValue(startOf(file.path));
           saved.clear(file.path);
         }
         results.replaceChildren();
       },
-    }, "Recomeçar"),
+    }, options.start ? "Voltar ao ponto de partida" : "Recomeçar"),
   );
+  const referenceFallback = options.start?.referenceFiles;
+  if (referenceFallback) {
+    toolbar.append(h("button", {
+      type: "button",
+      class: "link",
+      title: "Substitui o seu código pela solução de referência da etapa anterior",
+      onclick: () => referenceFallback.forEach((f) => editors.get(f.path)?.setValue(f.content)),
+    }, "Usar a referência da etapa anterior"));
+  }
   const solutionView = h("div", { class: "solution", hidden: true },
     h("p", { class: "eyebrow" }, "Solução de referência"),
     ...exercise.solutionFiles.map((f) => codeView(f.path, f.content)),
@@ -482,13 +554,19 @@ function buildExercise({ stage, store }: StageViewDeps, options: { onPass?: () =
       },
     }, "Ver solução"));
   }
-  const empty = exercise.starterFiles.every((f) => f.content === "");
+  const origin = options.start?.origin ?? (exercise.starterFiles.every((f) => f.content === "") ? "empty" : "reference");
+  const originNote: Record<typeof origin, string> = {
+    empty: "Editor vazio de propósito: escreva do zero. Esqueceu uma ferramenta da linguagem? Consulte a Toolbox.",
+    own: "Este é o seu código da etapa anterior. Faça só a mudança pedida.",
+    reference: "Você não tem uma versão aceita da etapa anterior (pulou?), então começamos da solução de referência dela. A partir daqui o código é seu.",
+  };
 
   const element = h(
     "div",
     { class: "exercise" },
     h("div", { class: "instructions", html: md(exercise.instructions) }),
-    empty ? h("p", { class: "muted hint-empty" }, "Editor vazio de propósito: escreva do zero. Esqueceu uma ferramenta da linguagem? Consulte a Toolbox.") : null,
+    h("p", { class: `muted origin ${origin}` }, originNote[origin]),
+    artifacts,
     fileTabs(tabs),
     toolbar,
     results,
@@ -505,7 +583,11 @@ function buildExercise({ stage, store }: StageViewDeps, options: { onPass?: () =
       const passed = outcome.result.tests.length > 0 && outcome.result.tests.every((t) => t.passed);
       results.replaceChildren(renderResult(outcome.result, outcome.firstPass));
       if (store.status(stage.id) === "not_started") store.setStatus(stage.id, "in_progress");
-      if (passed) options.onPass?.();
+      if (passed) {
+        // The learner's passing code becomes the state the next step starts from.
+        acceptedCode(stage.id).save(values());
+        options.onPass?.();
+      }
     } catch (error) {
       results.replaceChildren(h("p", { class: "fail" }, error instanceof Error ? error.message : "Falha ao rodar os testes."));
     } finally {
@@ -631,3 +713,18 @@ function attachExplainButton(root: HTMLElement, actions: StageActions, editorSel
 
 const list = (items: string[]): string =>
   items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} e ${items.at(-1) ?? ""}`;
+
+const ARTIFACTS = /&#x?[0-9a-f]+;|&(?:nbsp|lt|gt|amp|quot);|\\[ \t]*$/gim;
+
+function pasteArtifacts(source: string): number {
+  return source.match(ARTIFACTS)?.length ?? 0;
+}
+
+function cleanArtifacts(source: string): string {
+  const entities: Record<string, string> = { "&nbsp;": " ", "&lt;": "<", "&gt;": ">", "&amp;": "&", "&quot;": '"' };
+  return source
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+    .replace(/&(?:nbsp|lt|gt|amp|quot);/gi, (m) => entities[m.toLowerCase()] ?? m)
+    .replace(/[ \t]*\\[ \t]*$/gm, "");
+}

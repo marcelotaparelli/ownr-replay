@@ -13,30 +13,28 @@ function typedExercise(id: string): { exercise: Exercise; checks: CodeFile[] } {
   return { exercise, checks: exercise.typecheck.files };
 }
 
-const ENUM = `enum Category {
-  INCIDENT = "INCIDENT",
-  BUG = "BUG",
-  ACCESS = "ACCESS",
-  OTHER = "OTHER",
-}`;
+const TYPED_STAGE = "ops-triage-ai.m1-14";
 
-describe("stage 13: types are verified for real", () => {
-  const { exercise, checks } = typedExercise("ops-triage-ai.m1-13");
-  const run = (content: string) => checker.check([...completeExercise(exercise, [{ path: "category.ts", content }]), ...checks]);
+describe("the enum stage: types are verified for real", () => {
+  const { exercise, checks } = typedExercise(TYPED_STAGE);
+  const solution = exercise.solutionFiles[0]?.content ?? "";
+  const run = (content: string) => checker.check([...completeExercise(exercise, [{ path: "classify.ts", content }]), ...checks]);
 
-  test("the enum passes the checker", async () => {
-    expect(await run(ENUM)).toEqual([]);
+  test("the solution passes the checker", async () => {
+    expect(await run(solution)).toEqual([]);
   });
 
   test('const category: Category = "BILLIGN" is a real TypeScript error, on the learner\'s line', async () => {
-    const diagnostics = await run(`${ENUM}\n\nconst category: Category = "BILLIGN";`);
+    const lines = solution.split("\n").length;
+    const diagnostics = await run(`${solution}\n\nconst category: Category = "BILLIGN";`);
     expect(diagnostics).toEqual([
-      { file: "category.ts", line: 8, code: "TS2322", message: `Type '"BILLIGN"' is not assignable to type 'Category'.` },
+      { file: "classify.ts", line: lines + 2, code: "TS2322", message: `Type '"BILLIGN"' is not assignable to type 'Category'.` },
     ]);
   });
 
   test("a Category that accepts any string fails the type-level check", async () => {
-    const loose = `type Category = string;\nconst Category = { INCIDENT: "INCIDENT", BUG: "BUG", ACCESS: "ACCESS", OTHER: "OTHER" };`;
+    const loose = solution.replace(/enum Category \{[\s\S]*?\n\}/, 'type Category = string;\nconst Category = { INCIDENT: "INCIDENT", BUG: "BUG", ACCESS: "ACCESS", OTHER: "OTHER" };');
+    expect(loose).not.toBe(solution);
     const diagnostics = await run(loose);
     expect(diagnostics.map((d) => [d.file, d.code])).toContainEqual(["check.ts", "TS2578"]);
   });
@@ -70,20 +68,21 @@ test("parses tsc diagnostics and ignores anything else", () => {
 });
 
 describe("API", () => {
-  const stageId = "ops-triage-ai.m1-13";
+  const stageId = TYPED_STAGE;
+  const solution = () => typedExercise(TYPED_STAGE).exercise.solutionFiles[0]?.content ?? "";
 
   test("a type error is reported before anything runs", async () => {
     const { call } = testApp({ typeChecker: checker });
-    const files = [{ path: "category.ts", content: `${ENUM}\nconst c: Category = "BILLIGN";` }];
+    const files = [{ path: "classify.ts", content: `${solution()}\nconst c: Category = "BILLIGN";` }];
     const body = await (await call("POST", `/api/stages/${stageId}/run`, { files })).json();
     expect(body.mode).toBe("typecheck");
     expect(body.diagnostics[0].code).toBe("TS2322");
-    expect(body.modules).toBeUndefined();
+    expect(body.code).toBeUndefined();
   });
 
   test("correct types go on to run, marked as checked", async () => {
     const { call } = testApp({ typeChecker: checker });
-    const body = await (await call("POST", `/api/stages/${stageId}/run`, { files: [{ path: "category.ts", content: ENUM }] })).json();
+    const body = await (await call("POST", `/api/stages/${stageId}/run`, { files: [{ path: "classify.ts", content: solution() }] })).json();
     expect(body.mode).toBe("browser");
     expect(body.typecheck).toBe("passed");
   });
@@ -96,7 +95,7 @@ describe("API", () => {
 
   test("a typed stage without a checker fails loudly instead of skipping the check", async () => {
     const { call } = testApp({ typeChecker: null });
-    const response = await call("POST", `/api/stages/${stageId}/run`, { files: [{ path: "category.ts", content: ENUM }] });
+    const response = await call("POST", `/api/stages/${stageId}/run`, { files: [{ path: "classify.ts", content: solution() }] });
     expect(response.status).toBe(503);
   });
 });

@@ -4,8 +4,21 @@
   "subtitle": "Várias perguntas, em ordem",
   "goal": "Reconhecer INCIDENT, BUG e ACCESS.",
   "problem": "Tickets de bug e de acesso também chegam: \"Checkout bug\", \"Cannot login\".\n\nComo reconhecer mais de uma categoria?",
-  "example": "{ title: \"Checkout bug\", description: \"\" } → \"BUG\"\n{ title: \"Cannot login\", description: \"\" } → \"ACCESS\"\n{ title: \"Login bug\", description: \"\" }    → \"BUG\"",
-  "estimatedMinutes": 2,
+  "examples": [
+    {
+      "expr": "classify({ title: \"Checkout bug\", description: \"\" })",
+      "equals": "\"BUG\""
+    },
+    {
+      "expr": "classify({ title: \"Cannot login\", description: \"\" })",
+      "equals": "\"ACCESS\""
+    },
+    {
+      "expr": "classify({ title: \"Login bug\", description: \"\" })",
+      "equals": "\"BUG\""
+    }
+  ],
+  "estimatedMinutes": 1,
   "introduces": [
     "ordered-checks"
   ],
@@ -72,7 +85,7 @@
     }
   ],
   "exercise": {
-    "instructions": "Reconheça três categorias, verificando nesta ordem: \"down\" → `\"INCIDENT\"`, \"bug\" → `\"BUG\"`, \"login\" → `\"ACCESS\"`. Nenhuma → `\"OTHER\"`.",
+    "instructions": "Reconheça também \"bug\" → `\"BUG\"` e \"login\" → `\"ACCESS\"`, verificando nesta ordem: down, bug, login.",
     "files": [
       "classify.ts"
     ],
@@ -84,9 +97,9 @@
     {
       "id": "if",
       "name": "if",
-      "summary": "Executa algo só quando a condição é verdadeira.",
-      "example": "if (idade >= 18) return \"adulto\";\nreturn \"menor\";"
+      "summary": "Executa um bloco só quando a condição é verdadeira.",
+      "example": "function kind(age: number): string {\n  if (age >= 18) {\n    return \"adulto\";\n  }\n  return \"menor\";\n}"
     }
   ],
-  "limitation": "Cada categoria real tem **várias** palavras (\"outage\", \"error\", \"password\"…). Com um `if` por palavra, a função vira uma parede de ifs."
+  "limitation": "Cada categoria nova é mais um `if` — e cada categoria real tem **várias** palavras. A função vai virar uma parede de ifs."
 }

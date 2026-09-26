@@ -1,45 +1,98 @@
 // Authoring source of Module 1 (micro stages + checkpoint) of the ops-triage-ai golden journey.
-// Regenerates data/golden/ops-triage-ai/stages/m1: edit here, run `bun scripts/author-golden-m1.ts`, then `bun test`.
+// Regenerates data/golden/ops-triage-ai/stages/m1: edit here, run `bun run author:m1`, then `bun test`.
+//
+// Module 1 is ONE program, classify.ts, evolved step by step. Each micro stage is the previous
+// state plus one small change; the learner keeps editing their own code. The checkpoint asks for
+// the final state again, from an empty editor.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "../data/golden/ops-triage-ai/stages/m1");
-rmSync(ROOT, { recursive: true, force: true });
+const FILE = "classify.ts";
 
 type Node = { id: string; label: string; kind: string; col: number; row: number };
 type Edge = { from: string; to: string; rel: string };
 type Tool = { id: string; name: string; signature?: string; summary: string; example: string; whenToUse?: string };
-type Micro = {
+type Example = { expr: string; equals: string };
+type Step = {
   slug: string;
-  kind?: "micro" | "checkpoint";
   title: string;
-  subtitle?: string;
+  subtitle: string;
   goal: string;
   problem: string;
-  example?: string;
+  examples: Example[];
   minutes: number;
   introduces: string[];
   prerequisites: string[];
   arch: { nodes: Node[]; edges: Edge[] };
-  /** Files shown as the solution (pedagogical versions). First one is the new piece. */
-  reference: Record<string, string>;
+  /** The whole program after this step. */
+  program: string;
   lineNotes: { match: string; note: string }[];
-  explanation: { id: string; conceptId?: string; title: string; quick: string; normal?: string; deep?: string }[];
-  exercise: { instructions: string; files: string[]; expose: string[]; support?: string[]; solution?: Record<string, string> };
-  /** Valid modules the exercise builds on (with import/export), keyed by file name. */
-  given?: Record<string, string>;
-  /** Type-level checks (tsc only, never executed), written to given/. Enables real typechecking. */
-  typecheck?: Record<string, string>;
+  explanation: { id: string; conceptId?: string; title: string; quick: string; normal?: string }[];
+  instructions: string;
+  expose: string[];
+  /** Type-level checks, when the step teaches types (verified by the real tsc). */
+  typecheck?: string;
   tests: string;
   toolbox: Tool[];
   limitation?: string;
-  originalCodeRefs?: unknown[];
-  checkpoint?: { question: string; answer: string };
+  noveltyException?: string;
 };
 
-// ---------- shared code fragments ----------
+// ---------- the program, state by state ----------
 const TICKET = "ticket: { title: string; description: string }";
-const RULES_V1 = `const RULES = [
+const LOWER = `  const lower = (ticket.title + " " + ticket.description).toLowerCase();`;
+const TITLE_DESC = `  const title = ticket.title.toLowerCase();
+  const description = ticket.description.toLowerCase();`;
+
+const P1 = `function classify(text: string): string {
+  return "INCIDENT";
+}`;
+
+const P2 = `function classify(text: string): string {
+  if (text.includes("down")) {
+    return "INCIDENT";
+  }
+  return "OTHER";
+}`;
+
+const P3 = `function classify(text: string): string {
+  const lower = text.toLowerCase();
+  if (lower.includes("down")) {
+    return "INCIDENT";
+  }
+  return "OTHER";
+}`;
+
+const P4 = `function classify(${TICKET}): string {
+${LOWER}
+  if (lower.includes("down")) {
+    return "INCIDENT";
+  }
+  return "OTHER";
+}`;
+
+const P5 = `function classify(${TICKET}): string {
+${LOWER}
+  if (lower.includes("down")) {
+    return "INCIDENT";
+  }
+  if (lower.includes("bug")) {
+    return "BUG";
+  }
+  if (lower.includes("login")) {
+    return "ACCESS";
+  }
+  return "OTHER";
+}`;
+
+const RULES_3 = `const RULES = [
+  { word: "down", category: "INCIDENT" },
+  { word: "bug", category: "BUG" },
+  { word: "login", category: "ACCESS" },
+];`;
+
+const RULES_6 = `const RULES = [
   { word: "down", category: "INCIDENT" },
   { word: "outage", category: "INCIDENT" },
   { word: "bug", category: "BUG" },
@@ -47,6 +100,7 @@ const RULES_V1 = `const RULES = [
   { word: "login", category: "ACCESS" },
   { word: "password", category: "ACCESS" },
 ];`;
+
 const RULES_WEIGHTED = `const RULES = [
   { word: "down", category: "INCIDENT", weight: 5 },
   { word: "outage", category: "INCIDENT", weight: 4 },
@@ -55,6 +109,7 @@ const RULES_WEIGHTED = `const RULES = [
   { word: "login", category: "ACCESS", weight: 4 },
   { word: "password", category: "ACCESS", weight: 2 },
 ];`;
+
 const RULES_REGEX = String.raw`const RULES = [
   { pattern: /\bdown\b/, category: "INCIDENT", weight: 5 },
   { pattern: /\boutage\b/, category: "INCIDENT", weight: 4 },
@@ -63,6 +118,7 @@ const RULES_REGEX = String.raw`const RULES = [
   { pattern: /\blogin\b/, category: "ACCESS", weight: 4 },
   { pattern: /\bpassword\b/, category: "ACCESS", weight: 2 },
 ];`;
+
 const RULES_ENUM = String.raw`const RULES = [
   { pattern: /\bdown\b/, category: Category.INCIDENT, weight: 5 },
   { pattern: /\boutage\b/, category: Category.INCIDENT, weight: 4 },
@@ -71,45 +127,49 @@ const RULES_ENUM = String.raw`const RULES = [
   { pattern: /\blogin\b/, category: Category.ACCESS, weight: 4 },
   { pattern: /\bpassword\b/, category: Category.ACCESS, weight: 2 },
 ];`;
+
+const FIRST_MATCH = `function classify(${TICKET}): string {
+${LOWER}
+  for (const rule of RULES) {
+    if (lower.includes(rule.word)) {
+      return rule.category;
+    }
+  }
+  return "OTHER";
+}`;
+
 const SCORE_COUNT = `function scoreCategory(category: string, text: string): number {
   let score = 0;
   for (const rule of RULES) {
-    if (rule.category === category && text.includes(rule.word)) score += 1;
+    if (rule.category === category && text.includes(rule.word)) {
+      score += 1;
+    }
   }
   return score;
 }`;
-const SCORE_TITLE = `function scoreCategory(category: string, title: string, description: string): number {
-  let score = 0;
-  for (const rule of RULES) {
-    if (rule.category === category && title.includes(rule.word)) score += 2;
-    if (rule.category === category && description.includes(rule.word)) score += 1;
-  }
-  return score;
-}`;
-const SCORE_WEIGHTED = `function scoreCategory(category: string, title: string, description: string): number {
-  let score = 0;
-  for (const rule of RULES) {
-    if (rule.category === category && title.includes(rule.word)) score += rule.weight * 2;
-    if (rule.category === category && description.includes(rule.word)) score += rule.weight;
-  }
-  return score;
-}`;
-const SCORE_REGEX = `function scoreCategory(category: string, title: string, description: string): number {
-  let score = 0;
-  for (const rule of RULES) {
-    if (rule.category === category && rule.pattern.test(title)) score += rule.weight * 2;
-    if (rule.category === category && rule.pattern.test(description)) score += rule.weight;
-  }
-  return score;
-}`;
-const CLASSIFY_PICK = `const CATEGORIES = ["INCIDENT", "BUG", "ACCESS"];
 
-function classify(${TICKET}): string {
-  const text = (ticket.title + " " + ticket.description).toLowerCase();
-  let best = "OTHER";
+const scoreBy = (test: (where: string) => string, title: string, description: string) => `function scoreCategory(category: string, title: string, description: string): number {
+  let score = 0;
+  for (const rule of RULES) {
+    if (rule.category === category && ${test("title")}) {
+      score += ${title};
+    }
+    if (rule.category === category && ${test("description")}) {
+      score += ${description};
+    }
+  }
+  return score;
+}`;
+const SCORE_TITLE = scoreBy((w) => `${w}.includes(rule.word)`, "2", "1");
+const SCORE_WEIGHTED = scoreBy((w) => `${w}.includes(rule.word)`, "rule.weight * 2", "rule.weight");
+const SCORE_REGEX = scoreBy((w) => `rule.pattern.test(${w})`, "rule.weight * 2", "rule.weight");
+
+const pick = (list: string, returns = "string", start = `"OTHER"`, split = true) => `function classify(${TICKET}): ${returns} {
+${split ? TITLE_DESC : LOWER}
+  let best = ${start};
   let bestScore = 0;
-  for (const category of CATEGORIES) {
-    const score = scoreCategory(category, text);
+  for (const category of ${list}) {
+    const score = scoreCategory(category, ${split ? "title, description" : "lower"});
     if (score > bestScore) {
       best = category;
       bestScore = score;
@@ -117,73 +177,34 @@ function classify(${TICKET}): string {
   }
   return best;
 }`;
-const CLASSIFY_SPLIT = `const CATEGORIES = ["INCIDENT", "BUG", "ACCESS"];
 
-function classify(${TICKET}): string {
-  const title = ticket.title.toLowerCase();
-  const description = ticket.description.toLowerCase();
-  let best = "OTHER";
-  let bestScore = 0;
-  for (const category of CATEGORIES) {
-    const score = scoreCategory(category, title, description);
-    if (score > bestScore) {
-      best = category;
-      bestScore = score;
-    }
-  }
-  return best;
-}`;
-const CLASSIFY_TIE = `// Em empate vence quem vem primeiro: ignorar um incidente é o erro mais caro.
-const TIE_BREAK = ["INCIDENT", "ACCESS", "BUG"];
-
-function classify(${TICKET}): string {
-  const title = ticket.title.toLowerCase();
-  const description = ticket.description.toLowerCase();
-  let best = "OTHER";
-  let bestScore = 0;
-  for (const category of TIE_BREAK) {
-    const score = scoreCategory(category, title, description);
-    if (score > bestScore) {
-      best = category;
-      bestScore = score;
-    }
-  }
-  return best;
-}`;
-const CATEGORY_ENUM = `enum Category {
+const CATEGORIES = `const CATEGORIES = ["INCIDENT", "BUG", "ACCESS"];`;
+const TIE_BREAK = `// Em empate vence quem vem primeiro: ignorar um incidente é o erro mais caro.
+const TIE_BREAK = ["INCIDENT", "ACCESS", "BUG"];`;
+const TIE_BREAK_ENUM = `// Em empate vence quem vem primeiro: ignorar um incidente é o erro mais caro.
+const TIE_BREAK = [Category.INCIDENT, Category.ACCESS, Category.BUG];`;
+const ENUM = `enum Category {
   INCIDENT = "INCIDENT",
   BUG = "BUG",
   ACCESS = "ACCESS",
   OTHER = "OTHER",
 }`;
-const CHECK_CATEGORY = `import { Category } from "./category.ts";
 
-// Os quatro membros existem e têm o tipo Category.
-export const all: Category[] = [Category.INCIDENT, Category.BUG, Category.ACCESS, Category.OTHER];
+const join2 = (...parts: string[]) => parts.join("\n\n");
+const P6 = join2(RULES_3, FIRST_MATCH);
+const P7 = join2(RULES_6, FIRST_MATCH);
+const P8 = join2(RULES_6, SCORE_COUNT, FIRST_MATCH);
+const P9 = join2(RULES_6, SCORE_COUNT, CATEGORIES, pick("CATEGORIES", "string", `"OTHER"`, false));
+const P10 = join2(RULES_6, SCORE_TITLE, CATEGORIES, pick("CATEGORIES"));
+const P11 = join2(RULES_WEIGHTED, SCORE_WEIGHTED, CATEGORIES, pick("CATEGORIES"));
+const P12 = join2(RULES_WEIGHTED, SCORE_WEIGHTED, TIE_BREAK, pick("TIE_BREAK"));
+const P13 = join2(RULES_REGEX, SCORE_REGEX, TIE_BREAK, pick("TIE_BREAK"));
+const P14 = join2(ENUM, RULES_REGEX, SCORE_REGEX, TIE_BREAK_ENUM, pick("TIE_BREAK", "Category", "Category.OTHER"));
+const P15 = join2(ENUM, RULES_ENUM, SCORE_REGEX, TIE_BREAK_ENUM, pick("TIE_BREAK", "Category", "Category.OTHER"));
 
-// Uma string solta, ainda mais com erro de digitação, NÃO pode ser uma Category.
-// @ts-expect-error
-export const typo: Category = "INCIDNET";`;
-const CLASSIFY_ENUM = `const TIE_BREAK = [Category.INCIDENT, Category.ACCESS, Category.BUG];
-
-function classify(${TICKET}): Category {
-  const title = ticket.title.toLowerCase();
-  const description = ticket.description.toLowerCase();
-  let best = Category.OTHER;
-  let bestScore = 0;
-  for (const category of TIE_BREAK) {
-    const score = scoreCategory(category, title, description);
-    if (score > bestScore) {
-      best = category;
-      bestScore = score;
-    }
-  }
-  return best;
-}`;
-
-const exp = (code: string) => code.replace(/^(const|function|enum) /gm, "export $1 ");
-const imp = (names: string, from: string) => `import { ${names} } from "./${from}";\n\n`;
-const T = (body: string, from: string, names: string) => `import { test, expect } from "replay:test";\nimport { ${names} } from "./${from}";\n\n${body.trim()}\n`;
+// ---------- tests ----------
+const T = (names: string, body: string) => `import { test, expect } from "replay:test";\nimport { ${names} } from "./${FILE}";\n\n${body.trim()}\n`;
+const TICKETS = `const t = (title: string, description = "") => classify({ title, description });\n`;
 
 // ---------- architecture snapshots (only what has been learned) ----------
 const n = (id: string, label: string, kind: string, col: number, row = 0): Node => ({ id, label, kind, col, row });
@@ -191,44 +212,45 @@ const e = (from: string, to: string, rel = "flows_to"): Edge => ({ from, to, rel
 const ARCH_TEXT = { nodes: [n("text", "texto", "data", 0), n("classify", "classify()", "function", 1), n("category", "categoria", "data", 2)], edges: [e("text", "classify"), e("classify", "category", "creates")] };
 const ARCH_TICKET = { nodes: [n("ticket", "ticket", "data", 0), n("classify", "classify()", "function", 1), n("category", "categoria", "data", 2)], edges: [e("ticket", "classify"), e("classify", "category", "creates")] };
 const ARCH_RULES = { nodes: [...ARCH_TICKET.nodes, n("rules", "RULES", "data", 1, 1)], edges: [...ARCH_TICKET.edges, e("classify", "rules", "reads")] };
-const ARCH_SCORE = { nodes: [n("rules", "RULES", "data", 0), n("score", "scoreCategory()", "function", 1)], edges: [e("score", "rules", "reads")] };
-const ARCH_PICK = { nodes: [n("ticket", "ticket", "data", 0), n("classify", "classify()", "function", 1), n("category", "categoria", "data", 2), n("score", "scoreCategory()", "function", 1, 1), n("rules", "RULES", "data", 2, 1)], edges: [e("ticket", "classify"), e("classify", "category", "creates"), e("classify", "score", "calls"), e("score", "rules", "reads")] };
+const ARCH_SCORE = { nodes: [...ARCH_RULES.nodes, n("score", "scoreCategory()", "function", 2, 1)], edges: [...ARCH_RULES.edges, e("score", "rules", "reads")] };
+const ARCH_PICK = { nodes: ARCH_SCORE.nodes, edges: [...ARCH_TICKET.edges, e("classify", "score", "calls"), e("score", "rules", "reads")] };
 const ARCH_TIE = { nodes: [...ARCH_PICK.nodes, n("tie", "TIE_BREAK", "data", 0, 1)], edges: [...ARCH_PICK.edges, e("classify", "tie", "reads")] };
-const ARCH_ENUM = { nodes: [...ARCH_TIE.nodes.map((x) => (x.id === "category" ? { ...x, label: "Category", kind: "data" } : x))], edges: ARCH_TIE.edges };
+const ARCH_ENUM = { nodes: ARCH_TIE.nodes.map((x) => (x.id === "category" ? { ...x, label: "Category" } : x)), edges: ARCH_TIE.edges };
 
-// ---------- toolbox ----------
+// ---------- toolbox: every example is a complete, valid program (the validator type-checks each) ----------
 const tool = {
-  fn: { id: "function", name: "function", signature: "function nome(param) { ... }", summary: "Declara uma função: recebe parâmetros, devolve um valor com return.", example: "function double(n: number): number {\n  return n * 2;\n}" },
-  ret: { id: "return", name: "return", summary: "Encerra a função e devolve o valor.", example: 'return "pronto";' },
-  includes: { id: "includes", name: "String.includes()", signature: "texto.includes(pedaço): boolean", summary: "true se o texto contém o pedaço.", example: '"server down".includes("down"); // true' },
-  if: { id: "if", name: "if", summary: "Executa algo só quando a condição é verdadeira.", example: 'if (idade >= 18) return "adulto";\nreturn "menor";' },
+  fn: { id: "function", name: "function", signature: "function nome(param: Tipo): Tipo { ... }", summary: "Declara uma função: recebe parâmetros e devolve um valor com return.", example: "function double(n: number): number {\n  return n * 2;\n}\n\ndouble(21); // 42" },
+  ret: { id: "return", name: "return", summary: "Dentro de uma função: encerra e devolve o valor.", example: 'function greet(name: string): string {\n  return "oi " + name;\n}' },
+  includes: { id: "includes", name: "String.includes()", signature: "texto.includes(pedaço): boolean", summary: "true se o texto contém o pedaço.", example: '"server down".includes("down"); // true\n"lunch".includes("down"); // false' },
+  if: { id: "if", name: "if", summary: "Executa um bloco só quando a condição é verdadeira.", example: 'function kind(age: number): string {\n  if (age >= 18) {\n    return "adulto";\n  }\n  return "menor";\n}' },
   lower: { id: "to-lower", name: "String.toLowerCase()", summary: "Cópia do texto em minúsculas.", example: '"Server DOWN".toLowerCase(); // "server down"' },
-  object: { id: "object-param", name: "Objeto como parâmetro", summary: "Um valor com campos nomeados; leia com ponto.", example: 'function greet(user: { name: string }) {\n  return "oi " + user.name;\n}' },
-  concat: { id: "concat", name: "Juntar textos (+)", summary: "+ entre strings concatena.", example: '"a" + " " + "b"; // "a b"' },
+  object: { id: "object-param", name: "Objeto como parâmetro", summary: "Um valor com campos nomeados; leia cada campo com ponto.", example: 'function greet(user: { name: string }): string {\n  return "oi " + user.name;\n}\n\ngreet({ name: "Ana" }); // "oi Ana"' },
+  concat: { id: "concat", name: "Juntar textos (+)", summary: "+ entre strings concatena.", example: 'const full = "a" + " " + "b"; // "a b"' },
   array: { id: "array-objects", name: "Array de objetos", summary: "Uma lista de itens com o mesmo formato.", example: 'const fruits = [\n  { name: "maçã", color: "red" },\n  { name: "banana", color: "yellow" },\n];' },
-  forOf: { id: "for-of", name: "for...of", signature: "for (const item of lista) { ... }", summary: "Percorre os itens de uma lista, em ordem.", example: 'for (const fruit of fruits) {\n  if (fruit.color === "red") return fruit.name;\n}' },
-  counter: { id: "counter", name: "Contador (+=)", summary: "Comece em 0 e some dentro do laço.", example: "let total = 0;\nfor (const n of [1, 2, 3]) total += n;\n// total === 6" },
-  and: { id: "and", name: "&& (e)", summary: "Verdadeiro só se os dois lados forem.", example: 'if (fruit.color === "red" && fruit.ripe) eat(fruit);' },
-  max: { id: "running-max", name: "Guardar o maior até agora", summary: "Duas variáveis: o melhor item e seu valor; troque quando achar um maior.", example: 'let best = "";\nlet bestValue = 0;\nfor (const p of players) {\n  if (p.points > bestValue) {\n    best = p.name;\n    bestValue = p.points;\n  }\n}' },
+  forOf: { id: "for-of", name: "for...of", signature: "for (const item of lista) { ... }", summary: "Percorre os itens de uma lista, em ordem.", example: 'const fruits = [{ name: "maçã", color: "red" }];\n\nfunction firstRed(): string {\n  for (const fruit of fruits) {\n    if (fruit.color === "red") {\n      return fruit.name;\n    }\n  }\n  return "nenhuma";\n}' },
+  push: { id: "array-literal", name: "Mais itens na lista", summary: "Uma lista literal cresce acrescentando itens entre os colchetes.", example: 'const colors = [\n  "red",\n  "blue",\n  "green",\n];' },
+  counter: { id: "counter", name: "Contador (+=)", summary: "Comece em 0 e some dentro do laço.", example: "let total = 0;\nfor (const n of [1, 2, 3]) {\n  total += n;\n}\n// total === 6" },
+  and: { id: "and", name: "&& (e)", summary: "Verdadeiro só se os dois lados forem.", example: 'const fruit = { color: "red", ripe: true };\nif (fruit.color === "red" && fruit.ripe) {\n  console.log("pronta");\n}' },
+  max: { id: "running-max", name: "Guardar o maior até agora", summary: "Duas variáveis: o melhor item e seu valor; troque quando achar um maior.", example: 'const players = [{ name: "Ana", points: 3 }, { name: "Bia", points: 5 }];\nlet best = "";\nlet bestPoints = 0;\nfor (const p of players) {\n  if (p.points > bestPoints) {\n    best = p.name;\n    bestPoints = p.points;\n  }\n}\n// best === "Bia"' },
   regex: { id: "regex-test", name: "RegExp.test()", signature: "/padrão/.test(texto): boolean", summary: "true se o padrão casa em algum lugar do texto.", example: '/cat/.test("concatenate"); // true' },
-  boundary: { id: "word-boundary", name: String.raw`\b (fronteira de palavra)`, summary: "Casa onde uma palavra começa ou termina.", example: String.raw`/\bcat\b/.test("concatenate"); // false` + "\n" + String.raw`/\bcat\b/.test("my cat");      // true` },
-  enumT: { id: "enum", name: "enum", signature: 'enum Nome { A = "A", B = "B" }', summary: "Um conjunto fechado de valores com nome.", example: 'enum Color { RED = "RED", BLUE = "BLUE" }\nColor.RED; // "RED"' },
+  boundary: { id: "word-boundary", name: String.raw`\b (fronteira de palavra)`, summary: "Casa onde uma palavra começa ou termina.", example: String.raw`/\bcat\b/.test("concatenate"); // false` + "\n" + String.raw`/\bcat\b/.test("my cat"); // true` },
+  enumT: { id: "enum", name: "enum", signature: 'enum Nome { A = "A", B = "B" }', summary: "Um conjunto fechado de valores com nome.", example: 'enum Color {\n  RED = "RED",\n  BLUE = "BLUE",\n}\n\nconst c: Color = Color.RED; // "RED"' },
 } satisfies Record<string, Tool>;
 
 // ---------- the micro stages ----------
-const stages: Micro[] = [
+const steps: Step[] = [
   {
     slug: "01-fixed-answer",
     title: "Uma resposta fixa",
     subtitle: "Entra um texto, sai uma categoria",
     goal: "Ter uma função que recebe o texto de um ticket e devolve uma categoria.",
     problem: 'Queremos classificar o ticket **"production down"** como **INCIDENT**.\n\nQual é o programa mais simples possível que faz isso?',
-    example: 'classify("production down")\n→ "INCIDENT"',
+    examples: [{ expr: 'classify("production down")', equals: '"INCIDENT"' }],
     minutes: 1,
     introduces: ["function-io"],
     prerequisites: [],
     arch: ARCH_TEXT,
-    reference: { "classify.ts": `function classify(text: string): string {\n  return "INCIDENT";\n}` },
+    program: P1,
     lineNotes: [
       { match: "function classify", note: "Declara a função classify. `text` é o que entra; o `: string` depois dos parênteses diz que sai um texto." },
       { match: 'return "INCIDENT"', note: "Sempre a mesma resposta. A função ainda nem olha o texto — de propósito." },
@@ -238,12 +260,13 @@ const stages: Micro[] = [
         id: "io",
         conceptId: "function-io",
         title: "Entra texto, sai categoria",
-        quick: "Uma função é uma caixa: entra o texto do ticket, sai uma categoria. Esta devolve sempre `\"INCIDENT\"`.",
+        quick: 'Uma função é uma caixa: entra o texto do ticket, sai uma categoria. Esta devolve sempre `"INCIDENT"`.',
         normal: "`text: string` e `: string` são anotações do TypeScript: dizem o que entra e o que sai. Sem elas, é JavaScript puro — e funcionaria igual.",
       },
     ],
-    exercise: { instructions: 'Crie uma função `classify` que recebe um texto e devolve `"INCIDENT"`.', files: ["classify.ts"], expose: ["classify"] },
-    tests: T(`test('classify("production down") → "INCIDENT"', () => {\n  expect(classify("production down")).toBe("INCIDENT");\n});`, "classify.ts", "classify"),
+    instructions: 'Crie uma função `classify` que recebe um texto e devolve `"INCIDENT"`.',
+    expose: ["classify"],
+    tests: T("classify", `test('classify("production down") → "INCIDENT"', () => expect(classify("production down")).toBe("INCIDENT"));`),
     toolbox: [tool.fn, tool.ret],
     limitation: 'Mas agora **"lunch menu"** também vira INCIDENT.',
   },
@@ -253,28 +276,32 @@ const stages: Micro[] = [
     subtitle: "Uma palavra decide",
     goal: "Decidir a categoria a partir de uma palavra do texto.",
     problem: '"lunch menu" não é um incidente, mas a função diz que é.\n\nComo decidir **olhando o texto**?',
-    example: 'classify("production down") → "INCIDENT"\nclassify("lunch menu")      → "OTHER"',
+    examples: [
+      { expr: 'classify("server down")', equals: '"INCIDENT"' },
+      { expr: 'classify("lunch menu")', equals: '"OTHER"' },
+    ],
     minutes: 1,
     introduces: ["keyword-match", "default-category"],
     prerequisites: ["function-io"],
     arch: ARCH_TEXT,
-    reference: { "classify.ts": `function classify(text: string): string {\n  if (text.includes("down")) return "INCIDENT";\n  return "OTHER";\n}` },
+    program: P2,
     lineNotes: [
-      { match: 'text.includes("down")', note: '`includes` responde true/false: o texto contém "down"? Se sim, devolvemos INCIDENT e a função termina ali.' },
+      { match: 'text.includes("down")', note: '`includes` responde true/false: o texto contém "down"? Se sim, o bloco do `if` roda.' },
+      { match: 'return "INCIDENT"', note: "Devolve e encerra a função ali mesmo." },
       { match: 'return "OTHER"', note: "Se nenhuma condição acima devolveu nada, cai aqui: a resposta padrão." },
     ],
     explanation: [
       { id: "word", conceptId: "keyword-match", title: "Uma pista no texto", quick: 'Se o texto contém "down", é INCIDENT.' },
       { id: "default", conceptId: "default-category", title: "Uma resposta padrão", quick: "Quando nenhuma pista aparece, a resposta é OTHER — nunca ficamos sem resposta." },
     ],
-    exercise: { instructions: 'Faça `classify` devolver `"INCIDENT"` quando o texto mencionar "down", e `"OTHER"` em qualquer outro caso.', files: ["classify.ts"], expose: ["classify"] },
+    instructions: 'Mude a sua `classify`: `"INCIDENT"` só quando o texto mencionar "down"; qualquer outro texto → `"OTHER"`.',
+    expose: ["classify"],
     tests: T(
+      "classify",
       `test('"production down" → INCIDENT', () => expect(classify("production down")).toBe("INCIDENT"));
 test('"the server is down again" → INCIDENT', () => expect(classify("the server is down again")).toBe("INCIDENT"));
 test('"lunch menu" → OTHER', () => expect(classify("lunch menu")).toBe("OTHER"));
-test('texto vazio → OTHER', () => expect(classify("")).toBe("OTHER"));`,
-      "classify.ts",
-      "classify",
+test("texto vazio → OTHER", () => expect(classify("")).toBe("OTHER"));`,
     ),
     toolbox: [tool.includes, tool.if],
     limitation: '**"Production DOWN"**, em maiúsculas, virou OTHER.',
@@ -285,29 +312,27 @@ test('texto vazio → OTHER', () => expect(classify("")).toBe("OTHER"));`,
     subtitle: "Normalizar antes de comparar",
     goal: "Reconhecer a palavra independentemente de maiúsculas.",
     problem: '"Production DOWN" é claramente um incidente, mas `includes("down")` não encontra "DOWN".\n\nComo fazer "Down", "DOWN" e "down" valerem o mesmo?',
-    example: 'classify("Production DOWN") → "INCIDENT"',
+    examples: [{ expr: 'classify("Production DOWN")', equals: '"INCIDENT"' }],
     minutes: 1,
     introduces: ["text-normalization"],
     prerequisites: ["keyword-match"],
     arch: ARCH_TEXT,
-    reference: { "classify.ts": `function classify(text: string): string {\n  const lower = text.toLowerCase();\n  if (lower.includes("down")) return "INCIDENT";\n  return "OTHER";\n}` },
-    lineNotes: [{ match: "toLowerCase", note: "Uma cópia do texto toda em minúsculas. Comparamos sempre com essa cópia." }],
-    explanation: [
-      {
-        id: "lower",
-        conceptId: "text-normalization",
-        title: "Normalizar uma vez",
-        quick: "Convertemos o texto para minúsculas antes de procurar. Assim só precisamos procurar \"down\".",
-      },
+    program: P3,
+    lineNotes: [
+      { match: "toLowerCase", note: "Uma cópia do texto toda em minúsculas." },
+      { match: 'lower.includes("down")', note: "A pergunta agora é feita à cópia em minúsculas." },
     ],
-    exercise: { instructions: 'Faça `classify` reconhecer "down" com qualquer combinação de maiúsculas e minúsculas.', files: ["classify.ts"], expose: ["classify"] },
+    explanation: [
+      { id: "lower", conceptId: "text-normalization", title: "Normalizar uma vez", quick: 'Convertemos o texto para minúsculas antes de procurar. Assim só precisamos procurar "down".' },
+    ],
+    instructions: 'Faça "down" ser reconhecido com qualquer combinação de maiúsculas e minúsculas.',
+    expose: ["classify"],
     tests: T(
+      "classify",
       `test('"Production DOWN" → INCIDENT', () => expect(classify("Production DOWN")).toBe("INCIDENT"));
 test('"Server Down" → INCIDENT', () => expect(classify("Server Down")).toBe("INCIDENT"));
 test('"production down" → INCIDENT', () => expect(classify("production down")).toBe("INCIDENT"));
 test('"Lunch Menu" → OTHER', () => expect(classify("Lunch Menu")).toBe("OTHER"));`,
-      "classify.ts",
-      "classify",
     ),
     toolbox: [tool.lower],
     limitation: 'Tickets reais têm **título e descrição**. Título "Checkout", descrição "the site is down": como olhar os dois?',
@@ -318,32 +343,32 @@ test('"Lunch Menu" → OTHER', () => expect(classify("Lunch Menu")).toBe("OTHER"
     subtitle: "A entrada vira um ticket",
     goal: "Classificar um ticket inteiro, não só um texto.",
     problem: 'Um ticket tem **title** e **description**. O incidente pode estar em qualquer um dos dois:\n\ntítulo "Checkout", descrição "the site is down".',
-    example: 'classify({ title: "Checkout", description: "the site is down" })\n→ "INCIDENT"',
-    minutes: 2,
+    examples: [{ expr: 'classify({ title: "Checkout", description: "the site is down" })', equals: '"INCIDENT"' }],
+    minutes: 1,
     introduces: ["ticket-input"],
     prerequisites: ["text-normalization"],
     arch: ARCH_TICKET,
-    reference: { "classify.ts": `function classify(${TICKET}): string {\n  const text = (ticket.title + " " + ticket.description).toLowerCase();\n  if (text.includes("down")) return "INCIDENT";\n  return "OTHER";\n}` },
+    program: P4,
     lineNotes: [
       { match: "ticket: {", note: "O parâmetro agora é um objeto com dois campos: title e description." },
-      { match: 'ticket.title + " " + ticket.description', note: "Junta título e descrição (com um espaço no meio) para procurar nos dois de uma vez." },
+      { match: 'ticket.title + " " + ticket.description', note: "Junta título e descrição (com um espaço no meio) e procura nos dois de uma vez." },
     ],
     explanation: [
       {
         id: "ticket",
         conceptId: "ticket-input",
         title: "Um ticket é um objeto",
-        quick: "`ticket.title` e `ticket.description` são os dois campos. Juntamos os dois e seguimos como antes.",
+        quick: "`ticket.title` e `ticket.description` são os dois campos. Juntamos os dois e o resto continua igual.",
         normal: "`{ title: string; description: string }` descreve o formato do objeto que entra. No projeto real, esse formato ganha um nome: `TicketInput`.",
       },
     ],
-    exercise: { instructions: 'Agora `classify` recebe um ticket com `title` e `description`. É `"INCIDENT"` se "down" (em qualquer caixa) aparecer em qualquer um dos dois; senão, `"OTHER"`.', files: ["classify.ts"], expose: ["classify"] },
+    instructions: 'Agora `classify` recebe um ticket com `title` e `description`. "down" pode aparecer em qualquer um dos dois.',
+    expose: ["classify"],
     tests: T(
+      "classify",
       `test('"down" na descrição → INCIDENT', () => expect(classify({ title: "Checkout", description: "the site is down" })).toBe("INCIDENT"));
 test('"DOWN" no título → INCIDENT', () => expect(classify({ title: "Site DOWN", description: "" })).toBe("INCIDENT"));
 test('sem "down" → OTHER', () => expect(classify({ title: "Lunch", description: "menu for friday" })).toBe("OTHER"));`,
-      "classify.ts",
-      "classify",
     ),
     toolbox: [tool.object, tool.concat],
     limitation: '**"Login bug"** virou OTHER: a função só conhece a categoria INCIDENT.',
@@ -354,14 +379,16 @@ test('sem "down" → OTHER', () => expect(classify({ title: "Lunch", description
     subtitle: "Várias perguntas, em ordem",
     goal: "Reconhecer INCIDENT, BUG e ACCESS.",
     problem: 'Tickets de bug e de acesso também chegam: "Checkout bug", "Cannot login".\n\nComo reconhecer mais de uma categoria?',
-    example: '{ title: "Checkout bug", description: "" } → "BUG"\n{ title: "Cannot login", description: "" } → "ACCESS"\n{ title: "Login bug", description: "" }    → "BUG"',
-    minutes: 2,
+    examples: [
+      { expr: 'classify({ title: "Checkout bug", description: "" })', equals: '"BUG"' },
+      { expr: 'classify({ title: "Cannot login", description: "" })', equals: '"ACCESS"' },
+      { expr: 'classify({ title: "Login bug", description: "" })', equals: '"BUG"' },
+    ],
+    minutes: 1,
     introduces: ["ordered-checks"],
     prerequisites: ["ticket-input", "default-category"],
     arch: ARCH_TICKET,
-    reference: {
-      "classify.ts": `function classify(${TICKET}): string {\n  const text = (ticket.title + " " + ticket.description).toLowerCase();\n  if (text.includes("down")) return "INCIDENT";\n  if (text.includes("bug")) return "BUG";\n  if (text.includes("login")) return "ACCESS";\n  return "OTHER";\n}`,
-    },
+    program: P5,
     lineNotes: [
       { match: '"bug"', note: "Uma pergunta nova para uma categoria nova." },
       { match: '"login"', note: 'Só chega aqui se não achou "down" nem "bug". A ordem das perguntas decide quando duas pistas aparecem.' },
@@ -374,23 +401,19 @@ test('sem "down" → OTHER', () => expect(classify({ title: "Lunch", description
         quick: 'As perguntas são feitas em ordem e a função termina no primeiro `return`. "Login bug" vira BUG porque "bug" é perguntado antes de "login".',
       },
     ],
-    exercise: {
-      instructions: 'Reconheça três categorias, verificando nesta ordem: "down" → `"INCIDENT"`, "bug" → `"BUG"`, "login" → `"ACCESS"`. Nenhuma → `"OTHER"`.',
-      files: ["classify.ts"],
-      expose: ["classify"],
-    },
+    instructions: 'Reconheça também "bug" → `"BUG"` e "login" → `"ACCESS"`, verificando nesta ordem: down, bug, login.',
+    expose: ["classify"],
     tests: T(
-      `const t = (title: string, description = "") => classify({ title, description });
+      "classify",
+      `${TICKETS}
 test('"Checkout bug" → BUG', () => expect(t("Checkout bug")).toBe("BUG"));
 test('"Cannot LOGIN" → ACCESS', () => expect(t("Cannot LOGIN")).toBe("ACCESS"));
 test('"Site down" → INCIDENT', () => expect(t("Site down")).toBe("INCIDENT"));
 test('"Login bug" → BUG (a ordem decide)', () => expect(t("Login bug")).toBe("BUG"));
-test('nenhuma pista → OTHER', () => expect(t("Lunch", "menu")).toBe("OTHER"));`,
-      "classify.ts",
-      "classify",
+test("nenhuma pista → OTHER", () => expect(t("Lunch", "menu")).toBe("OTHER"));`,
     ),
     toolbox: [tool.if],
-    limitation: 'Cada categoria real tem **várias** palavras ("outage", "error", "password"…). Com um `if` por palavra, a função vira uma parede de ifs.',
+    limitation: "Cada categoria nova é mais um `if` — e cada categoria real tem **várias** palavras. A função vai virar uma parede de ifs.",
   },
   {
     slug: "06-rules-as-data",
@@ -398,34 +421,28 @@ test('nenhuma pista → OTHER', () => expect(t("Lunch", "menu")).toBe("OTHER"));
     subtitle: "Uma tabela no lugar dos ifs",
     goal: "Separar as regras (dados) do mecanismo que as aplica.",
     problem: "Cada palavra nova exige mais um `if`. E se as regras fossem uma **lista**, e a função só percorresse essa lista?",
-    example: 'Mesmo comportamento da etapa anterior.\nAcrescentar { word: "outage", category: "INCIDENT" } à lista\n→ "Outage" passa a ser INCIDENT, sem mexer na função.',
+    examples: [
+      { expr: 'classify({ title: "Cannot login", description: "" })', equals: '"ACCESS"' },
+      { expr: 'classify({ title: "Login bug", description: "" })', equals: '"BUG"' },
+    ],
     minutes: 2,
     introduces: ["rules-as-data"],
     prerequisites: ["ordered-checks"],
     arch: ARCH_RULES,
-    reference: {
-      "classify.ts": `const RULES = [\n  { word: "down", category: "INCIDENT" },\n  { word: "bug", category: "BUG" },\n  { word: "login", category: "ACCESS" },\n];\n\nfunction classify(${TICKET}): string {\n  const text = (ticket.title + " " + ticket.description).toLowerCase();\n  for (const rule of RULES) {\n    if (text.includes(rule.word)) return rule.category;\n  }\n  return "OTHER";\n}`,
-    },
+    program: P6,
     lineNotes: [
-      { match: "const RULES", note: "As três regras da etapa anterior, agora como dados: cada item diz qual palavra leva a qual categoria." },
+      { match: "const RULES", note: "As três regras dos ifs, agora como dados: cada item diz qual palavra leva a qual categoria." },
       { match: "for (const rule of RULES)", note: "Percorre a lista em ordem — a mesma ordem das perguntas de antes." },
-      { match: "rule.word", note: "Os ifs viraram um só: a palavra vem da regra, não do código." },
+      { match: "lower.includes(rule.word)", note: "Os três ifs viraram um só: a palavra vem da regra, não do código." },
     ],
     explanation: [
-      {
-        id: "data",
-        conceptId: "rules-as-data",
-        title: "A tabela manda",
-        quick: "Acrescentar uma regra agora é acrescentar uma linha em `RULES`. A função não muda.",
-      },
+      { id: "data", conceptId: "rules-as-data", title: "A tabela manda", quick: "Acrescentar uma regra agora é acrescentar uma linha em `RULES`. A função não muda." },
     ],
-    exercise: {
-      instructions: 'Troque os ifs por uma lista `RULES` (down → INCIDENT, bug → BUG, login → ACCESS, nessa ordem) e faça `classify` percorrê-la. Os testes vão acrescentar uma regra na sua lista e esperar que `classify` passe a respeitá-la.',
-      files: ["classify.ts"],
-      expose: ["classify", "RULES"],
-    },
+    instructions: "Troque os ifs por uma lista `RULES` de `{ word, category }` (as mesmas três regras, na mesma ordem) que `classify` percorre. O comportamento não muda.",
+    expose: ["classify", "RULES"],
     tests: T(
-      `const t = (title: string, description = "") => classify({ title, description });
+      "classify, RULES",
+      `${TICKETS}
 test("mesmo comportamento: bug, login, down, ordem, OTHER", () => {
   expect(t("Checkout bug")).toBe("BUG");
   expect(t("Cannot login")).toBe("ACCESS");
@@ -440,116 +457,137 @@ test("uma regra nova na lista muda o resultado sem mexer na função", () => {
   RULES.push({ word: "outage", category: "INCIDENT" });
   expect(t("Outage in EU")).toBe("INCIDENT");
 });`,
-      "classify.ts",
-      "classify, RULES",
     ),
     toolbox: [tool.array, tool.forOf],
-    limitation: 'Ticket: **"Cannot login after password reset — the page shows a bug"**. Há mais pistas de ACCESS (login, password) do que de BUG, mas a primeira regra que casa vence.',
+    limitation: '**"Outage in EU"** e **"Wrong password"** viram OTHER: faltam palavras na tabela.',
   },
   {
-    slug: "07-count-evidence",
+    slug: "07-more-signals",
+    title: "Mais pistas",
+    subtitle: "Só dados mudam",
+    goal: "Ver a tabela pagar o seu custo: mais regras, nenhuma mudança na função.",
+    problem: 'Cada categoria tem mais de uma pista: "outage" também é incidente, "error" também é bug, "password" também é acesso.',
+    examples: [
+      { expr: 'classify({ title: "Outage in EU", description: "" })', equals: '"INCIDENT"' },
+      { expr: 'classify({ title: "Wrong password", description: "" })', equals: '"ACCESS"' },
+    ],
+    minutes: 1,
+    introduces: [],
+    prerequisites: ["rules-as-data"],
+    arch: ARCH_RULES,
+    program: P7,
+    lineNotes: [{ match: '"outage"', note: "Uma linha nova na tabela. `classify` continua exatamente igual." }],
+    explanation: [
+      { id: "payoff", conceptId: "rules-as-data", title: "Só a tabela cresceu", quick: "Três pistas novas, zero linhas novas na função. É para isso que a tabela existe." },
+    ],
+    instructions: "Acrescente à tabela as pistas outage → INCIDENT, error → BUG e password → ACCESS.",
+    expose: ["classify", "RULES"],
+    tests: T(
+      "classify, RULES",
+      `${TICKETS}
+test("outage → INCIDENT", () => expect(t("Outage in EU")).toBe("INCIDENT"));
+test("error → BUG", () => expect(t("Checkout error")).toBe("BUG"));
+test("password → ACCESS", () => expect(t("Wrong password")).toBe("ACCESS"));
+test("seis pistas, duas por categoria", () => {
+  expect(RULES.length).toBe(6);
+  expect(RULES.filter((r) => r.category === "INCIDENT").length).toBe(2);
+});`,
+    ),
+    toolbox: [tool.push],
+    limitation: 'Ticket: **"Cannot login after password reset — the page shows a bug"**. Há duas pistas de ACCESS e uma de BUG, mas a primeira regra que casa vence: BUG.',
+  },
+  {
+    slug: "08-count-evidence",
     title: "Contar evidências",
     subtitle: "Quantas pistas cada categoria tem?",
     goal: "Medir quantas pistas de uma categoria aparecem no texto.",
     problem: "Em vez de parar na primeira pista, queremos **contar** as pistas de cada categoria.\n\nPrimeiro só medir; decidir vem depois.",
-    example: 'scoreCategory("ACCESS", "cannot login after password reset") → 2\nscoreCategory("BUG", "cannot login after password reset")    → 0',
+    examples: [
+      { expr: 'scoreCategory("ACCESS", "cannot login after password reset")', equals: "2" },
+      { expr: 'scoreCategory("BUG", "cannot login after password reset")', equals: "0" },
+    ],
     minutes: 2,
     introduces: ["evidence-score"],
     prerequisites: ["rules-as-data"],
     arch: ARCH_SCORE,
-    reference: { "score.ts": SCORE_COUNT, "rules.ts": RULES_V1 },
+    program: P8,
     lineNotes: [
+      { match: "function scoreCategory", note: "Uma função nova, ao lado de `classify`: mede, não decide." },
       { match: "let score = 0", note: "Começa sem pontos." },
       { match: "rule.category === category && text.includes(rule.word)", note: "Só conta regras da categoria perguntada, e só se a palavra aparece no texto." },
       { match: "score += 1", note: "Cada pista encontrada vale um ponto." },
-      { match: "const RULES", note: "A tabela ganhou mais palavras: duas por categoria." },
     ],
     explanation: [
-      {
-        id: "score",
-        conceptId: "evidence-score",
-        title: "Um placar por categoria",
-        quick: "`scoreCategory` percorre as regras e soma 1 para cada palavra daquela categoria que aparece no texto.",
-      },
+      { id: "score", conceptId: "evidence-score", title: "Um placar por categoria", quick: "`scoreCategory` percorre as regras e soma 1 para cada palavra daquela categoria que aparece no texto." },
     ],
-    exercise: {
-      instructions: "Crie `scoreCategory(category, text)`: quantas regras de `RULES` daquela categoria aparecem no texto? `RULES` já existe (é a tabela ao lado, de etapas anteriores).",
-      files: ["score.ts"],
-      expose: ["scoreCategory"],
-      support: ["rules.ts"],
-    },
-    given: { "rules.ts": exp(RULES_V1) },
+    instructions: "Crie `scoreCategory(category, text)`: quantas regras de `RULES` daquela categoria aparecem no texto. `classify` ainda não muda.",
+    expose: ["scoreCategory", "classify"],
     tests: T(
+      "scoreCategory",
       `test("duas pistas de ACCESS", () => expect(scoreCategory("ACCESS", "cannot login after password reset")).toBe(2));
 test("nenhuma pista de BUG", () => expect(scoreCategory("BUG", "cannot login after password reset")).toBe(0));
 test("duas pistas de BUG", () => expect(scoreCategory("BUG", "error: bug found")).toBe(2));
 test("texto vazio → 0", () => expect(scoreCategory("INCIDENT", "")).toBe(0));`,
-      "score.ts",
-      "scoreCategory",
     ),
-    toolbox: [tool.counter, tool.and, tool.forOf],
-    limitation: "Temos o placar de cada categoria, mas `classify` ainda escolhe a primeira regra que casa.",
+    toolbox: [tool.counter, tool.and],
+    limitation: "Temos o placar de cada categoria, mas `classify` ainda escolhe pela primeira regra que casa.",
   },
   {
-    slug: "08-pick-strongest",
+    slug: "09-pick-strongest",
     title: "Escolher a mais forte",
     subtitle: "O maior placar vence",
     goal: "Classificar pela categoria com mais evidência.",
     problem: "Com um placar por categoria, a decisão fica natural: **vence quem tem mais pontos**. E se ninguém pontuar?",
-    example: '{ title: "Cannot login", description: "after password reset the page shows a bug" }\n→ "ACCESS"   (ACCESS 2 × BUG 1)',
+    examples: [
+      { expr: 'classify({ title: "Cannot login", description: "after password reset the page shows a bug" })', equals: '"ACCESS"' },
+      { expr: 'classify({ title: "Lunch", description: "menu" })', equals: '"OTHER"' },
+    ],
     minutes: 2,
     introduces: ["highest-score"],
     prerequisites: ["evidence-score", "default-category"],
     arch: ARCH_PICK,
-    reference: { "classify.ts": CLASSIFY_PICK, "score.ts": SCORE_COUNT, "rules.ts": RULES_V1 },
+    program: P9,
     lineNotes: [
       { match: "const CATEGORIES", note: "As categorias que disputam. A ordem importa só em empate." },
       { match: 'let best = "OTHER"', note: "Começa em OTHER com 0 pontos: se ninguém pontuar, é a resposta." },
       { match: "score > bestScore", note: "Troca só se for estritamente maior — em empate, fica quem apareceu antes." },
     ],
     explanation: [
-      {
-        id: "max",
-        conceptId: "highest-score",
-        title: "Guardar o melhor até agora",
-        quick: "Percorre as categorias guardando a de maior placar. Ninguém pontuou → OTHER. Empate → vence a primeira da lista.",
-      },
+      { id: "max", conceptId: "highest-score", title: "Guardar o melhor até agora", quick: "Percorre as categorias guardando a de maior placar. Ninguém pontuou → OTHER. Empate → vence a primeira da lista." },
     ],
-    exercise: {
-      instructions: 'Reescreva `classify(ticket)`: vence a categoria (INCIDENT, BUG, ACCESS) com maior `scoreCategory`. Nenhum ponto → `"OTHER"`. Empate → a que vem primeiro nessa ordem. `scoreCategory` e `RULES` já existem.',
-      files: ["classify.ts"],
-      expose: ["classify"],
-      support: ["rules.ts", "score.ts"],
-    },
-    given: { "rules.ts": exp(RULES_V1), "score.ts": imp("RULES", "rules.ts") + exp(SCORE_COUNT) },
+    instructions: 'Faça `classify` escolher a categoria (INCIDENT, BUG, ACCESS) com maior `scoreCategory`. Nenhum ponto → `"OTHER"`. Empate → a que vem primeiro nessa ordem.',
+    expose: ["classify", "scoreCategory"],
     tests: T(
-      `const t = (title: string, description = "") => classify({ title, description });
+      "classify",
+      `${TICKETS}
 test("mais pistas vence: ACCESS 2 × BUG 1", () => expect(t("Cannot login", "after password reset the page shows a bug")).toBe("ACCESS"));
 test("uma pista basta", () => expect(t("Site down")).toBe("INCIDENT"));
 test("nenhuma pista → OTHER", () => expect(t("Lunch", "menu")).toBe("OTHER"));
 test("empate → a primeira da ordem (INCIDENT antes de BUG)", () => expect(t("bug", "outage")).toBe("INCIDENT"));`,
-      "classify.ts",
-      "classify",
     ),
-    toolbox: [tool.max, tool.forOf],
+    toolbox: [tool.max],
     limitation: 'Título **"Bug in checkout"**, descrição "the login button looks odd": 1 × 1. Mas quem abriu o ticket resumiu o problema no título — ele deveria pesar mais.',
   },
   {
-    slug: "09-title-weight",
+    slug: "10-title-weight",
     title: "O título pesa o dobro",
     subtitle: "Onde a pista aparece importa",
     goal: "Dar mais peso a pistas no título do que na descrição.",
     problem: "O título é onde a pessoa resume o problema. Uma pista ali deveria valer **mais** do que a mesma pista perdida na descrição.",
-    example: 'scoreCategory("BUG", "bug in checkout", "")    → 2\nscoreCategory("BUG", "", "bug in checkout")    → 1',
+    examples: [
+      { expr: 'scoreCategory("BUG", "bug in checkout", "")', equals: "2" },
+      { expr: 'scoreCategory("BUG", "", "bug in checkout")', equals: "1" },
+    ],
     minutes: 2,
     introduces: ["title-weight"],
     prerequisites: ["evidence-score"],
     arch: ARCH_PICK,
-    reference: { "score.ts": SCORE_TITLE, "classify.ts": CLASSIFY_SPLIT, "rules.ts": RULES_V1 },
+    program: P10,
     lineNotes: [
-      { match: "title.includes(rule.word)) score += 2", note: "Pista no título: 2 pontos." },
-      { match: "description.includes(rule.word)) score += 1", note: "Pista na descrição: 1 ponto. A mesma palavra nos dois lugares soma 3." },
-      { match: "const title = ticket.title.toLowerCase()", note: "classify agora normaliza título e descrição separadamente, para o placar saber onde cada pista estava." },
+      { match: "title.includes(rule.word)", note: "Pista no título…" },
+      { match: "score += 2", note: "…vale 2 pontos." },
+      { match: "description.includes(rule.word)", note: "Pista na descrição vale 1. A mesma palavra nos dois lugares soma 3." },
+      { match: "const title = ticket.title.toLowerCase()", note: "`classify` agora normaliza título e descrição separadamente, para o placar saber onde cada pista estava." },
     ],
     explanation: [
       {
@@ -560,36 +598,33 @@ test("empate → a primeira da ordem (INCIDENT antes de BUG)", () => expect(t("b
         normal: "É uma hipótese de produto, não uma verdade: o projeto real mede se ela melhora a classificação com datasets de avaliação.",
       },
     ],
-    exercise: {
-      instructions: "Reescreva `scoreCategory(category, title, description)`: cada pista da categoria vale 2 no título e 1 na descrição. `RULES` já existe.",
-      files: ["score.ts"],
-      expose: ["scoreCategory"],
-      support: ["rules.ts"],
-    },
-    given: { "rules.ts": exp(RULES_V1) },
+    instructions: "Mude `scoreCategory` para receber `category, title, description`: pista no título vale 2, na descrição vale 1. Ajuste `classify` para passar os dois separados.",
+    expose: ["classify", "scoreCategory"],
     tests: T(
+      "classify, scoreCategory",
       `test("pista no título vale 2", () => expect(scoreCategory("BUG", "bug in checkout", "")).toBe(2));
 test("pista na descrição vale 1", () => expect(scoreCategory("BUG", "", "bug in checkout")).toBe(1));
 test("título e descrição somam", () => expect(scoreCategory("ACCESS", "cannot login", "password reset")).toBe(3));
-test("outra categoria não conta", () => expect(scoreCategory("INCIDENT", "cannot login", "password reset")).toBe(0));`,
-      "score.ts",
-      "scoreCategory",
+test("classify usa o novo placar", () => expect(classify({ title: "Bug in checkout", description: "the login button looks odd" })).toBe("BUG"));`,
     ),
     toolbox: [tool.and, tool.counter],
     limitation: '"error" aparece em quase todo ticket; "down" é quase certeza de incidente. Hoje **as duas pistas valem o mesmo**.',
   },
   {
-    slug: "10-signal-weights",
+    slug: "11-signal-weights",
     title: "Sinais fortes e fracos",
     subtitle: "Cada pista tem um peso",
     goal: "Dar a cada pista uma força diferente.",
     problem: 'Uma pista forte ("down") deveria valer mais que uma fraca ("error"). Onde guardar essa força?',
-    example: 'scoreCategory("BUG", "error", "")          → 2   (peso 1, no título)\nscoreCategory("INCIDENT", "", "outage")    → 4   (peso 4, na descrição)',
+    examples: [
+      { expr: 'scoreCategory("BUG", "error", "")', equals: "2" },
+      { expr: 'scoreCategory("INCIDENT", "", "outage")', equals: "4" },
+    ],
     minutes: 2,
     introduces: ["weighted-signals"],
     prerequisites: ["title-weight", "rules-as-data"],
     arch: ARCH_PICK,
-    reference: { "score.ts": SCORE_WEIGHTED, "rules.ts": RULES_WEIGHTED },
+    program: P11,
     lineNotes: [
       { match: "weight: 5", note: '"down" é a pista mais forte de incidente.' },
       { match: "weight: 1", note: '"error" aparece em todo lugar: pista fraca.' },
@@ -597,86 +632,69 @@ test("outra categoria não conta", () => expect(scoreCategory("INCIDENT", "canno
       { match: "score += rule.weight;", note: "O peso da pista, simples na descrição." },
     ],
     explanation: [
-      {
-        id: "weights",
-        conceptId: "weighted-signals",
-        title: "A força mora na tabela",
-        quick: "Cada regra ganhou `weight`. O placar soma o peso (dobrado no título) em vez de 1.",
-      },
+      { id: "weights", conceptId: "weighted-signals", title: "A força mora na tabela", quick: "Cada regra ganhou `weight`. O placar soma o peso (dobrado no título) em vez de 2 e 1." },
     ],
-    exercise: {
-      instructions: "Reescreva `scoreCategory(category, title, description)` usando o `weight` de cada regra: no título vale o dobro do peso, na descrição vale o peso. `RULES` (agora com pesos) já existe.",
-      files: ["score.ts"],
-      expose: ["scoreCategory"],
-      support: ["rules.ts"],
-    },
-    given: { "rules.ts": exp(RULES_WEIGHTED) },
+    instructions: "Dê a cada regra um `weight`: down 5, outage 4, bug 3, error 1, login 4, password 2. No título a pista vale o dobro do peso; na descrição, o peso.",
+    expose: ["classify", "scoreCategory"],
     tests: T(
+      "scoreCategory",
       `test("pista fraca no título: 1 × 2", () => expect(scoreCategory("BUG", "error", "")).toBe(2));
 test("pista fraca na descrição: 1", () => expect(scoreCategory("BUG", "", "error")).toBe(1));
 test("pista forte na descrição: 4", () => expect(scoreCategory("INCIDENT", "", "outage")).toBe(4));
-test("soma de pistas e posições", () => expect(scoreCategory("INCIDENT", "down", "outage")).toBe(14));`,
-      "score.ts",
-      "scoreCategory",
+test("soma de pistas e posições", () => expect(scoreCategory("INCIDENT", "down", "outage")).toBe(14));
+test("login e password", () => expect(scoreCategory("ACCESS", "login", "password")).toBe(10));`,
     ),
     toolbox: [tool.counter],
     limitation: 'Descrição **"login fails with a bug error"**: ACCESS 4 × BUG 4. O empate cai para quem vem primeiro em `CATEGORIES` — uma ordem que ninguém escolheu de propósito.',
   },
   {
-    slug: "11-safe-tie-break",
+    slug: "12-safe-tie-break",
     title: "Empate seguro",
     subtitle: "A ordem vira uma decisão",
     goal: "Decidir, de propósito, quem vence um empate.",
     problem: "Em empate, qual erro é mais caro? Tratar um incidente como bug deixa produção fora do ar esperando na fila. Tratar um bug como incidente custa alguns minutos de atenção.",
-    example: '{ title: "", description: "login fails with a bug error" }\n→ "ACCESS"   (empate 4 × 4: ACCESS vem antes de BUG)',
+    examples: [{ expr: 'classify({ title: "", description: "login fails with a bug error" })', equals: '"ACCESS"' }],
     minutes: 1,
     introduces: ["tie-break"],
     prerequisites: ["highest-score"],
     arch: ARCH_TIE,
-    reference: { "classify.ts": CLASSIFY_TIE, "score.ts": SCORE_WEIGHTED, "rules.ts": RULES_WEIGHTED },
+    program: P12,
     lineNotes: [
-      { match: "const TIE_BREAK", note: "Mesma lista de antes, com nome e ordem escolhidos: incidentes primeiro, depois acesso, depois bug." },
+      { match: "const TIE_BREAK", note: "A mesma lista de antes, com nome e ordem escolhidos: incidentes, depois acesso, depois bug." },
       { match: "for (const category of TIE_BREAK)", note: "Como só troca com placar estritamente maior, a primeira da lista vence os empates." },
     ],
     explanation: [
-      {
-        id: "tie",
-        conceptId: "tie-break",
-        title: "Errar para o lado seguro",
-        quick: "A lista `TIE_BREAK` torna explícita uma decisão de produto: em empate, INCIDENT > ACCESS > BUG.",
-      },
+      { id: "tie", conceptId: "tie-break", title: "Errar para o lado seguro", quick: "A lista `TIE_BREAK` torna explícita uma decisão de produto: em empate, INCIDENT > ACCESS > BUG." },
     ],
-    exercise: {
-      instructions: 'Reescreva `classify(ticket)` com a ordem de desempate INCIDENT, ACCESS, BUG. Continua: maior placar vence, nenhum ponto → `"OTHER"`. `scoreCategory(category, title, description)` e `RULES` já existem.',
-      files: ["classify.ts"],
-      expose: ["classify"],
-      support: ["rules.ts", "score.ts"],
-    },
-    given: { "rules.ts": exp(RULES_WEIGHTED), "score.ts": imp("RULES", "rules.ts") + exp(SCORE_WEIGHTED) },
+    instructions: "Em empate, a ordem passa a ser INCIDENT, ACCESS, BUG.",
+    expose: ["classify", "scoreCategory"],
     tests: T(
-      `const t = (title: string, description = "") => classify({ title, description });
-test("empate ACCESS × BUG → ACCESS", () => expect(t("", "login fails with a bug error")).toBe("ACCESS"));
-test("título pesa: BUG", () => expect(t("Checkout bug", "")).toBe("BUG"));
-test("incidente", () => expect(t("Site DOWN", "")).toBe("INCIDENT"));
-test("nada → OTHER", () => expect(t("Lunch", "menu")).toBe("OTHER"));`,
-      "classify.ts",
       "classify",
+      `${TICKETS}
+test("empate ACCESS × BUG → ACCESS", () => expect(t("", "login fails with a bug error")).toBe("ACCESS"));
+test("empate INCIDENT × ACCESS → INCIDENT", () => expect(t("", "outage login")).toBe("INCIDENT"));
+test("sem empate, maior placar vence", () => expect(t("Checkout bug", "")).toBe("BUG"));
+test("nada → OTHER", () => expect(t("Lunch", "menu")).toBe("OTHER"));`,
     ),
     toolbox: [tool.max],
     limitation: '**"Debug mode is slow"** virou BUG: "bug" está dentro de "debug". `includes` procura pedaços, não palavras.',
   },
   {
-    slug: "12-whole-words",
+    slug: "13-whole-words",
     title: "Palavra inteira",
     subtitle: '"debug" não é "bug"',
     goal: "Fazer cada pista casar só com a palavra inteira.",
     problem: '"debug" contém "bug"; "downloads" contém "down". Precisamos casar a **palavra**, não um pedaço dela.',
-    example: 'scoreCategory("BUG", "debug mode is slow", "")      → 0\nscoreCategory("INCIDENT", "", "downloads are slow")  → 0\nscoreCategory("BUG", "bug in checkout", "")          → 6',
+    examples: [
+      { expr: 'scoreCategory("BUG", "debug mode is slow", "")', equals: "0" },
+      { expr: 'scoreCategory("INCIDENT", "", "downloads are slow")', equals: "0" },
+      { expr: 'scoreCategory("BUG", "bug in checkout", "")', equals: "6" },
+    ],
     minutes: 2,
     introduces: ["regex-word-boundary"],
     prerequisites: ["weighted-signals"],
     arch: ARCH_TIE,
-    reference: { "rules.ts": RULES_REGEX, "score.ts": SCORE_REGEX },
+    program: P13,
     lineNotes: [
       { match: String.raw`/\bdown\b/`, note: String.raw`Uma expressão regular. \b marca onde uma palavra começa ou termina: casa "down", não "downloads".` },
       { match: "rule.pattern.test(title)", note: "`.test` pergunta se o padrão casa no texto — o papel que `includes` fazia." },
@@ -689,182 +707,148 @@ test("nada → OTHER", () => expect(t("Lunch", "menu")).toBe("OTHER"));`,
         quick: "Cada regra guarda um padrão (`/\\bbug\\b/`) em vez de uma palavra. `\\b` exige que seja uma palavra inteira.",
       },
     ],
-    exercise: {
-      instructions: 'Reescreva a tabela `RULES` com as mesmas pistas, categorias e pesos, mas cada pista deve casar só a palavra inteira. Cada regra precisa de um campo `pattern` — é ele que `scoreCategory` (já pronta) usa.',
-      files: ["rules.ts"],
-      expose: ["RULES"],
-      support: ["score.ts"],
-    },
-    given: { "score.ts": imp("RULES", "rules.ts") + exp(SCORE_REGEX) },
-    tests: `import { test, expect } from "replay:test";
-import { scoreCategory } from "./score.ts";
-
-test('"debug" não conta como "bug"', () => expect(scoreCategory("BUG", "debug mode is slow", "")).toBe(0));
+    instructions: 'Faça cada pista casar só com a palavra inteira: "debug" não é "bug", "downloads" não é "down". Mesmas pistas, categorias e pesos.',
+    expose: ["classify", "scoreCategory"],
+    tests: T(
+      "classify, scoreCategory",
+      `test('"debug" não conta como "bug"', () => expect(scoreCategory("BUG", "debug mode is slow", "")).toBe(0));
 test('"downloads" não conta como "down"', () => expect(scoreCategory("INCIDENT", "", "downloads are slow")).toBe(0));
 test("bug no título: 3 × 2", () => expect(scoreCategory("BUG", "bug in checkout", "")).toBe(6));
-test("down no título: 5 × 2", () => expect(scoreCategory("INCIDENT", "server down", "")).toBe(10));
 test("login e password na descrição: 4 + 2", () => expect(scoreCategory("ACCESS", "", "login after password reset")).toBe(6));
-test("outage (4) e error (1) continuam valendo", () => {
-  expect(scoreCategory("INCIDENT", "", "outage")).toBe(4);
-  expect(scoreCategory("BUG", "", "error")).toBe(1);
-});
-`,
+test("classify: debug mode → OTHER", () => expect(classify({ title: "Debug mode is slow", description: "" })).toBe("OTHER"));`,
+    ),
     toolbox: [tool.regex, tool.boundary],
-    limitation: 'As categorias são strings soltas. Um **"INCIDNET"** digitado errado na tabela nunca casaria com nada — e ninguém seria avisado.',
+    limitation: 'As categorias são strings soltas. Um **"INCIDNET"** digitado errado passaria em silêncio — e aquela categoria nunca mais seria escolhida.',
   },
   {
-    slug: "13-named-categories",
+    slug: "14-category-enum",
     title: "Categorias com nome",
     subtitle: "Um conjunto fechado",
-    goal: "Tornar as categorias possíveis um conjunto fechado e nomeado.",
-    problem: 'Hoje qualquer string passa por categoria. Um `"INCIDNET"` digitado errado na tabela seria aceito em silêncio — e aquele sinal nunca mais casaria com nada.\n\nQueremos um conjunto **fechado** (INCIDENT, BUG, ACCESS, OTHER) em que um erro de digitação seja **recusado antes de o código rodar**.',
-    example: 'const ok: Category = Category.INCIDENT;   ✓\nconst typo: Category = "INCIDNET";      ✗ erro do TypeScript, antes de rodar',
-    minutes: 1,
+    goal: "Tornar as categorias possíveis um conjunto fechado e verificado.",
+    problem: 'Hoje qualquer string passa por categoria. Queremos um conjunto **fechado** — INCIDENT, BUG, ACCESS, OTHER — em que um erro de digitação seja **recusado antes de o código rodar**: `const c: Category = "INCIDNET"` tem que ser um erro.',
+    examples: [{ expr: 'classify({ title: "Cannot login", description: "" })', equals: "Category.ACCESS" }],
+    minutes: 2,
     introduces: ["string-enum"],
     prerequisites: ["tie-break"],
     arch: ARCH_ENUM,
-    reference: { "category.ts": CATEGORY_ENUM, "check.ts": CHECK_CATEGORY, "rules.ts": RULES_ENUM, "classify.ts": CLASSIFY_ENUM },
+    program: P14,
     lineNotes: [
       { match: "enum Category", note: "Declara o conjunto fechado de categorias." },
       { match: 'INCIDENT = "INCIDENT"', note: 'Cada membro tem um nome e um valor. Em runtime, Category.INCIDENT é a própria string "INCIDENT".' },
-      { match: "Category.INCIDENT, weight: 5", note: "A tabela passa a usar os nomes. Category.INCIDNET não existe: o TypeScript aponta o erro antes de rodar." },
-      { match: "@ts-expect-error", note: "Diz ao TypeScript: a linha seguinte **tem** que dar erro. Se `Category` aceitasse qualquer string, não haveria erro — e a verificação reprovaria." },
-      { match: 'const typo: Category = "INCIDNET"', note: "Um texto solto não é um membro do enum. É exatamente o erro de digitação que queremos barrar." },
+      { match: "TIE_BREAK = [Category.", note: "A ordem de desempate passa a usar os membros do enum." },
+      { match: "): Category {", note: "`classify` promete devolver uma `Category` — o TypeScript confere." },
+      { match: "let best = Category.OTHER", note: "O padrão também é um membro do enum." },
     ],
     explanation: [
       {
         id: "enum",
         conceptId: "string-enum",
         title: "Nomes em vez de strings soltas",
-        quick: "`enum Category` lista as quatro categorias. Algo do tipo `Category` só aceita esses membros: `\"INCIDNET\"` vira erro de compilação.",
+        quick: '`enum Category` lista as quatro categorias. Algo do tipo `Category` só aceita esses membros: `"INCIDNET"` vira erro de compilação.',
         normal: 'Em runtime nada muda — `Category.BUG === "BUG"`. A diferença acontece **antes** de rodar: nesta etapa o seu código passa pelo verificador do TypeScript, e um tipo errado reprova sem executar nenhum teste.',
       },
     ],
-    exercise: {
-      instructions: 'Crie o `enum Category` com INCIDENT, BUG, ACCESS e OTHER, cada um valendo o próprio nome como texto. A tabela e `classify` (já prontas) usam `Category`.\n\nNesta etapa o código passa pelo **verificador do TypeScript** antes de rodar — a aba "verificação de tipos" mostra o que ele exige. Depois de passar, experimente acrescentar `const c: Category = "BILLIGN";` e rodar de novo.',
-      files: ["category.ts"],
-      expose: ["Category"],
-      support: ["rules.ts", "score.ts", "classify.ts"],
-    },
-    given: {
-      "rules.ts": imp("Category", "category.ts") + exp(RULES_ENUM),
-      "score.ts": imp("RULES", "rules.ts") + exp(SCORE_REGEX),
-      "classify.ts": imp("Category", "category.ts") + imp("scoreCategory", "score.ts") + exp(CLASSIFY_ENUM),
-    },
-    typecheck: { "check.ts": CHECK_CATEGORY },
-    tests: `import { test, expect } from "replay:test";
-import { Category } from "./category.ts";
-import { classify } from "./classify.ts";
+    instructions: 'Crie o `enum Category` (INCIDENT, BUG, ACCESS e OTHER, cada um valendo o próprio nome como texto) e faça `classify` devolver `Category`. O código passa pelo **verificador do TypeScript** — a aba "verificação de tipos" mostra o que ele exige. Depois de passar, experimente escrever `const c: Category = "BILLIGN";`.',
+    expose: ["Category", "classify"],
+    typecheck: `import { Category, classify } from "./${FILE}";
 
-test("quatro categorias, cada uma valendo o próprio nome", () => {
-  expect(Category.INCIDENT).toBe("INCIDENT");
-  expect(Category.BUG).toBe("BUG");
-  expect(Category.ACCESS).toBe("ACCESS");
-  expect(Category.OTHER).toBe("OTHER");
+// classify devolve uma Category.
+export const decided: Category = classify({ title: "Server down", description: "" });
+
+// Uma string solta, com erro de digitação, NÃO pode ser uma Category.
+// @ts-expect-error
+export const typo: Category = "INCIDNET";`,
+    tests: T(
+      "Category, classify",
+      `test("quatro categorias, cada uma valendo o próprio nome", () => {
+  expect([Category.INCIDENT, Category.BUG, Category.ACCESS, Category.OTHER]).toEqual(["INCIDENT", "BUG", "ACCESS", "OTHER"]);
 });
 test("classify devolve membros de Category", () => {
   expect(classify({ title: "Cannot login", description: "" })).toBe(Category.ACCESS);
   expect(classify({ title: "Lunch", description: "" })).toBe(Category.OTHER);
-});
-`,
+});`,
+    ),
     toolbox: [tool.enumT],
-    limitation: "Você reconstruiu cada peça separadamente. Consegue montar o classificador inteiro, **do zero, sem olhar**?",
+    limitation: 'A tabela ainda usa strings soltas: um `category: "INCIDNET"` ali continuaria passando sem aviso.',
+  },
+  {
+    slug: "15-rules-use-enum",
+    title: "A tabela usa os nomes",
+    subtitle: "Nenhuma string solta",
+    goal: "Levar a verificação de tipos até a tabela de regras.",
+    problem: "O enum existe, mas a tabela ainda escreve as categorias como texto. Um erro de digitação ali escaparia da verificação.",
+    examples: [{ expr: "RULES[0].category", equals: "Category.INCIDENT" }],
+    minutes: 1,
+    introduces: [],
+    prerequisites: ["string-enum"],
+    arch: ARCH_ENUM,
+    program: P15,
+    lineNotes: [
+      { match: "category: Category.INCIDENT, weight: 5", note: "`Category.INCIDNET` não existe: o TypeScript aponta o erro antes de rodar." },
+    ],
+    explanation: [
+      { id: "enum-table", conceptId: "string-enum", title: "Verificado de ponta a ponta", quick: "Com a tabela usando `Category.X`, nenhuma categoria do programa é mais uma string solta." },
+    ],
+    instructions: "Faça a tabela `RULES` usar `Category` em vez de strings.",
+    expose: ["Category", "classify", "RULES"],
+    typecheck: `import { Category, RULES } from "./${FILE}";
+
+// Cada regra aponta para um membro de Category, não para uma string solta.
+export const first: Category = RULES[0].category;
+
+// @ts-expect-error
+export const typo: Category = "INCIDNET";`,
+    tests: T(
+      "Category, classify, RULES",
+      `test("cada regra usa um membro de Category", () => {
+  expect(RULES.map((r) => r.category)).toEqual([Category.INCIDENT, Category.INCIDENT, Category.BUG, Category.BUG, Category.ACCESS, Category.ACCESS]);
+});
+test("comportamento preservado", () => expect(classify({ title: "", description: "login fails with a bug error" })).toBe(Category.ACCESS));`,
+    ),
+    toolbox: [tool.enumT],
+    limitation: "Você evoluiu cada peça. Consegue montar o classificador inteiro, **do zero, sem olhar**?",
   },
 ];
 
-// ---------- module checkpoint ----------
-const CONSOLIDATED = String.raw`enum Category {
-  INCIDENT = "INCIDENT",
-  BUG = "BUG",
-  ACCESS = "ACCESS",
-  OTHER = "OTHER",
-}
-
-const RULES = [
-  { pattern: /\bdown\b/, category: Category.INCIDENT, weight: 5 },
-  { pattern: /\boutage\b/, category: Category.INCIDENT, weight: 4 },
-  { pattern: /\bbug\b/, category: Category.BUG, weight: 3 },
-  { pattern: /\berror\b/, category: Category.BUG, weight: 1 },
-  { pattern: /\blogin\b/, category: Category.ACCESS, weight: 4 },
-  { pattern: /\bpassword\b/, category: Category.ACCESS, weight: 2 },
-];
-
-// Em empate vence quem vem primeiro: ignorar um incidente é o erro mais caro.
-const TIE_BREAK = [Category.INCIDENT, Category.ACCESS, Category.BUG];
-
-function scoreCategory(category: Category, title: string, description: string): number {
-  let score = 0;
-  for (const rule of RULES) {
-    if (rule.category === category && rule.pattern.test(title)) score += rule.weight * 2;
-    if (rule.category === category && rule.pattern.test(description)) score += rule.weight;
-  }
-  return score;
-}
-
-function classify(ticket: { title: string; description: string }): Category {
-  const title = ticket.title.toLowerCase();
-  const description = ticket.description.toLowerCase();
-  let best = Category.OTHER;
-  let bestScore = 0;
-  for (const category of TIE_BREAK) {
-    const score = scoreCategory(category, title, description);
-    if (score > bestScore) {
-      best = category;
-      bestScore = score;
-    }
-  }
-  return best;
-}`;
-
-const checkpoint: Micro = {
+// ---------- module checkpoint: the final state, rebuilt from an empty editor ----------
+const checkpoint = {
   slug: "99-checkpoint",
-  kind: "checkpoint",
   title: "Checkpoint: o classificador inteiro",
   subtitle: "Do zero, sem olhar",
   goal: "Reconstruir sozinho o classificador determinístico completo e compará-lo com o código real.",
   problem: "Juntar todas as peças do módulo em um arquivo, começando do editor vazio. Depois, comparar a sua versão com a versão consolidada do Replay e com o código real do ops-triage-ai.",
-  example: [
-    "Categorias: INCIDENT, BUG, ACCESS, OTHER (Category)",
-    "Pistas (palavra inteira, sem diferenciar maiúsculas) e pesos:",
-    "  down 5, outage 4 → INCIDENT · bug 3, error 1 → BUG · login 4, password 2 → ACCESS",
-    "scoreCategory(category, title, description): título vale o dobro",
-    "classify(ticket): maior placar; empate → INCIDENT, ACCESS, BUG; nada → OTHER",
-  ].join("\n"),
+  requirements: [
+    "`Category`: INCIDENT, BUG, ACCESS, OTHER",
+    "Pistas (palavra inteira, sem diferenciar maiúsculas) e pesos: down 5, outage 4 → INCIDENT · bug 3, error 1 → BUG · login 4, password 2 → ACCESS",
+    "`scoreCategory(category, title, description)`: no título vale o dobro do peso",
+    "`classify(ticket)`: maior placar; empate → INCIDENT, ACCESS, BUG; nenhuma pista → OTHER",
+  ],
   minutes: 5,
-  introduces: [],
   prerequisites: ["string-enum", "regex-word-boundary", "tie-break", "weighted-signals", "title-weight"],
-  arch: ARCH_ENUM,
-  reference: { "classifier.ts": CONSOLIDATED },
-  lineNotes: [],
+  program: P15,
   explanation: [
     {
       id: "real",
       title: "O que o código real faz a mais",
       quick: "O mesmo esqueleto — sinais com peso, título em dobro, desempate explícito — com mais categorias e mais sinais por categoria.",
-      normal: "No `DeterministicTriageClassifier` real, cada sinal também tem um `label` (\"production_down\") usado para explicar a decisão; `normalize` remove acentos e pontuação; e o resultado não é só a categoria: inclui confiança, prioridade, risco e time sugerido. Esses são os próximos módulos.",
+      normal: 'No `DeterministicTriageClassifier` real, cada sinal também tem um `label` ("production_down") usado para explicar a decisão; `normalize` remove acentos e pontuação; e o resultado não é só a categoria: inclui confiança, prioridade, risco e time sugerido. Esses são os próximos módulos.',
     },
   ],
-  exercise: {
-    instructions: "Reconstrua em `classifier.ts`, do zero: `Category`, as regras, `scoreCategory(category, title, description)` e `classify(ticket)`. Os requisitos estão acima; o resto é com você. O TypeScript verifica os tipos antes dos testes.",
-    files: ["classifier.ts"],
-    expose: ["Category", "scoreCategory", "classify"],
-  },
-  typecheck: {
-    "check.ts": `import { Category, classify, scoreCategory } from "./classifier.ts";
+  instructions: "Reconstrua em `classify.ts`, do zero: `Category`, as regras, `scoreCategory(category, title, description)` e `classify(ticket)`. Os requisitos estão acima; o resto é com você. O TypeScript verifica os tipos antes dos testes.",
+  expose: ["Category", "RULES", "scoreCategory", "classify"],
+  typecheck: `import { Category, RULES, classify, scoreCategory } from "./${FILE}";
 
-// classify devolve uma Category; scoreCategory, um número.
+// classify devolve uma Category; scoreCategory, um número; a tabela usa Category.
 export const decided: Category = classify({ title: "Server down", description: "" });
 export const points: number = scoreCategory(Category.BUG, "bug", "");
+export const first: Category = RULES[0].category;
 
 // Uma string solta não é uma Category.
 // @ts-expect-error
 export const typo: Category = "INCIDNET";`,
-  },
-  tests: `import { test, expect } from "replay:test";
-import { Category, classify, scoreCategory } from "./classifier.ts";
-
-const t = (title: string, description = "") => classify({ title, description });
-
+  tests: T(
+    "Category, classify, scoreCategory",
+    `${TICKETS}
 test("Category tem as quatro categorias", () => {
   expect([Category.INCIDENT, Category.BUG, Category.ACCESS, Category.OTHER]).toEqual(["INCIDENT", "BUG", "ACCESS", "OTHER"]);
 });
@@ -883,62 +867,96 @@ test("empate: INCIDENT > ACCESS > BUG", () => {
   expect(t("", "login fails with a bug error")).toBe(Category.ACCESS);
   expect(t("", "outage login")).toBe(Category.INCIDENT);
 });
-test("sem pistas → OTHER", () => expect(t("Lunch", "menu")).toBe(Category.OTHER));
-`,
+test("sem pistas → OTHER", () => expect(t("Lunch", "menu")).toBe(Category.OTHER));`,
+  ),
   toolbox: [tool.enumT, tool.regex, tool.boundary, tool.forOf, tool.max, tool.lower],
   originalCodeRefs: [
-    { path: "src/domain/triage.ts", startLine: 1, endLine: 9, symbol: "Category", replayFile: "classifier.ts", note: "O mesmo enum, com 7 categorias (inclui FEATURE_REQUEST, CONTENT_CHANGE e SUPPORT). Mora na camada de domínio." },
-    { path: "src/application/classifiers/deterministic-triage-classifier.ts", startLine: 24, endLine: 66, symbol: "CATEGORY_SIGNALS", replayFile: "classifier.ts", replaySymbol: "RULES", note: "Nossa tabela RULES, organizada por categoria (Record<Category, ...>), com vários sinais por categoria e um label por sinal para explicar a decisão." },
-    { path: "src/application/classifiers/deterministic-triage-classifier.ts", startLine: 68, endLine: 77, symbol: "CATEGORY_TIE_BREAK", replayFile: "classifier.ts", note: 'Nosso TIE_BREAK, com o mesmo raciocínio no comentário: "Safety-sensitive operational categories win."' },
-    { path: "src/application/classifiers/deterministic-triage-classifier.ts", startLine: 116, endLine: 132, symbol: "scoreCategory", replayFile: "classifier.ts", note: "Idêntico em lógica: peso × 2 no título, peso na descrição. Também devolve quais sinais casaram (matched)." },
-    { path: "src/application/classifiers/deterministic-triage-classifier.ts", startLine: 78, endLine: 114, symbol: "classify", replayFile: "classifier.ts", note: "Nosso classify, mais: confiança pela margem entre 1º e 2º colocados, prioridade, risco, time sugerido e justificativa." },
-    { path: "src/application/classifiers/deterministic-triage-classifier.ts", startLine: 221, endLine: 229, symbol: "normalize", replayFile: "classifier.ts", replaySymbol: "classify", note: "Nosso toLowerCase, mais remoção de acentos e pontuação." },
+    { path: "src/domain/triage.ts", startLine: 1, endLine: 9, symbol: "Category", replayFile: FILE, note: "O mesmo enum, com 7 categorias (inclui FEATURE_REQUEST, CONTENT_CHANGE e SUPPORT). Mora na camada de domínio." },
+    { path: "src/application/classifiers/deterministic-triage-classifier.ts", startLine: 24, endLine: 66, symbol: "CATEGORY_SIGNALS", replayFile: FILE, replaySymbol: "RULES", note: "Nossa tabela RULES, organizada por categoria (Record<Category, ...>), com vários sinais por categoria e um label por sinal para explicar a decisão." },
+    { path: "src/application/classifiers/deterministic-triage-classifier.ts", startLine: 68, endLine: 77, symbol: "CATEGORY_TIE_BREAK", replayFile: FILE, note: 'Nosso TIE_BREAK, com o mesmo raciocínio no comentário: "Safety-sensitive operational categories win."' },
+    { path: "src/application/classifiers/deterministic-triage-classifier.ts", startLine: 116, endLine: 132, symbol: "scoreCategory", replayFile: FILE, note: "Idêntico em lógica: peso × 2 no título, peso na descrição. Também devolve quais sinais casaram (matched)." },
+    { path: "src/application/classifiers/deterministic-triage-classifier.ts", startLine: 78, endLine: 114, symbol: "classify", replayFile: FILE, note: "Nosso classify, mais: confiança pela margem entre 1º e 2º colocados, prioridade, risco, time sugerido e justificativa." },
+    { path: "src/application/classifiers/deterministic-triage-classifier.ts", startLine: 221, endLine: 229, symbol: "normalize", replayFile: FILE, replaySymbol: "classify", note: "Nosso toLowerCase, mais remoção de acentos e pontuação." },
   ],
-  checkpoint: {
+  checkpointQuestion: {
     question: "No código real, por que o título ter peso dobrado é uma decisão que precisa ser medida, e não uma verdade?",
     answer: "Porque é uma hipótese sobre como as pessoas escrevem tickets. O projeto real avalia o classificador em datasets rotulados: se dobrar o título piorasse os acertos, o peso mudaria. Os pesos são parâmetros de produto, não fatos.",
   },
 };
 
 // ---------- write ----------
-function write(stage: Micro): void {
-  const dir = join(ROOT, stage.slug);
+rmSync(ROOT, { recursive: true, force: true });
+
+function writeStage(slug: string, json: Record<string, unknown>, program: string, tests: string, typecheck?: string): void {
+  const dir = join(ROOT, slug);
   mkdirSync(join(dir, "reference"), { recursive: true });
-  for (const [file, content] of Object.entries(stage.reference)) writeFileSync(join(dir, "reference", file), content + "\n");
-  const givenFiles = { ...stage.given, ...stage.typecheck };
-  if (Object.keys(givenFiles).length) {
+  writeFileSync(join(dir, "reference", FILE), program + "\n");
+  writeFileSync(join(dir, "tests.ts"), tests);
+  if (typecheck) {
     mkdirSync(join(dir, "given"), { recursive: true });
-    for (const [file, content] of Object.entries(givenFiles)) writeFileSync(join(dir, "given", file), content + "\n");
+    writeFileSync(join(dir, "given", "check.ts"), typecheck + "\n");
   }
-  writeFileSync(join(dir, "tests.ts"), stage.tests);
-  const json = {
-    kind: stage.kind ?? "micro",
-    title: stage.title,
-    ...(stage.subtitle ? { subtitle: stage.subtitle } : {}),
-    goal: stage.goal,
-    problem: stage.problem,
-    ...(stage.example ? { example: stage.example } : {}),
-    estimatedMinutes: stage.minutes,
-    introduces: stage.introduces,
-    prerequisites: stage.prerequisites,
-    architecture: stage.arch,
-    referenceCode: Object.keys(stage.reference),
-    lineNotes: stage.lineNotes,
-    explanation: stage.explanation,
-    ...(stage.originalCodeRefs ? { originalCodeRefs: stage.originalCodeRefs } : {}),
-    exercise: {
-      instructions: stage.exercise.instructions,
-      files: stage.exercise.files,
-      ...(stage.exercise.support ? { supportFiles: stage.exercise.support } : {}),
-      expose: stage.exercise.expose,
-      ...(stage.typecheck ? { typecheck: { files: Object.keys(stage.typecheck) } } : {}),
-    },
-    toolbox: stage.toolbox,
-    ...(stage.checkpoint ? { checkpoint: stage.checkpoint } : {}),
-    ...(stage.limitation ? { limitation: stage.limitation } : {}),
-  };
   writeFileSync(join(dir, "stage.json"), JSON.stringify(json, null, 2) + "\n");
 }
 
-for (const stage of [...stages, checkpoint]) write(stage);
-console.log([...stages, checkpoint].map((s) => "m1/" + s.slug).join("\n"));
+const exercise = (instructions: string, expose: string[], typecheck?: string) => ({
+  instructions,
+  files: [FILE],
+  expose,
+  ...(typecheck ? { typecheck: { files: ["check.ts"] } } : {}),
+});
+
+for (const step of steps) {
+  writeStage(
+    step.slug,
+    {
+      kind: "micro",
+      title: step.title,
+      subtitle: step.subtitle,
+      goal: step.goal,
+      problem: step.problem,
+      examples: step.examples,
+      estimatedMinutes: step.minutes,
+      introduces: step.introduces,
+      prerequisites: step.prerequisites,
+      architecture: step.arch,
+      referenceCode: [FILE],
+      lineNotes: step.lineNotes,
+      explanation: step.explanation,
+      exercise: exercise(step.instructions, step.expose, step.typecheck),
+      toolbox: step.toolbox,
+      ...(step.limitation ? { limitation: step.limitation } : {}),
+      ...(step.noveltyException ? { noveltyException: step.noveltyException } : {}),
+    },
+    step.program,
+    step.tests,
+    step.typecheck,
+  );
+}
+
+writeStage(
+  checkpoint.slug,
+  {
+    kind: "checkpoint",
+    title: checkpoint.title,
+    subtitle: checkpoint.subtitle,
+    goal: checkpoint.goal,
+    problem: checkpoint.problem,
+    requirements: checkpoint.requirements,
+    estimatedMinutes: checkpoint.minutes,
+    introduces: [],
+    prerequisites: checkpoint.prerequisites,
+    architecture: ARCH_ENUM,
+    referenceCode: [FILE],
+    explanation: checkpoint.explanation,
+    originalCodeRefs: checkpoint.originalCodeRefs,
+    exercise: exercise(checkpoint.instructions, checkpoint.expose, checkpoint.typecheck),
+    toolbox: checkpoint.toolbox,
+    checkpoint: checkpoint.checkpointQuestion,
+  },
+  checkpoint.program,
+  checkpoint.tests,
+  checkpoint.typecheck,
+);
+
+console.log([...steps.map((s) => s.slug), checkpoint.slug].map((slug) => `m1/${slug}`).join("\n"));

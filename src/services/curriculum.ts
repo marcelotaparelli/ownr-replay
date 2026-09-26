@@ -4,11 +4,13 @@ import { z } from "zod";
 import { graphProblems } from "../domain/architecture-diff.ts";
 import { ArchitectureGraph } from "../domain/architecture.ts";
 import type { Journey } from "../domain/journey.ts";
+import { FROM_SCRATCH, LearningGoal } from "../domain/learning-goal.ts";
 import {
   Checkpoint,
   CodeFile,
   Concept,
   ExplanationBlock,
+  IoExample,
   LineNote,
   OriginalCodeReference,
   Stage,
@@ -43,6 +45,7 @@ const JourneySource = z.strictObject({
     url: z.string().url(),
     sha: z.string().regex(/^[0-9a-f]{40}$/),
   }),
+  goal: LearningGoal.default(FROM_SCRATCH),
   modules: z
     .array(
       z.strictObject({
@@ -63,7 +66,9 @@ const StageSource = z.strictObject({
   subtitle: z.string().optional(),
   goal: z.string().min(1),
   problem: z.string().min(1),
-  example: z.string().optional(),
+  examples: z.array(IoExample).default([]),
+  requirements: z.array(z.string().min(1)).default([]),
+  noveltyException: z.string().min(1).optional(),
   estimatedMinutes: z.number().int().positive(),
   introduces: z.array(z.string()),
   prerequisites: z.array(z.string()),
@@ -100,7 +105,7 @@ export function loadJourney(dir: string): Journey {
   const source = JourneySource.parse(readJson(join(dir, "journey.json")));
   const paths = source.modules.flatMap((module) => module.stages.map((path) => ({ module: module.id, path })));
   const ids = paths.map(({ module, path }) => stageId(source.id, module, path));
-  const stages = paths.map(({ module, path }, index) => loadStage(dir, source, module, path, index + 1, ids.slice(0, index)));
+  const stages = continueMicroStages(paths.map(({ module, path }, index) => loadStage(dir, source, module, path, index + 1, ids.slice(0, index))));
   const modules: Module[] = source.modules.map((module) => ({
     id: module.id,
     title: module.title,
@@ -112,6 +117,7 @@ export function loadJourney(dir: string): Journey {
     title: source.title,
     description: source.description,
     repo: source.repo,
+    goal: source.goal,
     status: "ready",
     concepts: source.concepts,
     modules,
@@ -155,7 +161,9 @@ function loadStage(dir: string, journey: JourneySource, moduleId: string, path: 
     ...(source.subtitle === undefined ? {} : { subtitle: source.subtitle }),
     goal: source.goal,
     problem: source.problem,
-    ...(source.example === undefined ? {} : { example: source.example }),
+    examples: source.examples,
+    requirements: source.requirements,
+    ...(source.noveltyException === undefined ? {} : { noveltyException: source.noveltyException }),
     estimatedMinutes: source.estimatedMinutes,
     introduces: source.introduces,
     prerequisites: source.prerequisites,
@@ -179,9 +187,10 @@ function loadStage(dir: string, journey: JourneySource, moduleId: string, path: 
       : {
           exercise: {
             instructions: exercise.instructions,
-            // Micro stages and checkpoints have no starter/ directory: the editor starts empty.
+            // Only chapters ship starter/. Checkpoints start empty; micro stages continue from the
+            // previous micro stage (set by continueMicroStages), the first one starting empty.
             starterFiles: exercise.files.map((file) =>
-              existsSync(join(stageDir, "starter", file)) ? read("starter", file) : { path: file, content: "" },
+              source.kind === "chapter" && existsSync(join(stageDir, "starter", file)) ? read("starter", file) : { path: file, content: "" },
             ),
             solutionFiles: (exercise.solutionFiles ?? exercise.files).map((file) => readFirst(["solution", "reference"], file)),
             supportFiles: exercise.supportFiles.map((file) => readFirst(["given", "reference"], file)),
@@ -204,6 +213,25 @@ function loadStage(dir: string, journey: JourneySource, moduleId: string, path: 
     ...(source.summary === undefined ? {} : { summary: source.summary }),
   });
 }
+
+/**
+ * Cumulative workspace: a micro stage starts from where the previous micro stage of the
+ * same module ended. This is the reference starting point; the learner's own accepted
+ * code replaces it in the client, and the validator proves it still fails the new tests.
+ */
+function continueMicroStages(stages: Stage[]): Stage[] {
+  return stages.map((stage, index) => {
+    const previous = stages[index - 1];
+    if (stage.kind !== "micro" || !stage.exercise || previous?.kind !== "micro" || previous.moduleId !== stage.moduleId || !previous.exercise) {
+      return stage;
+    }
+    const before = previous.exercise.solutionFiles;
+    const starterFiles = stage.exercise.starterFiles.map((file) => ({ path: file.path, content: before.find((f) => f.path === file.path)?.content ?? "" }));
+    return { ...stage, exercise: { ...stage.exercise, starterFiles } };
+  });
+}
+
+const HTML_ENTITY = /&(?:#x?[0-9a-f]+|[a-z]+);/i;
 
 /** Cross-stage invariants the schema alone cannot express. */
 export function validateJourney(journey: Journey): string[] {
@@ -234,10 +262,22 @@ export function validateJourney(journey: Journey): string[] {
       if (!files.has(ref.replayFile)) problems.push(`${where}: ${ref.symbol} maps to missing ${ref.replayFile}`);
     }
     if (stage.architecture) problems.push(...graphProblems(stage.architecture).map((problem) => `${where}: ${problem}`));
-    // The core pedagogical rule: rebuilding starts from a blank editor.
-    if (stage.kind !== "chapter" && stage.exercise?.starterFiles.some((file) => file.content.trim() !== "")) {
-      problems.push(`${where}: ${stage.kind} stages must not ship starter code`);
+    // Checkpoints rebuild everything from a blank editor.
+    if (stage.kind === "checkpoint" && stage.exercise?.starterFiles.some((file) => file.content.trim() !== "")) {
+      problems.push(`${where}: checkpoints must start from an empty editor`);
     }
+    // What is shown as the solution is exactly what the tests validate: no unvalidated code on screen.
+    if (stage.kind !== "chapter" && stage.exercise) {
+      const solution = new Map(stage.exercise.solutionFiles.map((f) => [f.path, f.content]));
+      for (const file of stage.referenceCode) {
+        if (solution.get(file.path) !== file.content) problems.push(`${where}: shown code ${file.path} differs from the validated solution`);
+      }
+    }
+    // Code on screen must look like code: serialized HTML never belongs in content.
+    const texts = [stage.title, stage.problem, stage.goal, stage.limitation ?? "", ...stage.requirements, ...stage.referenceCode.map((f) => f.content),
+      ...stage.explanation.flatMap((b) => [b.quick, b.normal ?? "", b.deep ?? ""]), ...stage.toolbox.flatMap((t) => [t.example, t.summary]),
+      ...stage.examples.flatMap((e) => [e.expr, e.equals]), ...stage.lineNotes.map((n) => n.note)];
+    if (texts.some((text) => HTML_ENTITY.test(text))) problems.push(`${where}: content contains an HTML entity`);
     if (stage.kind === "micro" && !stage.limitation && stage.order < journey.stages.length) {
       problems.push(`${where}: micro stages must name the limitation that motivates the next step`);
     }

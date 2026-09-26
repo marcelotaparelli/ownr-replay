@@ -1,0 +1,139 @@
+{
+  "kind": "micro",
+  "title": "Contar evidências",
+  "subtitle": "Quantas pistas cada categoria tem?",
+  "goal": "Medir quantas pistas de uma categoria aparecem no texto.",
+  "problem": "Em vez de parar na primeira pista, queremos **contar** as pistas de cada categoria.\n\nPrimeiro só medir; decidir vem depois.",
+  "examples": [
+    {
+      "expr": "scoreCategory(\"ACCESS\", \"cannot login after password reset\")",
+      "equals": "2"
+    },
+    {
+      "expr": "scoreCategory(\"BUG\", \"cannot login after password reset\")",
+      "equals": "0"
+    }
+  ],
+  "estimatedMinutes": 2,
+  "introduces": [
+    "evidence-score"
+  ],
+  "prerequisites": [
+    "rules-as-data"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
+        "col": 2,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "rules",
+        "rel": "reads"
+      },
+      {
+        "from": "score",
+        "to": "rules",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "function scoreCategory",
+      "note": "Uma função nova, ao lado de `classify`: mede, não decide."
+    },
+    {
+      "match": "let score = 0",
+      "note": "Começa sem pontos."
+    },
+    {
+      "match": "rule.category === category && text.includes(rule.word)",
+      "note": "Só conta regras da categoria perguntada, e só se a palavra aparece no texto."
+    },
+    {
+      "match": "score += 1",
+      "note": "Cada pista encontrada vale um ponto."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "score",
+      "conceptId": "evidence-score",
+      "title": "Um placar por categoria",
+      "quick": "`scoreCategory` percorre as regras e soma 1 para cada palavra daquela categoria que aparece no texto."
+    }
+  ],
+  "exercise": {
+    "instructions": "Crie `scoreCategory(category, text)`: quantas regras de `RULES` daquela categoria aparecem no texto. `classify` ainda não muda.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "scoreCategory",
+      "classify"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "counter",
+      "name": "Contador (+=)",
+      "summary": "Comece em 0 e some dentro do laço.",
+      "example": "let total = 0;\nfor (const n of [1, 2, 3]) {\n  total += n;\n}\n// total === 6"
+    },
+    {
+      "id": "and",
+      "name": "&& (e)",
+      "summary": "Verdadeiro só se os dois lados forem.",
+      "example": "const fruit = { color: \"red\", ripe: true };\nif (fruit.color === \"red\" && fruit.ripe) {\n  console.log(\"pronta\");\n}"
+    }
+  ],
+  "limitation": "Temos o placar de cada categoria, mas `classify` ainda escolhe pela primeira regra que casa."
+}

@@ -1,0 +1,107 @@
+{
+  "kind": "micro",
+  "title": "Mais pistas",
+  "subtitle": "Só dados mudam",
+  "goal": "Ver a tabela pagar o seu custo: mais regras, nenhuma mudança na função.",
+  "problem": "Cada categoria tem mais de uma pista: \"outage\" também é incidente, \"error\" também é bug, \"password\" também é acesso.",
+  "examples": [
+    {
+      "expr": "classify({ title: \"Outage in EU\", description: \"\" })",
+      "equals": "\"INCIDENT\""
+    },
+    {
+      "expr": "classify({ title: \"Wrong password\", description: \"\" })",
+      "equals": "\"ACCESS\""
+    }
+  ],
+  "estimatedMinutes": 1,
+  "introduces": [],
+  "prerequisites": [
+    "rules-as-data"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 1,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "rules",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "\"outage\"",
+      "note": "Uma linha nova na tabela. `classify` continua exatamente igual."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "payoff",
+      "conceptId": "rules-as-data",
+      "title": "Só a tabela cresceu",
+      "quick": "Três pistas novas, zero linhas novas na função. É para isso que a tabela existe."
+    }
+  ],
+  "exercise": {
+    "instructions": "Acrescente à tabela as pistas outage → INCIDENT, error → BUG e password → ACCESS.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "classify",
+      "RULES"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "array-literal",
+      "name": "Mais itens na lista",
+      "summary": "Uma lista literal cresce acrescentando itens entre os colchetes.",
+      "example": "const colors = [\n  \"red\",\n  \"blue\",\n  \"green\",\n];"
+    }
+  ],
+  "limitation": "Ticket: **\"Cannot login after password reset — the page shows a bug\"**. Há duas pistas de ACCESS e uma de BUG, mas a primeira regra que casa vence: BUG."
+}

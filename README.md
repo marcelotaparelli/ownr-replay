@@ -26,9 +26,11 @@ data/golden/    jornada curada: stage.json + reference/ starter/ tests.ts + trec
 
 ## Pedagogia: módulos e micro etapas
 
-Cada módulo decompõe um capítulo do repo em **micro etapas** de 1–2 minutos, com **uma ideia nova** cada: problema mínimo → solução mínima (linhas novas destacadas, nota por linha) → entenda → **reconstrua do zero** (editor vazio, solução escondida) → testes → **nova limitação**, que motiva a etapa seguinte. O módulo termina num **checkpoint**: reconstruir tudo do zero e comparar *sua versão ↔ replay consolidado ↔ código real*. "Já sei isso" e "Já domino este módulo" pulam sem bloquear.
+Cada módulo decompõe um capítulo do repo em **micro etapas** de 1–2 minutos, com **uma ideia nova** cada: problema mínimo → solução mínima (verde = só o delta real em relação à etapa anterior) → entenda → **evolua o seu próprio código** → testes → **nova limitação**, que motiva a etapa seguinte. As micro etapas de um módulo evoluem **um único programa**: a etapa N começa do código que você teve aceito na etapa N−1 (se você pulou, começa da referência dela, com aviso). O módulo termina num **checkpoint**: editor vazio, reconstruir tudo e comparar *sua versão ↔ replay consolidado ↔ código real*.
 
-O aluno escreve código puro: `export` é adicionado automaticamente para os nomes que os testes usam, e o que etapas anteriores já construíram (tabelas, funções) vem como arquivo fornecido, importado automaticamente. Só a ideia nova é reescrita.
+A home pergunta **o que você quer entender** (aprender do zero, fluxo principal, uma parte específica…). Hoje só "aprender do zero" tem jornada curada; os demais objetivos são registrados (`journey_requests`) e alimentarão o futuro Planner (`plan(repository, goal)`).
+
+Tudo que aparece como código correto é validado por `bun test`: soluções passam nos testes (e no `tsc` quando a etapa ensina tipos), exemplos são executados, snippets da Toolbox passam no `tsc`, e cada micro etapa respeita o orçamento de novidade (≤ 10 linhas relevantes novas, com a tabela impressa no teste).
 
 - Module 1 é gerado por `scripts/author-golden-m1.ts` (edite lá e rode `bun scripts/author-golden-m1.ts`).
 - Os módulos 2–8 ainda são capítulos não decompostos (`kind: "chapter"`, com starter).

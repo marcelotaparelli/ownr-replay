@@ -1,0 +1,134 @@
+{
+  "kind": "micro",
+  "title": "Sinais fortes e fracos",
+  "subtitle": "Cada pista tem um peso",
+  "goal": "Dar a cada pista uma força diferente.",
+  "problem": "Uma pista forte (\"down\") deveria valer mais que uma fraca (\"error\"). Onde guardar essa força?",
+  "examples": [
+    {
+      "expr": "scoreCategory(\"BUG\", \"error\", \"\")",
+      "equals": "2"
+    },
+    {
+      "expr": "scoreCategory(\"INCIDENT\", \"\", \"outage\")",
+      "equals": "4"
+    }
+  ],
+  "estimatedMinutes": 2,
+  "introduces": [
+    "weighted-signals"
+  ],
+  "prerequisites": [
+    "title-weight",
+    "rules-as-data"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
+        "col": 2,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "score",
+        "rel": "calls"
+      },
+      {
+        "from": "score",
+        "to": "rules",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "weight: 5",
+      "note": "\"down\" é a pista mais forte de incidente."
+    },
+    {
+      "match": "weight: 1",
+      "note": "\"error\" aparece em todo lugar: pista fraca."
+    },
+    {
+      "match": "rule.weight * 2",
+      "note": "O peso da pista, dobrado no título."
+    },
+    {
+      "match": "score += rule.weight;",
+      "note": "O peso da pista, simples na descrição."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "weights",
+      "conceptId": "weighted-signals",
+      "title": "A força mora na tabela",
+      "quick": "Cada regra ganhou `weight`. O placar soma o peso (dobrado no título) em vez de 2 e 1."
+    }
+  ],
+  "exercise": {
+    "instructions": "Dê a cada regra um `weight`: down 5, outage 4, bug 3, error 1, login 4, password 2. No título a pista vale o dobro do peso; na descrição, o peso.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "classify",
+      "scoreCategory"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "counter",
+      "name": "Contador (+=)",
+      "summary": "Comece em 0 e some dentro do laço.",
+      "example": "let total = 0;\nfor (const n of [1, 2, 3]) {\n  total += n;\n}\n// total === 6"
+    }
+  ],
+  "limitation": "Descrição **\"login fails with a bug error\"**: ACCESS 4 × BUG 4. O empate cai para quem vem primeiro em `CATEGORIES` — uma ordem que ninguém escolheu de propósito."
+}

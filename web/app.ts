@@ -102,16 +102,13 @@ async function render(): Promise<void> {
 async function showHome(): Promise<void> {
   journeyList ??= api.journeys();
   const journeys = await journeyList;
-  // A single curated journey: go straight to it.
-  const only = journeys[0];
-  if (journeys.length === 1 && only) {
-    location.replace(`#/j/${only.id}`);
-    return;
-  }
+  // Home always asks what the developer wants to understand; returning learners get a one-click resume.
+  const started = journeys.find((j) => storeFor(j.id).snapshot.lastStageId);
+  const resume = started ? { journey: started, label: "você já começou esta jornada" } : undefined;
   idleSidebar();
   nav.replaceChildren();
   crumb.textContent = "";
-  main.replaceChildren(renderHome(journeys));
+  main.replaceChildren(renderHome(journeys, resume));
 }
 
 async function showStage(journey: JourneyOutline, store: ProgressStore, order: number): Promise<void> {

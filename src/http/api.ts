@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Repository } from "../db/repository.ts";
 import { outline, type Journey } from "../domain/journey.ts";
+import { FROM_SCRATCH, LearningGoal } from "../domain/learning-goal.ts";
 import { AttemptInput, ClientEvent, KnowledgeLevel, LearnerId, ProgressUpdate } from "../domain/progress.ts";
 import { CodeFile, type Stage } from "../domain/stage.ts";
 import { TutorRequest } from "../domain/tutor.ts";
@@ -27,7 +28,7 @@ export type ApiDeps = {
 
 const RunRequest = z.strictObject({ files: z.array(CodeFile).min(1).max(10) });
 const KnowledgeRequest = z.strictObject({ conceptIds: z.array(z.string().max(64)).min(1).max(50), state: KnowledgeLevel });
-const CreateJourneyRequest = z.strictObject({ repoUrl: z.string().max(200) });
+const CreateJourneyRequest = z.strictObject({ repoUrl: z.string().max(200), goal: LearningGoal.default(FROM_SCRATCH) });
 
 const RUN_TIMEOUT_MS = 3_000;
 const MAX_SOURCE_BYTES = 64 * 1024;
@@ -74,14 +75,25 @@ export function createApi(deps: ApiDeps): Router {
       ),
     )
     .on("POST", "/api/journeys", async (req) => {
-      const { repoUrl } = await readBody(req, CreateJourneyRequest);
+      const { repoUrl, goal } = await readBody(req, CreateJourneyRequest);
       const repo = parseGithubRepoUrl(repoUrl);
       if (!repo) throw new HttpError(422, "INVALID_REPO_URL", "Use uma URL pública no formato https://github.com/owner/repo.");
-      const existing = journeys.find(
+      const sameRepo = journeys.filter(
         (j) => j.repo.owner.toLowerCase() === repo.owner.toLowerCase() && j.repo.name.toLowerCase() === repo.name.toLowerCase(),
       );
-      if (existing) return json({ id: existing.id, status: existing.status });
-      // Automatic generation (clone → analyze → plan → generate) is a later phase.
+      const match = sameRepo.find((j) => j.goal.kind === goal.kind);
+      const learnerId = LearnerId.safeParse(req.headers.get("x-learner-id"));
+      repository.recordJourneyRequest({ learnerId: learnerId.success ? learnerId.data : null, owner: repo.owner, name: repo.name, goal, served: Boolean(match) });
+      logger.info("journey_requested", { repo: `${repo.owner}/${repo.name}`, goal: goal.kind, served: Boolean(match) });
+      if (match) return json({ id: match.id, status: match.status });
+      // plan(repository, goal) → journey is a later phase (Planner). Be explicit about what exists today.
+      const fallback = sameRepo[0];
+      if (fallback) {
+        return json(
+          { error: { code: "GOAL_NOT_AVAILABLE", message: "Jornadas direcionadas a esse objetivo ainda não são geradas. Registramos o seu pedido. Por enquanto, este repositório tem a jornada “Aprender o projeto do zero”." }, fallback: { id: fallback.id } },
+          501,
+        );
+      }
       throw new HttpError(501, "GENERATION_NOT_AVAILABLE", `Geração automática para ${repo.owner}/${repo.name} ainda não está disponível.`);
     })
     .on("GET", "/api/journeys/:id", (_req, params) => json(outline(findJourney(params.id))))

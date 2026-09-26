@@ -4,7 +4,12 @@
   "subtitle": "Do zero, sem olhar",
   "goal": "Reconstruir sozinho o classificador determinístico completo e compará-lo com o código real.",
   "problem": "Juntar todas as peças do módulo em um arquivo, começando do editor vazio. Depois, comparar a sua versão com a versão consolidada do Replay e com o código real do ops-triage-ai.",
-  "example": "Categorias: INCIDENT, BUG, ACCESS, OTHER (Category)\nPistas (palavra inteira, sem diferenciar maiúsculas) e pesos:\n  down 5, outage 4 → INCIDENT · bug 3, error 1 → BUG · login 4, password 2 → ACCESS\nscoreCategory(category, title, description): título vale o dobro\nclassify(ticket): maior placar; empate → INCIDENT, ACCESS, BUG; nada → OTHER",
+  "requirements": [
+    "`Category`: INCIDENT, BUG, ACCESS, OTHER",
+    "Pistas (palavra inteira, sem diferenciar maiúsculas) e pesos: down 5, outage 4 → INCIDENT · bug 3, error 1 → BUG · login 4, password 2 → ACCESS",
+    "`scoreCategory(category, title, description)`: no título vale o dobro do peso",
+    "`classify(ticket)`: maior placar; empate → INCIDENT, ACCESS, BUG; nenhuma pista → OTHER"
+  ],
   "estimatedMinutes": 5,
   "introduces": [],
   "prerequisites": [
@@ -38,16 +43,16 @@
         "row": 0
       },
       {
-        "id": "score",
-        "label": "scoreCategory()",
-        "kind": "function",
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
         "col": 1,
         "row": 1
       },
       {
-        "id": "rules",
-        "label": "RULES",
-        "kind": "data",
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
         "col": 2,
         "row": 1
       },
@@ -88,9 +93,8 @@
     ]
   },
   "referenceCode": [
-    "classifier.ts"
+    "classify.ts"
   ],
-  "lineNotes": [],
   "explanation": [
     {
       "id": "real",
@@ -105,7 +109,7 @@
       "startLine": 1,
       "endLine": 9,
       "symbol": "Category",
-      "replayFile": "classifier.ts",
+      "replayFile": "classify.ts",
       "note": "O mesmo enum, com 7 categorias (inclui FEATURE_REQUEST, CONTENT_CHANGE e SUPPORT). Mora na camada de domínio."
     },
     {
@@ -113,7 +117,7 @@
       "startLine": 24,
       "endLine": 66,
       "symbol": "CATEGORY_SIGNALS",
-      "replayFile": "classifier.ts",
+      "replayFile": "classify.ts",
       "replaySymbol": "RULES",
       "note": "Nossa tabela RULES, organizada por categoria (Record<Category, ...>), com vários sinais por categoria e um label por sinal para explicar a decisão."
     },
@@ -122,7 +126,7 @@
       "startLine": 68,
       "endLine": 77,
       "symbol": "CATEGORY_TIE_BREAK",
-      "replayFile": "classifier.ts",
+      "replayFile": "classify.ts",
       "note": "Nosso TIE_BREAK, com o mesmo raciocínio no comentário: \"Safety-sensitive operational categories win.\""
     },
     {
@@ -130,7 +134,7 @@
       "startLine": 116,
       "endLine": 132,
       "symbol": "scoreCategory",
-      "replayFile": "classifier.ts",
+      "replayFile": "classify.ts",
       "note": "Idêntico em lógica: peso × 2 no título, peso na descrição. Também devolve quais sinais casaram (matched)."
     },
     {
@@ -138,7 +142,7 @@
       "startLine": 78,
       "endLine": 114,
       "symbol": "classify",
-      "replayFile": "classifier.ts",
+      "replayFile": "classify.ts",
       "note": "Nosso classify, mais: confiança pela margem entre 1º e 2º colocados, prioridade, risco, time sugerido e justificativa."
     },
     {
@@ -146,18 +150,19 @@
       "startLine": 221,
       "endLine": 229,
       "symbol": "normalize",
-      "replayFile": "classifier.ts",
+      "replayFile": "classify.ts",
       "replaySymbol": "classify",
       "note": "Nosso toLowerCase, mais remoção de acentos e pontuação."
     }
   ],
   "exercise": {
-    "instructions": "Reconstrua em `classifier.ts`, do zero: `Category`, as regras, `scoreCategory(category, title, description)` e `classify(ticket)`. Os requisitos estão acima; o resto é com você. O TypeScript verifica os tipos antes dos testes.",
+    "instructions": "Reconstrua em `classify.ts`, do zero: `Category`, as regras, `scoreCategory(category, title, description)` e `classify(ticket)`. Os requisitos estão acima; o resto é com você. O TypeScript verifica os tipos antes dos testes.",
     "files": [
-      "classifier.ts"
+      "classify.ts"
     ],
     "expose": [
       "Category",
+      "RULES",
       "scoreCategory",
       "classify"
     ],
@@ -173,7 +178,7 @@
       "name": "enum",
       "signature": "enum Nome { A = \"A\", B = \"B\" }",
       "summary": "Um conjunto fechado de valores com nome.",
-      "example": "enum Color { RED = \"RED\", BLUE = \"BLUE\" }\nColor.RED; // \"RED\""
+      "example": "enum Color {\n  RED = \"RED\",\n  BLUE = \"BLUE\",\n}\n\nconst c: Color = Color.RED; // \"RED\""
     },
     {
       "id": "regex-test",
@@ -186,20 +191,20 @@
       "id": "word-boundary",
       "name": "\\b (fronteira de palavra)",
       "summary": "Casa onde uma palavra começa ou termina.",
-      "example": "/\\bcat\\b/.test(\"concatenate\"); // false\n/\\bcat\\b/.test(\"my cat\");      // true"
+      "example": "/\\bcat\\b/.test(\"concatenate\"); // false\n/\\bcat\\b/.test(\"my cat\"); // true"
     },
     {
       "id": "for-of",
       "name": "for...of",
       "signature": "for (const item of lista) { ... }",
       "summary": "Percorre os itens de uma lista, em ordem.",
-      "example": "for (const fruit of fruits) {\n  if (fruit.color === \"red\") return fruit.name;\n}"
+      "example": "const fruits = [{ name: \"maçã\", color: \"red\" }];\n\nfunction firstRed(): string {\n  for (const fruit of fruits) {\n    if (fruit.color === \"red\") {\n      return fruit.name;\n    }\n  }\n  return \"nenhuma\";\n}"
     },
     {
       "id": "running-max",
       "name": "Guardar o maior até agora",
       "summary": "Duas variáveis: o melhor item e seu valor; troque quando achar um maior.",
-      "example": "let best = \"\";\nlet bestValue = 0;\nfor (const p of players) {\n  if (p.points > bestValue) {\n    best = p.name;\n    bestValue = p.points;\n  }\n}"
+      "example": "const players = [{ name: \"Ana\", points: 3 }, { name: \"Bia\", points: 5 }];\nlet best = \"\";\nlet bestPoints = 0;\nfor (const p of players) {\n  if (p.points > bestPoints) {\n    best = p.name;\n    bestPoints = p.points;\n  }\n}\n// best === \"Bia\""
     },
     {
       "id": "to-lower",

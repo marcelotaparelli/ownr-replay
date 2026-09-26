@@ -130,6 +130,39 @@ export class Repository {
       .all({ threadId, learnerId, stageId, limit });
   }
 
+  recordJourneyRequest(input: {
+    learnerId: string | null;
+    owner: string;
+    name: string;
+    goal: { kind: string; target?: string | undefined; topic?: string | undefined; note?: string | undefined };
+    served: boolean;
+  }): void {
+    this.db
+      .query(
+        `INSERT INTO journey_requests (learner_id, repo_owner, repo_name, goal_kind, goal_target, goal_topic, goal_note, served, created_at)
+         VALUES ($learnerId, $owner, $name, $kind, $target, $topic, $note, $served, $now)`,
+      )
+      .run({
+        learnerId: input.learnerId,
+        owner: input.owner,
+        name: input.name,
+        kind: input.goal.kind,
+        target: input.goal.target ?? null,
+        topic: input.goal.topic ?? null,
+        note: input.goal.note ?? null,
+        served: input.served ? 1 : 0,
+        now: Date.now(),
+      });
+  }
+
+  countJourneyRequests(goalKind: string): number {
+    return (
+      this.db
+        .query<{ n: number }, { goalKind: string }>("SELECT COUNT(*) AS n FROM journey_requests WHERE goal_kind = $goalKind")
+        .get({ goalKind })?.n ?? 0
+    );
+  }
+
   appendEvent(input: {
     learnerId: string;
     journeyId: string;

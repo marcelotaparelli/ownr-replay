@@ -5,9 +5,11 @@ const RULES = [
 ];
 
 function classify(ticket: { title: string; description: string }): string {
-  const text = (ticket.title + " " + ticket.description).toLowerCase();
+  const lower = (ticket.title + " " + ticket.description).toLowerCase();
   for (const rule of RULES) {
-    if (text.includes(rule.word)) return rule.category;
+    if (lower.includes(rule.word)) {
+      return rule.category;
+    }
   }
   return "OTHER";
 }

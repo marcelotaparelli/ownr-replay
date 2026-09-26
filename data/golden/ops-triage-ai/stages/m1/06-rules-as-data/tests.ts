@@ -2,6 +2,7 @@ import { test, expect } from "replay:test";
 import { classify, RULES } from "./classify.ts";
 
 const t = (title: string, description = "") => classify({ title, description });
+
 test("mesmo comportamento: bug, login, down, ordem, OTHER", () => {
   expect(t("Checkout bug")).toBe("BUG");
   expect(t("Cannot login")).toBe("ACCESS");

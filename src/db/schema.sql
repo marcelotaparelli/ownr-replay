@@ -40,6 +40,20 @@ CREATE TABLE IF NOT EXISTS tutor_messages (
 );
 CREATE INDEX IF NOT EXISTS tutor_by_thread ON tutor_messages (thread_id, id);
 
+-- What developers ask to understand, per repository: product data for the future Planner.
+CREATE TABLE IF NOT EXISTS journey_requests (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  learner_id  TEXT,
+  repo_owner  TEXT NOT NULL,
+  repo_name   TEXT NOT NULL,
+  goal_kind   TEXT NOT NULL,
+  goal_target TEXT,
+  goal_topic  TEXT,
+  goal_note   TEXT,
+  served      INTEGER NOT NULL CHECK (served IN (0, 1)),
+  created_at  INTEGER NOT NULL
+);
+
 -- Append-only learning events: raw material for pedagogical metrics
 -- (completion, skip rates, runs per stage, first-pass success, tutor usage, revisits).
 CREATE TABLE IF NOT EXISTS events (

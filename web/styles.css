@@ -323,3 +323,29 @@ pre.snippet { font: 12.5px/1.6 var(--mono); background: var(--code-bg); border: 
 .limitation p { margin: 0 0 10px; font-size: 15.5px; }
 .comparison h3 { font-size: 15px; margin: 18px 0 6px; }
 .checkpoint-q .answer { background: var(--sunken); border-radius: var(--radius); padding: 8px 12px; margin-top: 6px; }
+
+/* ---- Goal-first home ---- */
+.goal-form { display: grid; gap: 14px; margin: 18px 0 8px; }
+.goal-form .field { display: grid; gap: 4px; }
+.goal-form input[type="url"], .goal-form input[type="text"], .goal-form select, .goal-form textarea { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); width: 100%; }
+.goal-form fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+.goal-form legend { margin-bottom: 6px; }
+.goal { display: grid; grid-template-columns: 20px 1fr; gap: 8px; align-items: start; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); cursor: pointer; }
+.goal:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.goal input { margin-top: 4px; }
+.goal strong { display: block; font-size: 14.5px; }
+.goal .muted { font-size: 13px; }
+.goal-form .btn.primary { justify-self: start; }
+.goal-message:empty { display: none; }
+.goal-message { border-radius: var(--radius); background: var(--warn-soft); padding: 10px 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.goal-message p { margin: 0; flex: 1 1 300px; }
+.journeys-list { margin-top: 18px; }
+
+/* ---- Cumulative workspace ---- */
+.origin { font-size: 13px; margin: 4px 0 8px; }
+.origin.own { color: var(--ok); }
+.origin.reference { color: var(--text); background: var(--warn-soft); padding: 6px 10px; border-radius: 6px; }
+.notice.small { font-size: 13px; padding: 6px 10px; margin: 0 0 8px; border-radius: 6px; background: var(--warn-soft); }
+.requirements { margin: 4px 0 0; padding-left: 18px; font-size: 14px; }
+.requirements li { margin: 2px 0; }
+.diagnostic summary { cursor: pointer; font-size: 13px; color: var(--muted); }

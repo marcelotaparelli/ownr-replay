@@ -14,7 +14,7 @@ function stage(id: string): Stage {
 }
 
 const first = stage("ops-triage-ai.m1-01");
-const tieBreak = stage("ops-triage-ai.m1-11");
+const tieBreak = stage("ops-triage-ai.m1-12");
 const checkpoint = stage("ops-triage-ai.m1-99");
 
 /** A copy of the journey with a fake later stage, to prove it never leaks. */

@@ -1,4 +1,5 @@
 import type { JourneyOutline } from "../src/domain/journey.ts";
+import type { LearningGoal } from "../src/domain/learning-goal.ts";
 import type { KnowledgeLevel, ProgressUpdate, RunResult, StageProgress } from "../src/domain/progress.ts";
 import type { CodeFile, Stage } from "../src/domain/stage.ts";
 import type { TutorReply, TutorSelection } from "../src/domain/tutor.ts";
@@ -17,12 +18,14 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** The full error body, for errors that carry an alternative (e.g. a fallback journey). */
+    readonly body?: unknown,
   ) {
     super(message);
   }
 }
 
-const LEARNER_KEY = "rr:v1:learner";
+const LEARNER_KEY = "rr:v1:learner"; // identity survives content resets
 const REQUEST_TIMEOUT_MS = 15_000;
 const TUTOR_TIMEOUT_MS = 90_000;
 
@@ -49,7 +52,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown, 
   const payload: unknown = await response.json();
   if (!response.ok) {
     const error = isErrorBody(payload) ? payload.error : { code: "HTTP_" + response.status, message: "Falha na requisição." };
-    throw new ApiError(response.status, error.code, error.message);
+    throw new ApiError(response.status, error.code, error.message, payload);
   }
   return payload as T;
 }
@@ -63,7 +66,7 @@ function isErrorBody(value: unknown): value is { error: { code: string; message:
 export const api = {
   journeys: () => request<JourneyCard[]>("GET", "/api/journeys"),
   journey: (id: string) => request<JourneyOutline>("GET", `/api/journeys/${encodeURIComponent(id)}`),
-  createJourney: (repoUrl: string) => request<{ id: string }>("POST", "/api/journeys", { repoUrl }),
+  createJourney: (repoUrl: string, goal: LearningGoal) => request<{ id: string }>("POST", "/api/journeys", { repoUrl, goal }),
   progress: (journeyId: string) =>
     request<{ stages: StageProgress[]; knowledge: { conceptId: string; state: KnowledgeLevel }[] }>(
       "GET",

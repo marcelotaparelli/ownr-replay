@@ -41,22 +41,6 @@ export function codeView(file: string, source: string, options: CodeViewOptions 
   return view;
 }
 
-/** Lines of `current` that did not exist in `previous` (compared by trimmed text, respecting repeats). */
-export function addedLines(previous: string | undefined, current: string): Set<number> {
-  const added = new Set<number>();
-  if (previous === undefined) return added;
-  const remaining = new Map<string, number>();
-  for (const line of previous.split("\n")) remaining.set(line.trim(), (remaining.get(line.trim()) ?? 0) + 1);
-  current.split("\n").forEach((line, index) => {
-    const key = line.trim();
-    if (!key || /^[{}()[\];,]+$/.test(key)) return;
-    const left = remaining.get(key) ?? 0;
-    if (left > 0) remaining.set(key, left - 1);
-    else added.add(index + 1);
-  });
-  return added;
-}
-
 /** Maps the current DOM selection inside a codeView to a tutor selection. */
 export function selectionFromCodeView(): TutorSelection | undefined {
   const selection = window.getSelection();

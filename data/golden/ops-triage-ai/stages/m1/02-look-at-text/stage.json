@@ -4,7 +4,16 @@
   "subtitle": "Uma palavra decide",
   "goal": "Decidir a categoria a partir de uma palavra do texto.",
   "problem": "\"lunch menu\" não é um incidente, mas a função diz que é.\n\nComo decidir **olhando o texto**?",
-  "example": "classify(\"production down\") → \"INCIDENT\"\nclassify(\"lunch menu\")      → \"OTHER\"",
+  "examples": [
+    {
+      "expr": "classify(\"server down\")",
+      "equals": "\"INCIDENT\""
+    },
+    {
+      "expr": "classify(\"lunch menu\")",
+      "equals": "\"OTHER\""
+    }
+  ],
   "estimatedMinutes": 1,
   "introduces": [
     "keyword-match",
@@ -56,7 +65,11 @@
   "lineNotes": [
     {
       "match": "text.includes(\"down\")",
-      "note": "`includes` responde true/false: o texto contém \"down\"? Se sim, devolvemos INCIDENT e a função termina ali."
+      "note": "`includes` responde true/false: o texto contém \"down\"? Se sim, o bloco do `if` roda."
+    },
+    {
+      "match": "return \"INCIDENT\"",
+      "note": "Devolve e encerra a função ali mesmo."
     },
     {
       "match": "return \"OTHER\"",
@@ -78,7 +91,7 @@
     }
   ],
   "exercise": {
-    "instructions": "Faça `classify` devolver `\"INCIDENT\"` quando o texto mencionar \"down\", e `\"OTHER\"` em qualquer outro caso.",
+    "instructions": "Mude a sua `classify`: `\"INCIDENT\"` só quando o texto mencionar \"down\"; qualquer outro texto → `\"OTHER\"`.",
     "files": [
       "classify.ts"
     ],
@@ -92,13 +105,13 @@
       "name": "String.includes()",
       "signature": "texto.includes(pedaço): boolean",
       "summary": "true se o texto contém o pedaço.",
-      "example": "\"server down\".includes(\"down\"); // true"
+      "example": "\"server down\".includes(\"down\"); // true\n\"lunch\".includes(\"down\"); // false"
     },
     {
       "id": "if",
       "name": "if",
-      "summary": "Executa algo só quando a condição é verdadeira.",
-      "example": "if (idade >= 18) return \"adulto\";\nreturn \"menor\";"
+      "summary": "Executa um bloco só quando a condição é verdadeira.",
+      "example": "function kind(age: number): string {\n  if (age >= 18) {\n    return \"adulto\";\n  }\n  return \"menor\";\n}"
     }
   ],
   "limitation": "**\"Production DOWN\"**, em maiúsculas, virou OTHER."

@@ -169,3 +169,30 @@ describe("tutor", () => {
     expect(seen).toEqual([1, 1]);
   });
 });
+
+describe("learning goal", () => {
+  const url = "https://github.com/marcelotaparelli/ops-triage-ai";
+
+  test("learning from scratch opens the curated journey", async () => {
+    const { call } = testApp();
+    const body = await (await call("POST", "/api/journeys", { repoUrl: url, goal: { kind: "from_scratch" } })).json();
+    expect(body.id).toBe("ops-triage-ai");
+  });
+
+  test("a targeted goal is recorded and answered honestly, with the available journey as fallback", async () => {
+    const { call, repository } = testApp();
+    const response = await call("POST", "/api/journeys", { repoUrl: url, goal: { kind: "specific_part", target: "HybridPolicy" } });
+    expect(response.status).toBe(501);
+    const body = await response.json();
+    expect(body.error.code).toBe("GOAL_NOT_AVAILABLE");
+    expect(body.fallback.id).toBe("ops-triage-ai");
+    expect(repository.countJourneyRequests("specific_part")).toBe(1);
+  });
+
+  test("goals are validated at the boundary", async () => {
+    const { call } = testApp();
+    for (const goal of [{ kind: "specific_part" }, { kind: "topic" }, { kind: "other" }, { kind: "everything" }]) {
+      expect((await call("POST", "/api/journeys", { repoUrl: url, goal })).status).toBe(422);
+    }
+  });
+});

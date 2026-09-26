@@ -1,5 +1,5 @@
 import { test, expect } from "replay:test";
-import { Category, classify, scoreCategory } from "./classifier.ts";
+import { Category, classify, scoreCategory } from "./classify.ts";
 
 const t = (title: string, description = "") => classify({ title, description });
 

@@ -4,7 +4,16 @@
   "subtitle": "Uma tabela no lugar dos ifs",
   "goal": "Separar as regras (dados) do mecanismo que as aplica.",
   "problem": "Cada palavra nova exige mais um `if`. E se as regras fossem uma **lista**, e a função só percorresse essa lista?",
-  "example": "Mesmo comportamento da etapa anterior.\nAcrescentar { word: \"outage\", category: \"INCIDENT\" } à lista\n→ \"Outage\" passa a ser INCIDENT, sem mexer na função.",
+  "examples": [
+    {
+      "expr": "classify({ title: \"Cannot login\", description: \"\" })",
+      "equals": "\"ACCESS\""
+    },
+    {
+      "expr": "classify({ title: \"Login bug\", description: \"\" })",
+      "equals": "\"BUG\""
+    }
+  ],
   "estimatedMinutes": 2,
   "introduces": [
     "rules-as-data"
@@ -67,15 +76,15 @@
   "lineNotes": [
     {
       "match": "const RULES",
-      "note": "As três regras da etapa anterior, agora como dados: cada item diz qual palavra leva a qual categoria."
+      "note": "As três regras dos ifs, agora como dados: cada item diz qual palavra leva a qual categoria."
     },
     {
       "match": "for (const rule of RULES)",
       "note": "Percorre a lista em ordem — a mesma ordem das perguntas de antes."
     },
     {
-      "match": "rule.word",
-      "note": "Os ifs viraram um só: a palavra vem da regra, não do código."
+      "match": "lower.includes(rule.word)",
+      "note": "Os três ifs viraram um só: a palavra vem da regra, não do código."
     }
   ],
   "explanation": [
@@ -87,7 +96,7 @@
     }
   ],
   "exercise": {
-    "instructions": "Troque os ifs por uma lista `RULES` (down → INCIDENT, bug → BUG, login → ACCESS, nessa ordem) e faça `classify` percorrê-la. Os testes vão acrescentar uma regra na sua lista e esperar que `classify` passe a respeitá-la.",
+    "instructions": "Troque os ifs por uma lista `RULES` de `{ word, category }` (as mesmas três regras, na mesma ordem) que `classify` percorre. O comportamento não muda.",
     "files": [
       "classify.ts"
     ],
@@ -108,8 +117,8 @@
       "name": "for...of",
       "signature": "for (const item of lista) { ... }",
       "summary": "Percorre os itens de uma lista, em ordem.",
-      "example": "for (const fruit of fruits) {\n  if (fruit.color === \"red\") return fruit.name;\n}"
+      "example": "const fruits = [{ name: \"maçã\", color: \"red\" }];\n\nfunction firstRed(): string {\n  for (const fruit of fruits) {\n    if (fruit.color === \"red\") {\n      return fruit.name;\n    }\n  }\n  return \"nenhuma\";\n}"
     }
   ],
-  "limitation": "Ticket: **\"Cannot login after password reset — the page shows a bug\"**. Há mais pistas de ACCESS (login, password) do que de BUG, mas a primeira regra que casa vence."
+  "limitation": "**\"Outage in EU\"** e **\"Wrong password\"** viram OTHER: faltam palavras na tabela."
 }

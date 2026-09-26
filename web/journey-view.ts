@@ -2,6 +2,7 @@ import type { JourneyOutline, StageOutline } from "../src/domain/journey.ts";
 import type { KnowledgeLevel, StageStatus } from "../src/domain/progress.ts";
 import type { Concept, Module } from "../src/domain/stage.ts";
 import { ApiError, api, type JourneyCard } from "./api.ts";
+import type { LearningGoal, LearningGoalKind, LearningTopic } from "../src/domain/learning-goal.ts";
 import { h } from "./dom.ts";
 import { mdInline } from "./md.ts";
 import type { ProgressStore } from "./store.ts";
@@ -196,37 +197,107 @@ export function conceptState(conceptId: string, stage: StageOutline | undefined,
   return "unknown";
 }
 
-export function renderHome(journeys: JourneyCard[]): HTMLElement {
-  const message = h("p", { class: "muted", "aria-live": "polite" });
-  const input = h("input", { type: "url", name: "repoUrl", required: true, placeholder: "https://github.com/owner/repo", "aria-label": "URL do repositório no GitHub" });
-  const form = h("form", { class: "repo-form" }, input, h("button", { class: "btn primary", type: "submit" }, "Gerar jornada"));
+type GoalOption = { kind: LearningGoalKind; title: string; hint: string };
+
+const GOALS: GoalOption[] = [
+  { kind: "from_scratch", title: "Aprender o projeto do zero", hint: "Do menor programa possível até a arquitetura completa." },
+  { kind: "main_flow", title: "Entender o fluxo principal", hint: "Da entrada à resposta, focando em como as partes se ligam." },
+  { kind: "trace_request", title: "Rastrear uma requisição", hint: "Uma requisição concreta, do início ao fim." },
+  { kind: "specific_part", title: "Entender uma parte específica", hint: "Um arquivo, classe ou função — e só o que ela exige." },
+  { kind: "architecture_why", title: "Entender por que a arquitetura é assim", hint: "As forças que criaram cada camada." },
+  { kind: "topic", title: "Entender um tema", hint: "Persistência, segurança, testes ou integrações." },
+  { kind: "other", title: "Outro objetivo", hint: "Descreva com suas palavras." },
+];
+
+const TOPICS: { value: LearningTopic; label: string }[] = [
+  { value: "persistence", label: "Persistência / banco" },
+  { value: "security", label: "Autenticação / segurança" },
+  { value: "tests", label: "Testes" },
+  { value: "integrations", label: "Integrações (LLM, HTTP)" },
+];
+
+const SAMPLE_REPO = "https://github.com/marcelotaparelli/ops-triage-ai";
+
+/** Repo + what the developer wants to understand → a journey (planned per goal in the future). */
+export function renderHome(journeys: JourneyCard[], resume: { journey: JourneyCard; label: string } | undefined): HTMLElement {
+  const message = h("div", { class: "goal-message", "aria-live": "polite" });
+  const url = h("input", { type: "url", name: "repoUrl", required: true, value: SAMPLE_REPO, placeholder: "https://github.com/owner/repo", "aria-label": "URL do repositório no GitHub" });
+  const target = h("input", { type: "text", name: "target", maxlength: 120, placeholder: "ex.: HybridPolicy, src/server.ts", "aria-label": "Qual parte" });
+  const topic = h("select", { name: "topic", "aria-label": "Tema" }, ...TOPICS.map((t) => h("option", { value: t.value }, t.label)));
+  const note = h("textarea", { name: "note", rows: 2, maxlength: 300, placeholder: "O que você quer entender?", "aria-label": "Objetivo" });
+  const extras: Partial<Record<LearningGoalKind, HTMLElement>> = { specific_part: target, trace_request: target, topic, other: note };
+
+  const options = GOALS.map((goal, index) =>
+    h(
+      "label",
+      { class: "goal" },
+      h("input", { type: "radio", name: "goal", value: goal.kind, checked: index === 0 }),
+      h("span", {}, h("strong", {}, goal.title), h("span", { class: "muted" }, goal.hint)),
+    ),
+  );
+  const extraSlot = h("div", { class: "goal-extra" });
+  const selected = (): LearningGoalKind => {
+    const value = new FormData(form).get("goal");
+    return GOALS.find((g) => g.kind === value)?.kind ?? "from_scratch";
+  };
+  const form = h(
+    "form",
+    { class: "goal-form" },
+    h("label", { class: "field" }, h("span", { class: "eyebrow" }, "Repositório"), url),
+    h("fieldset", {}, h("legend", { class: "eyebrow" }, "O que você quer entender?"), ...options),
+    extraSlot,
+    h("button", { class: "btn primary", type: "submit" }, "Montar jornada →"),
+  );
+  form.addEventListener("change", () => {
+    const extra = extras[selected()];
+    extraSlot.replaceChildren(...(extra ? [extra] : []));
+    if (selected() === "trace_request") target.placeholder = "ex.: POST /tickets/triage";
+    else target.placeholder = "ex.: HybridPolicy, src/server.ts";
+  });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    message.textContent = "Verificando…";
+    const kind = selected();
+    const goal: LearningGoal = {
+      kind,
+      ...(extras[kind] === target && target.value.trim() ? { target: target.value.trim() } : {}),
+      ...(kind === "topic" ? { topic: topic.value as LearningTopic } : {}),
+      ...(kind === "other" && note.value.trim() ? { note: note.value.trim() } : {}),
+    };
+    message.replaceChildren(h("p", { class: "muted" }, "Verificando…"));
     api
-      .createJourney(input.value)
+      .createJourney(url.value, goal)
       .then(({ id }) => {
         location.hash = `#/j/${id}`;
       })
       .catch((error: unknown) => {
-        message.textContent = error instanceof ApiError ? error.message : "Falha ao criar a jornada.";
+        if (!(error instanceof ApiError)) return message.replaceChildren(h("p", { class: "fail" }, "Falha ao criar a jornada."));
+        const fallback = fallbackId(error.body);
+        message.replaceChildren(
+          h("p", {}, error.message),
+          ...(fallback ? [h("a", { class: "btn", href: `#/j/${fallback}` }, "Aprender o projeto do zero →")] : []),
+        );
       });
   });
+
   return h(
     "article",
     { class: "home" },
     h("h1", {}, "Repo Replay"),
-    h("p", { class: "subtitle" }, "Entenda um repositório real reconstruindo sua arquitetura em poucas etapas incrementais."),
+    h("p", { class: "subtitle" }, "Entenda um repositório real reconstruindo-o em passos pequenos."),
+    resume
+      ? h("aside", { class: "resume" }, h("p", {}, "Continuar ", h("strong", {}, resume.journey.title), ` — ${resume.label}`), h("a", { class: "btn primary", href: `#/j/${resume.journey.id}` }, "Continuar"))
+      : null,
     form,
     message,
-    h("h2", {}, "Jornadas disponíveis"),
-    h(
-      "ul",
-      { class: "journeys" },
-      ...journeys.map((j) =>
-        h("li", {}, h("a", { href: `#/j/${j.id}` }, h("strong", {}, j.title)), h("span", { class: "muted" }, ` · ${j.stageCount} etapas`), h("p", {}, j.description)),
-      ),
-    ),
+    journeys.length
+      ? h("details", { class: "journeys-list" }, h("summary", { class: "muted" }, "Jornadas já disponíveis"), h("ul", { class: "journeys" }, ...journeys.map((j) => h("li", {}, h("a", { href: `#/j/${j.id}` }, j.title), h("span", { class: "muted" }, ` · ${j.stageCount} etapas`)))))
+      : null,
   );
+}
+
+function fallbackId(body: unknown): string | undefined {
+  if (typeof body !== "object" || body === null || !("fallback" in body)) return undefined;
+  const fallback = body.fallback;
+  return typeof fallback === "object" && fallback !== null && "id" in fallback && typeof fallback.id === "string" ? fallback.id : undefined;
 }
 

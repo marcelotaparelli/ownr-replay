@@ -4,7 +4,12 @@
   "subtitle": "Normalizar antes de comparar",
   "goal": "Reconhecer a palavra independentemente de maiúsculas.",
   "problem": "\"Production DOWN\" é claramente um incidente, mas `includes(\"down\")` não encontra \"DOWN\".\n\nComo fazer \"Down\", \"DOWN\" e \"down\" valerem o mesmo?",
-  "example": "classify(\"Production DOWN\") → \"INCIDENT\"",
+  "examples": [
+    {
+      "expr": "classify(\"Production DOWN\")",
+      "equals": "\"INCIDENT\""
+    }
+  ],
   "estimatedMinutes": 1,
   "introduces": [
     "text-normalization"
@@ -55,7 +60,11 @@
   "lineNotes": [
     {
       "match": "toLowerCase",
-      "note": "Uma cópia do texto toda em minúsculas. Comparamos sempre com essa cópia."
+      "note": "Uma cópia do texto toda em minúsculas."
+    },
+    {
+      "match": "lower.includes(\"down\")",
+      "note": "A pergunta agora é feita à cópia em minúsculas."
     }
   ],
   "explanation": [
@@ -67,7 +76,7 @@
     }
   ],
   "exercise": {
-    "instructions": "Faça `classify` reconhecer \"down\" com qualquer combinação de maiúsculas e minúsculas.",
+    "instructions": "Faça \"down\" ser reconhecido com qualquer combinação de maiúsculas e minúsculas.",
     "files": [
       "classify.ts"
     ],

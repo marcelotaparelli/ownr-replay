@@ -1,3 +1,4 @@
+import type { LearningGoal } from "./learning-goal.ts";
 import type { Concept, Module, Stage } from "./stage.ts";
 
 export type GenerationStatus =
@@ -24,6 +25,8 @@ export type Journey = {
   title: string;
   description: string;
   repo: RepositorySnapshot;
+  /** What this journey helps the developer understand. */
+  goal: LearningGoal;
   status: GenerationStatus;
   concepts: Concept[];
   modules: Module[];

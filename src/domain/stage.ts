@@ -108,6 +108,10 @@ export const StageKind = z.enum(["micro", "checkpoint", "chapter"]);
 export type StageKind = z.infer<typeof StageKind>;
 
 export const LineNote = z.strictObject({ match: z.string().min(1), note: z.string().min(1) });
+
+/** An input → output example. Both sides are TypeScript expressions, executed against the solution by the validator. */
+export const IoExample = z.strictObject({ expr: z.string().min(1), equals: z.string().min(1) });
+export type IoExample = z.infer<typeof IoExample>;
 export type LineNote = z.infer<typeof LineNote>;
 
 export const Stage = z.strictObject({
@@ -119,8 +123,12 @@ export const Stage = z.strictObject({
   subtitle: z.string().optional(),
   goal: z.string().min(1),
   problem: z.string().min(1),
-  /** Concrete input → output: says WHAT is expected, never HOW. */
-  example: z.string().optional(),
+  /** Concrete input → output: says WHAT is expected, never HOW. Verified by execution. */
+  examples: z.array(IoExample),
+  /** Plain-language requirements (checkpoints): what to rebuild, not code. */
+  requirements: z.array(z.string().min(1)),
+  /** Why this step exceeds the novelty budget, when it must (otherwise: decompose). */
+  noveltyException: z.string().min(1).optional(),
   estimatedMinutes: z.number().int().positive(),
   /** Concept ids introduced here. */
   introduces: z.array(z.string()),

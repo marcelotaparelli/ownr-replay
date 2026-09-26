@@ -18,7 +18,8 @@ export type LocalJourney = {
 
 type OutboxItem = { stageId: string; update: ProgressUpdate };
 
-const VERSION = "rr:v1";
+// v2: Module 1 became a cumulative workspace; v1 drafts belonged to different stage contents.
+const VERSION = "rr:v2";
 const OUTBOX_KEY = `${VERSION}:outbox`;
 const OUTBOX_LIMIT = 200;
 
@@ -170,4 +171,16 @@ export function drafts(stageId: string) {
 /** Background sync is best-effort; failures are surfaced to devtools, never to the flow. */
 export function reportSyncFailure(error: unknown): void {
   console.warn(JSON.stringify({ event: "sync_failed", error: error instanceof Error ? error.message : String(error) }));
+}
+
+/**
+ * The learner's accepted code per stage (last run where every test passed).
+ * In a module's micro stages this is the protagonist: the next stage starts from it.
+ */
+export function acceptedCode(stageId: string) {
+  const key = (path: string) => `${VERSION}:accepted:${stageId}:${path}`;
+  return {
+    load: (path: string): string | undefined => read<string | undefined>(key(path), undefined),
+    save: (files: { path: string; content: string }[]): void => files.forEach((f) => write(key(f.path), f.content)),
+  };
 }
