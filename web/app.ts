@@ -193,6 +193,7 @@ function restoreAnchor(anchor: string | undefined, status: string): void {
 }
 
 function idleSidebar(): void {
+  tutor.idle();
   toolboxRoot.replaceChildren(h("div", { class: "panel-head" }, h("h2", {}, "Toolbox")), h("p", { class: "muted pad" }, "Ferramentas úteis aparecem aqui quando você abre uma etapa."));
 }
 

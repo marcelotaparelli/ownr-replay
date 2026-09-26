@@ -9,6 +9,7 @@ type Thread = { id?: string; messages: Message[] };
 
 export type TutorPanel = {
   setStage(stage: StageDetail, suggestions: string[]): void;
+  idle(): void;
   attach(selection: TutorSelection): void;
   ask(message: string, selection?: TutorSelection): void;
   focus(): void;
@@ -133,6 +134,13 @@ export function mountTutor(root: HTMLElement): TutorPanel {
       attached = undefined;
       title.textContent = `Stage ${String(next.order).padStart(2, "0")}`;
       render();
+    },
+    idle() {
+      stage = undefined;
+      attached = undefined;
+      title.textContent = "";
+      chip.replaceChildren();
+      log.replaceChildren(h("p", { class: "muted tutor-empty" }, "Abra uma etapa: o tutor responde sobre ela e as anteriores."));
     },
     attach(selection) {
       attached = selection;
