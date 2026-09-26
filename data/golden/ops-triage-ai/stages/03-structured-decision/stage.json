@@ -1,0 +1,147 @@
+{
+  "title": "Resultado estruturado → decisão",
+  "subtitle": "Uma categoria não basta para agir",
+  "goal": "Transformar a saída do classificador em uma decisão acionável: quem atende, quão urgente, e se um humano precisa olhar.",
+  "problem": "\"BUG\" não diz se é urgente, quem deve atender nem quão confiável é a resposta. Uma queda de produção classificada com pouca certeza não deveria seguir sozinha. Que forma deve ter o resultado para que alguém possa agir — e quando pedir revisão humana?",
+  "estimatedMinutes": 6,
+  "introduces": ["structured-result", "confidence", "human-review"],
+  "prerequisites": ["string-enum", "record-type", "interface-contract"],
+  "architecture": {
+    "nodes": [
+      { "id": "ticket", "label": "Ticket", "kind": "data", "col": 0, "row": 0 },
+      { "id": "triage-ticket", "label": "TriageTicket", "kind": "class", "col": 1, "row": 0 },
+      { "id": "triage-classifier", "label": "TriageClassifier", "kind": "interface", "col": 2, "row": 0 },
+      { "id": "result", "label": "ClassifierResult", "kind": "data", "col": 3, "row": 0 },
+      { "id": "deterministic", "label": "Deterministic…", "kind": "class", "col": 2, "row": 1 },
+      { "id": "team", "label": "suggestedTeam()", "kind": "function", "col": 3, "row": 1 },
+      { "id": "decision", "label": "TriageDecision", "kind": "data", "col": 1, "row": 1 }
+    ],
+    "edges": [
+      { "from": "ticket", "to": "triage-ticket", "rel": "flows_to" },
+      { "from": "triage-ticket", "to": "triage-classifier", "rel": "depends_on" },
+      { "from": "triage-classifier", "to": "result", "rel": "creates" },
+      { "from": "deterministic", "to": "triage-classifier", "rel": "implements" },
+      { "from": "deterministic", "to": "team", "rel": "calls" },
+      { "from": "triage-ticket", "to": "decision", "rel": "creates" }
+    ]
+  },
+  "referenceCode": ["triage.ts", "suggested-team.ts", "triage-decision.ts"],
+  "explanation": [
+    {
+      "id": "result",
+      "conceptId": "structured-result",
+      "title": "ClassifierResult: o que alguém precisa para agir",
+      "quick": "Categoria, prioridade, risco, time sugerido, confiança, resumo e justificativa — o mesmo formato para qualquer classificador.",
+      "normal": "Cada campo responde uma pergunta operacional: *o que é* (category), *quão urgente* (priority), *quão perigoso* (risk), *quem atende* (suggestedTeam), *quão certo* (confidence), *por quê* (rationale).\n\nComo o contrato `TriageClassifier` passa a devolver `ClassifierResult`, todo classificador futuro precisa produzir exatamente isso — e tudo que vem depois pode confiar no formato.",
+      "deep": "O `rationale` é o que mantém a decisão auditável: no projeto real o determinístico gera códigos como `INCIDENT_HIGH_SIGNAL: production_down | PRIORITY_HIGH_PRODUCTION`.\n\nO time sugerido **não** é decidido pelo classificador livremente: é derivado da categoria por uma tabela. Isso impede que um classificador produza combinações incoerentes (ACCESS → INFRASTRUCTURE)."
+    },
+    {
+      "id": "confidence",
+      "conceptId": "confidence",
+      "title": "Confiança em três degraus",
+      "quick": "`Confidence = 0.5 | 0.7 | 0.9`: baixa, parcial, alta. Um tipo literal, não `number`.",
+      "normal": "Uma heurística não tem precisão para dizer 0.83. Três degraus são honestos e fáceis de usar em regras: `confidence === 0.5` significa \"não confie sozinho\".\n\nO tipo literal faz o compilador recusar `confidence: 0.8`.",
+      "deep": "No projeto real, o determinístico chega a 0.5 quando nenhum sinal casa ou há empate, e a 0.9 quando o vencedor tem score alto e margem ≥ 3 sobre o segundo colocado (`confidenceFor`).\n\nTrade-off: degraus discretos perdem nuance, mas tornam o comportamento previsível e testável — e forçam o LLM (mais adiante) a falar a mesma língua."
+    },
+    {
+      "id": "review",
+      "conceptId": "human-review",
+      "title": "Quando pedir um humano",
+      "quick": "Baixa confiança ou alta severidade → `requiresHumanReview = true`, com os motivos listados.",
+      "normal": "```ts\nif (result.confidence === 0.5) reasons.push(LOW_CONFIDENCE);\nif (isHighSeverity(result)) reasons.push(HIGH_SEVERITY);\n```\n\nA decisão carrega os *motivos*, não só um booleano: quem revisa sabe por que foi chamado. A ordem é fixa para que a saída seja estável.",
+      "deep": "`TriageDecision extends ClassifierResult`: a decisão é o resultado mais metadados, então consumidores podem tratá-la como resultado.\n\nO espalhamento `{ ...result, ... }` cria um objeto novo: a função não altera o que recebeu (há um teste para isso). Imutabilidade aqui evita bugs quando o mesmo resultado for comparado com outro — algo que vai importar logo."
+    }
+  ],
+  "originalCodeRefs": [
+    {
+      "path": "src/domain/triage.ts",
+      "startLine": 11,
+      "endLine": 48,
+      "symbol": "ClassifierResult",
+      "replayFile": "triage.ts",
+      "note": "Mesma estrutura; produção tem 7 categorias e 6 times (inclui CONTENT e PRODUCT) e chama a confiança de HeuristicConfidence."
+    },
+    {
+      "path": "src/domain/suggested-team.ts",
+      "startLine": 1,
+      "endLine": 15,
+      "symbol": "SUGGESTED_TEAM_BY_CATEGORY",
+      "replayFile": "suggested-team.ts",
+      "note": "Idêntico em forma: um Readonly<Record<Category, SuggestedTeam>> e uma função de consulta."
+    },
+    {
+      "path": "src/domain/triage-decision.ts",
+      "startLine": 1,
+      "endLine": 21,
+      "symbol": "TriageDecision",
+      "replayFile": "triage-decision.ts",
+      "note": "Produção já prevê mais fontes de decisão e motivos de revisão do que usamos aqui."
+    },
+    {
+      "path": "src/application/policies/hybrid-policy.ts",
+      "startLine": 54,
+      "endLine": 91,
+      "symbol": "decideSingle",
+      "replayFile": "triage-decision.ts",
+      "note": "Em produção decideSingle é um método de uma política maior e os motivos passam por um Set + uma ordem fixa."
+    },
+    {
+      "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+      "startLine": 134,
+      "endLine": 144,
+      "symbol": "confidenceFor",
+      "replayFile": "triage.ts",
+      "note": "Como o classificador determinístico escolhe entre 0.5, 0.7 e 0.9."
+    }
+  ],
+  "exercise": {
+    "instructions": "Implemente `suggestedTeamForCategory` com um `Record` e `decideSingle`, que transforma um `ClassifierResult` em `TriageDecision`. Os tipos estão em `triage.ts`.",
+    "starterFiles": ["suggested-team.ts", "triage-decision.ts"],
+    "supportFiles": ["triage.ts"]
+  },
+  "toolbox": [
+    {
+      "id": "literal-union",
+      "name": "União de literais",
+      "signature": "type Confidence = 0.5 | 0.7 | 0.9",
+      "summary": "Um tipo que aceita só esses valores exatos.",
+      "example": "type Size = \"S\" | \"M\" | \"L\";\nconst s: Size = \"XL\"; // erro de compilação"
+    },
+    {
+      "id": "spread",
+      "name": "Spread { ...obj }",
+      "summary": "Copia as propriedades para um objeto novo; as seguintes sobrescrevem.",
+      "example": "const next = { ...result, reviewed: true };",
+      "whenToUse": "Para derivar um objeto sem alterar o original."
+    },
+    {
+      "id": "extends",
+      "name": "interface extends",
+      "summary": "Uma interface herda os campos de outra e acrescenta os seus.",
+      "example": "interface Decision extends Result { approved: boolean }"
+    },
+    {
+      "id": "record-lookup",
+      "name": "Record como tabela",
+      "signature": "const t: Readonly<Record<K, V>> = { ... }",
+      "summary": "Uma consulta O(1) exaustiva: toda chave de K precisa estar lá.",
+      "example": "const label: Record<Risk, string> = { LOW: \"baixo\", MEDIUM: \"médio\", HIGH: \"alto\" };",
+      "complexity": "O(1)"
+    },
+    {
+      "id": "array-push",
+      "name": "Array.push()",
+      "summary": "Acrescenta ao fim do array; a ordem de inserção é preservada.",
+      "example": "const reasons: string[] = [];\nif (low) reasons.push(\"LOW\");"
+    }
+  ],
+  "checkpoint": {
+    "question": "Por que o time sugerido vem de uma tabela por categoria, e não é escolhido livremente pelo classificador?",
+    "answer": "Para garantir coerência: qualquer classificador que diga ACCESS manda para SUPPORT. Se cada classificador escolhesse o time, combinações inválidas seriam possíveis — e um classificador menos confiável (um LLM, por exemplo) poderia rotear errado."
+  },
+  "summary": {
+    "added": ["ClassifierResult", "suggestedTeamForCategory", "TriageDecision"],
+    "why": "Dar a cada ticket informação suficiente para agir — e um sinal claro de quando um humano precisa revisar.",
+    "flow": ["Ticket", "TriageTicket", "TriageClassifier → ClassifierResult", "decideSingle()", "TriageDecision"]
+  }
+}

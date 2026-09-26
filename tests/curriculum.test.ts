@@ -19,14 +19,14 @@ for (const journey of journeys) {
       if (!exercise) continue;
 
       test(`${stage.id} solution passes every test`, async () => {
-        const result = await executeModules(prepareModules(exercise.solutionFiles, exercise.testFile));
+        const result = await executeModules(prepareModules([...exercise.solutionFiles, ...exercise.supportFiles], exercise.testFile));
         const failed = result.tests.filter((t) => !t.passed);
         expect(failed).toEqual([]);
         expect(result.tests.length).toBeGreaterThan(0);
       });
 
       test(`${stage.id} starter fails at least one test`, async () => {
-        const result = await executeModules(prepareModules(exercise.starterFiles, exercise.testFile));
+        const result = await executeModules(prepareModules([...exercise.starterFiles, ...exercise.supportFiles], exercise.testFile));
         expect(result.tests.some((t) => !t.passed)).toBe(true);
       });
 

@@ -39,9 +39,18 @@ test("offline tutor explains the selected concept with its real-project location
 });
 
 test("offline tutor defers concepts from later stages instead of teaching them early", () => {
-  const answer = offlineAnswer(tutorContext(withFutureStage(), stage1), "como funciona a HybridPolicy?");
+  const answer = offlineAnswer(tutorContext(journey, stage1), "como funciona a HybridPolicy?");
   expect(answer).toContain("aparece mais adiante");
-  expect(answer).toContain("Stage 99");
+  expect(answer).toContain("Stage 05");
+});
+
+test("the real journey never leaks later stage titles into an earlier stage prompt", () => {
+  for (const stage of journey.stages) {
+    const prompt = systemPrompt(tutorContext(journey, stage));
+    for (const later of journey.stages.filter((s) => s.order > stage.order)) {
+      expect(prompt).not.toContain(later.title);
+    }
+  }
 });
 
 test("offline tutor points to the real project when asked where", () => {

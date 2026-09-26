@@ -21,7 +21,7 @@ export function offlineAnswer(context: TutorContext, message: string): string {
 
   if (future && !concept) {
     const at = journey.stages.find((s) => s.introduces.includes(future.id));
-    return `**${future.name}** aparece mais adiante${at ? ` (Stage ${at.order} — ${at.title})` : ""}. Por enquanto, o foco é: ${stage.goal}`;
+    return `**${future.name}** aparece mais adiante${at ? ` (Stage ${String(at.order).padStart(2, "0")} — ${at.title})` : ""}. Por enquanto, o foco é: ${stage.goal}`;
   }
 
   if (wantsOriginal && !concept && !tool) return originalAnswer(stage.originalCodeRefs);

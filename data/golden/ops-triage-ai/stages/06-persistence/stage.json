@@ -1,0 +1,131 @@
+{
+  "title": "Persistência auditável",
+  "subtitle": "Toda decisão deixa rastro — inclusive as que falham",
+  "goal": "Registrar cada triagem como um run com início e fim, sem acoplar a aplicação ao banco.",
+  "problem": "Uma decisão que só existe na resposta HTTP não pode ser auditada, corrigida por um humano nem medida depois. E se o processo morrer no meio de uma chamada ao LLM, nada indica que aquela triagem sequer começou. Como guardar tudo isso sem que o caso de uso passe a depender do Prisma?",
+  "estimatedMinutes": 7,
+  "introduces": ["repository-port", "run-lifecycle", "audit-trail"],
+  "prerequisites": ["interface-contract", "typed-errors", "hybrid-policy", "test-double"],
+  "architecture": {
+    "nodes": [
+      { "id": "service", "label": "PersistedTriage…", "kind": "class", "col": 0, "row": 0 },
+      { "id": "triage-ticket", "label": "TriageTicket", "kind": "class", "col": 1, "row": 0 },
+      { "id": "policy", "label": "HybridPolicy", "kind": "class", "col": 2, "row": 0 },
+      { "id": "runs-port", "label": "TriageRunRepository", "kind": "interface", "col": 0, "row": 1 },
+      { "id": "prisma", "label": "Prisma…Repository", "kind": "infra", "col": 1, "row": 2 },
+      { "id": "memory", "label": "InMemoryTriageRuns", "kind": "class", "col": 0, "row": 2 },
+      { "id": "postgres", "label": "PostgreSQL", "kind": "external", "col": 2, "row": 2 }
+    ],
+    "edges": [
+      { "from": "service", "to": "triage-ticket", "rel": "wraps" },
+      { "from": "triage-ticket", "to": "policy", "rel": "calls" },
+      { "from": "service", "to": "runs-port", "rel": "depends_on" },
+      { "from": "memory", "to": "runs-port", "rel": "implements" },
+      { "from": "prisma", "to": "runs-port", "rel": "implements" },
+      { "from": "prisma", "to": "postgres", "rel": "persists" }
+    ]
+  },
+  "referenceCode": ["persisted-triage-service.ts", "triage-persistence.ts", "in-memory-runs.ts"],
+  "explanation": [
+    {
+      "id": "port",
+      "conceptId": "repository-port",
+      "title": "A aplicação define a porta de persistência",
+      "quick": "`TriageRunRepository` descreve o que a aplicação precisa guardar; Prisma é só uma implementação.",
+      "normal": "O serviço recebe o repositório pelo construtor — mesmo padrão da Stage 2. Nos testes, `InMemoryTriageRuns` substitui o banco inteiro em poucas linhas.\n\nA porta fala a língua do domínio (`start`, `complete`, `fail`), não SQL.",
+      "deep": "No projeto real, `PrismaTriageRunRepository` implementa a porta com transações: iniciar um run cria `Ticket` e `TriageRun` juntos; completar grava a `TriageDecision` e atualiza o status atomicamente.\n\nO caso de uso da Stage 5 (`TriageTicket`) continua sem saber que existe banco: `PersistedTriageService` o **envolve**. Persistência é uma camada ao redor da decisão, não dentro dela."
+    },
+    {
+      "id": "lifecycle",
+      "conceptId": "run-lifecycle",
+      "title": "start → complete | fail",
+      "quick": "O run é gravado como RUNNING antes da classificação e fechado como SUCCEEDED ou FAILED depois.",
+      "normal": "Se o processo morrer durante a chamada ao LLM, fica um run RUNNING órfão — evidência de que algo aconteceu. Sem o `start` antecipado, a triagem desapareceria sem rastro.\n\nNa falha, o código (`TIMEOUT`, `UNAVAILABLE`, `INVALID_RESPONSE`, `UNEXPECTED`) é derivado dos erros tipados da Stage 4, e o erro original é relançado.",
+      "deep": "`markFailed` engole a falha de gravar a falha — deliberadamente: se o banco caiu *e* o LLM deu timeout, quem chama precisa saber do timeout. O trade-off é perder o registro; o projeto real compensa com `reconcileStaleRuns`, que na inicialização marca runs RUNNING antigos como `ABANDONED`.\n\nUm sistema mais exigente registraria esse erro engolido em log/métrica em vez de silenciá-lo por completo."
+    },
+    {
+      "id": "audit",
+      "conceptId": "audit-trail",
+      "title": "Trilha de auditoria",
+      "quick": "Ticket, run, decisão e feedback humano ficam gravados; correções são acrescentadas, nunca sobrescrevem.",
+      "normal": "O feedback de um revisor não altera a decisão original: vira um registro novo ligado a ela. Assim é possível responder \"o que o sistema decidiu, e o que o humano corrigiu?\" — a base para medir a qualidade do classificador ao longo do tempo.",
+      "deep": "No projeto real, `GET /triage/:id` devolve o registro de auditoria completo (ticket + run + decisão + feedbacks) e `POST /triage/:id/feedback` anexa correções. O time corrigido é recalculado pela mesma tabela da Stage 3 — o revisor corrige a categoria, não o roteamento."
+    }
+  ],
+  "originalCodeRefs": [
+    {
+      "path": "src/application/persisted-triage-service.ts",
+      "startLine": 22,
+      "endLine": 93,
+      "symbol": "PersistedTriageService",
+      "replayFile": "persisted-triage-service.ts",
+      "note": "Mesmo ciclo start → complete | fail. Em produção também expõe a leitura da auditoria e o registro de feedback."
+    },
+    {
+      "path": "src/application/ports/triage-persistence.ts",
+      "startLine": 8,
+      "endLine": 99,
+      "symbol": "TriageRunRepository",
+      "replayFile": "triage-persistence.ts",
+      "note": "A porta completa: tipos dos registros persistidos, estados (incluindo ABANDONED) e o repositório de feedback."
+    },
+    {
+      "path": "src/infrastructure/persistence/prisma-triage-repositories.ts",
+      "startLine": 32,
+      "endLine": 78,
+      "symbol": "PrismaTriageRunRepository",
+      "replayFile": "in-memory-runs.ts",
+      "note": "A implementação real da porta que o replay faz em memória: Prisma sobre PostgreSQL, com transações."
+    },
+    {
+      "path": "prisma/schema.prisma",
+      "startLine": 82,
+      "endLine": 136,
+      "symbol": "model TriageRun",
+      "replayFile": "triage-persistence.ts",
+      "note": "O modelo relacional: Ticket 1—N TriageRun 1—1 TriageDecision 1—N Feedback."
+    }
+  ],
+  "exercise": {
+    "instructions": "Complete `PersistedTriageService.execute`: registre o run antes de classificar, feche como sucesso ou falha e **nunca** deixe uma falha ao gravar esconder o erro original. `markFailed` e `failureCode` já estão prontos.",
+    "starterFiles": ["persisted-triage-service.ts"],
+    "supportFiles": ["triage.ts", "triage-decision.ts", "classifier-errors.ts", "triage-persistence.ts", "in-memory-runs.ts"]
+  },
+  "toolbox": [
+    {
+      "id": "random-uuid",
+      "name": "crypto.randomUUID()",
+      "summary": "Gera um UUID v4 aleatório, nativo em Bun, Node e browsers.",
+      "example": "const runId = crypto.randomUUID(); // \"3b241101-e2bb-4255-8caf-4136c566a962\""
+    },
+    {
+      "id": "try-catch-rethrow",
+      "name": "catch + throw",
+      "summary": "Reaja ao erro (registre, traduza) e relance o mesmo objeto para quem chamou.",
+      "example": "try {\n  return await work();\n} catch (error) {\n  await record(error);\n  throw error;\n}"
+    },
+    {
+      "id": "map",
+      "name": "Map<K, V>",
+      "signature": "new Map<K, V>()  ·  .set(k, v)  ·  .get(k)",
+      "summary": "Dicionário com chaves de qualquer tipo e consulta O(1).",
+      "example": "const runs = new Map<string, Run>();\nruns.set(id, { status: \"RUNNING\" });",
+      "complexity": "get/set O(1)"
+    },
+    {
+      "id": "new-date",
+      "name": "new Date()",
+      "summary": "O instante atual; guarde em UTC e formate só na borda.",
+      "example": "const completedAt = new Date();"
+    }
+  ],
+  "checkpoint": {
+    "question": "Por que runs.start acontece antes de classificar, e não junto com o resultado no final?",
+    "answer": "Porque a classificação pode demorar (LLM) ou o processo pode morrer no meio. Com o start antecipado, fica um run RUNNING como evidência — que o projeto real reconcilia como ABANDONED na inicialização. Gravando só no final, essas execuções sumiriam sem rastro."
+  },
+  "summary": {
+    "added": ["TriageRunRepository", "PersistedTriageService"],
+    "why": "Tornar cada decisão auditável — incluindo as que falham — sem que a aplicação dependa do banco.",
+    "flow": ["Ticket", "PersistedTriageService (start)", "TriageTicket → HybridPolicy", "complete | fail", "TriageRunRepository → PostgreSQL"]
+  }
+}

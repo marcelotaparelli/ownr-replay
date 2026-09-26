@@ -58,6 +58,7 @@ const StageSource = z.strictObject({
       instructions: z.string().min(1),
       starterFiles: z.array(z.string()).min(1),
       solutionFiles: z.array(z.string()).optional(),
+      supportFiles: z.array(z.string()).default([]),
       testFile: z.string().default("tests.ts"),
     })
     .optional(),
@@ -145,6 +146,7 @@ function loadStage(
             solutionFiles: (exercise.solutionFiles ?? exercise.starterFiles).map((path) =>
               code(existsSync(join(stageDir, "solution", path)) ? "solution" : "reference", path),
             ),
+            supportFiles: exercise.supportFiles.map((path) => code("reference", path)),
             testFile: CodeFile.parse({
               path: exercise.testFile,
               content: readFileSync(join(stageDir, exercise.testFile), "utf8"),

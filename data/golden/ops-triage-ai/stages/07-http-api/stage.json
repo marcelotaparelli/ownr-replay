@@ -1,0 +1,134 @@
+{
+  "title": "HTTP: a fronteira",
+  "subtitle": "Traduzir protocolo, validar cedo, falhar com o status certo",
+  "goal": "Expor a triagem via HTTP mantendo a rota fina: validar a entrada na borda e traduzir cada falha em um status útil.",
+  "problem": "Agora qualquer cliente pode mandar qualquer coisa: JSON quebrado, campos a mais, títulos de 1 MB. E quando o LLM falha, o cliente precisa saber se vale tentar de novo. Onde validar, e como transformar erros internos em respostas HTTP sem vazar detalhes?",
+  "estimatedMinutes": 7,
+  "introduces": ["boundary-validation", "error-status-mapping", "composition-root"],
+  "prerequisites": ["typed-errors", "use-case", "run-lifecycle", "structured-output"],
+  "architecture": {
+    "nodes": [
+      { "id": "client", "label": "Cliente HTTP", "kind": "external", "col": 0, "row": 0 },
+      { "id": "route", "label": "POST /tickets/triage", "kind": "infra", "col": 1, "row": 0 },
+      { "id": "parse", "label": "parseTicketInput()", "kind": "function", "col": 1, "row": 1 },
+      { "id": "service", "label": "PersistedTriage…", "kind": "class", "col": 2, "row": 0 },
+      { "id": "triage-ticket", "label": "TriageTicket", "kind": "class", "col": 3, "row": 0 },
+      { "id": "index", "label": "index.ts", "kind": "infra", "col": 2, "row": 1 }
+    ],
+    "edges": [
+      { "from": "client", "to": "route", "rel": "calls" },
+      { "from": "route", "to": "parse", "rel": "validates" },
+      { "from": "route", "to": "service", "rel": "calls" },
+      { "from": "service", "to": "triage-ticket", "rel": "wraps" },
+      { "from": "index", "to": "service", "rel": "creates" }
+    ]
+  },
+  "referenceCode": ["http.ts", "triage-request.ts"],
+  "explanation": [
+    {
+      "id": "boundary",
+      "conceptId": "boundary-validation",
+      "title": "Validar uma vez, na borda",
+      "quick": "O corpo HTTP vira `TicketInput` válido (ou um 422 com os problemas) antes de tocar no caso de uso.",
+      "normal": "Depois de `parseTicketInput`, o resto do sistema confia nos dados: nenhuma camada interna repete checagens de tipo ou tamanho.\n\nObjeto **estrito**: campos desconhecidos são recusados, não ignorados — um cliente que manda `admin: true` descobre na hora que isso não existe.",
+      "deep": "Limites de tamanho são defesa, não estética: `title` ≤ 200 e `description` ≤ 5000 limitam o custo do prompt do LLM e o tamanho do que vai para o banco. O limite do corpo (32 KB) é verificado antes do parse.\n\nNo projeto real, isso é um `z.object({...}).strict()` com `.trim().min(1).max(n)` — o replay escreve a mesma regra à mão. As `issues` devolvem campo e código, não mensagens livres: clientes podem reagir programaticamente."
+    },
+    {
+      "id": "status",
+      "conceptId": "error-status-mapping",
+      "title": "Cada erro, o status que orienta o cliente",
+      "quick": "Timeout → 504, indisponível → 503, resposta inválida → 502, bug → 500 genérico.",
+      "normal": "Os erros tipados da Stage 4 pagam o investimento aqui: `classifierResponse` é um mapeamento direto, sem interpretar mensagens.\n\n5xx de dependência (502/503/504) dizem \"o problema está atrás de mim, tente de novo\"; um 500 diz \"bug\". O corpo de um 500 nunca inclui a mensagem do erro — ela pode conter segredos ou caminhos internos.",
+      "deep": "Com a política híbrida, falhas do LLM normalmente viram fallback e nem chegam aqui — esses status aparecem nos modos `ollama` puro ou quando a própria requisição estoura o tempo total. O projeto real também devolve 429 quando o limite de concorrência é atingido e 401 sem API key válida (comparação em tempo constante)."
+    },
+    {
+      "id": "root",
+      "conceptId": "composition-root",
+      "title": "index.ts monta tudo",
+      "quick": "O único arquivo que conhece as classes concretas: lê a config, cria classificadores, repositórios e o servidor.",
+      "normal": "Tudo que vimos recebe dependências pelo construtor; alguém precisa fazer os `new`. Esse alguém é `src/index.ts`, o *composition root*. Trocar Ollama por outro LLM, ou o modo de triagem, muda só aqui (e na config).",
+      "deep": "A config é validada no boot (`loadConfig`, Zod): um `DATABASE_URL` ausente derruba o processo na partida, não na primeira requisição. Produção exige `TRIAGE_API_KEY`.\n\nO index também cuida do ciclo de vida: reconcilia runs órfãos, instala handlers de SIGTERM/SIGINT para desligar com *drain* das requisições em andamento — próximo assunto."
+    }
+  ],
+  "originalCodeRefs": [
+    {
+      "path": "src/server.ts",
+      "startLine": 69,
+      "endLine": 93,
+      "symbol": "POST /tickets/triage",
+      "replayFile": "http.ts",
+      "note": "Mesma sequência: content-type → corpo com limite → validação → caso de uso → 201 com Location, ou erro mapeado. Produção acrescenta auth, limite de concorrência, timeout, logs e métricas."
+    },
+    {
+      "path": "src/server.ts",
+      "startLine": 158,
+      "endLine": 164,
+      "symbol": "classifierResponse",
+      "replayFile": "http.ts",
+      "note": "O mesmo mapeamento, com o nome da métrica e do evento de log de cada caso."
+    },
+    {
+      "path": "src/http/triage-request.ts",
+      "startLine": 1,
+      "endLine": 30,
+      "symbol": "parseTicketInput",
+      "replayFile": "triage-request.ts",
+      "note": "A versão Zod: strict + trim + min/max, com issues no formato { field, code }."
+    },
+    {
+      "path": "src/index.ts",
+      "startLine": 1,
+      "endLine": 51,
+      "symbol": "index.ts",
+      "replayFile": "http.ts",
+      "note": "O composition root completo: config → classificadores → caso de uso → persistência → servidor."
+    }
+  ],
+  "exercise": {
+    "instructions": "Implemente `parseTicketInput` (validação estrita na borda) e `classifierResponse` (erro → status). `handleTriage` já usa as duas.",
+    "starterFiles": ["triage-request.ts", "http.ts"],
+    "supportFiles": ["triage.ts", "triage-decision.ts", "classifier-errors.ts"]
+  },
+  "toolbox": [
+    {
+      "id": "response",
+      "name": "new Response()",
+      "signature": "new Response(body, { status, headers })",
+      "summary": "A resposta HTTP padrão da Web — Bun.serve devolve exatamente isso.",
+      "example": "new Response(JSON.stringify({ ok: true }), { status: 201, headers: { location: \"/x/1\" } });"
+    },
+    {
+      "id": "object-keys",
+      "name": "Object.keys()",
+      "summary": "As chaves próprias de um objeto — útil para recusar campos desconhecidos.",
+      "example": "Object.keys(body).filter((k) => !ALLOWED.includes(k));"
+    },
+    {
+      "id": "string-trim",
+      "name": "String.trim()",
+      "summary": "Remove espaços e quebras de linha das pontas.",
+      "example": "\"  bug \".trim(); // \"bug\""
+    },
+    {
+      "id": "typeof-guard",
+      "name": "typeof / Array.isArray",
+      "summary": "Estreitam unknown para tipos primitivos; lembre: typeof null === \"object\".",
+      "example": "if (typeof v !== \"object\" || v === null || Array.isArray(v)) return fail();"
+    },
+    {
+      "id": "status-codes",
+      "name": "Status HTTP de erro",
+      "summary": "400 JSON inválido · 413 corpo grande · 415 tipo errado · 422 dados inválidos · 502/503/504 dependência · 500 bug.",
+      "example": "return json(422, { error: \"invalid_request\", issues });"
+    }
+  ],
+  "checkpoint": {
+    "question": "Por que o 500 devolve só { error: \"internal_error\" } em vez da mensagem do erro?",
+    "answer": "Porque a mensagem de um erro inesperado pode conter detalhes internos — caminhos de arquivo, SQL, até segredos. Para o cliente, 500 significa apenas \"falha nossa\"; os detalhes vão para logs estruturados com o request id, onde quem opera o sistema consegue investigar."
+  },
+  "summary": {
+    "added": ["parseTicketInput", "handleTriage", "classifierResponse"],
+    "why": "Abrir o sistema para clientes sem deixar dados inválidos entrarem nem detalhes internos saírem.",
+    "flow": ["Cliente HTTP", "POST /tickets/triage → parseTicketInput", "PersistedTriageService → TriageTicket", "201 | 4xx | 5xx"]
+  }
+}

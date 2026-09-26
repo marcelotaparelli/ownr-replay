@@ -130,7 +130,10 @@ export function createApi(deps: ApiDeps): Router {
         throw new HttpError(413, "SOURCE_TOO_LARGE", "Código grande demais para esta stage.");
       }
       // Files the learner did not send keep their starter content.
-      const merged = exercise.starterFiles.map((f) => files.find((sent) => sent.path === f.path) ?? f);
+      const merged = [
+        ...exercise.starterFiles.map((f) => files.find((sent) => sent.path === f.path) ?? f),
+        ...exercise.supportFiles,
+      ];
 
       if (!deps.sandbox) {
         try {

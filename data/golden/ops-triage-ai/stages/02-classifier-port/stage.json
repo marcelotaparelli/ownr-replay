@@ -1,0 +1,150 @@
+{
+  "title": "Um contrato: TriageClassifier",
+  "subtitle": "Separar quem decide de como se decide",
+  "goal": "Fazer o caso de uso depender de um contrato de classificação, não de uma implementação.",
+  "problem": "classify() funciona, mas quem precisa triar um ticket chama diretamente as regras por palavra-chave. Para testar com outro classificador — ou trocar por um melhor — seria preciso reescrever quem chama. Como separar \"triar um ticket\" de \"como a categoria é decidida\"?",
+  "estimatedMinutes": 5,
+  "introduces": ["interface-contract", "dependency-inversion", "use-case", "async-contract", "test-double"],
+  "prerequisites": ["ticket-input", "string-enum"],
+  "architecture": {
+    "nodes": [
+      { "id": "ticket", "label": "Ticket", "kind": "data", "col": 0, "row": 0 },
+      { "id": "triage-ticket", "label": "TriageTicket", "kind": "class", "col": 1, "row": 0 },
+      { "id": "triage-classifier", "label": "TriageClassifier", "kind": "interface", "col": 2, "row": 0 },
+      { "id": "deterministic", "label": "Deterministic…", "kind": "class", "col": 2, "row": 1 },
+      { "id": "classify", "label": "classify()", "kind": "function", "col": 3, "row": 1 }
+    ],
+    "edges": [
+      { "from": "ticket", "to": "triage-ticket", "rel": "flows_to" },
+      { "from": "triage-ticket", "to": "triage-classifier", "rel": "depends_on" },
+      { "from": "deterministic", "to": "triage-classifier", "rel": "implements" },
+      { "from": "deterministic", "to": "classify", "rel": "calls" }
+    ]
+  },
+  "referenceCode": ["triage-classifier.ts", "deterministic-triage-classifier.ts", "triage-ticket.ts", "triage.ts"],
+  "explanation": [
+    {
+      "id": "port",
+      "conceptId": "interface-contract",
+      "title": "A interface é o contrato",
+      "quick": "`TriageClassifier` diz *o que* um classificador oferece — `classify(input)` — sem dizer *como*.",
+      "normal": "Qualquer classe com esse método serve. `implements TriageClassifier` faz o compilador conferir que `DeterministicTriageClassifier` cumpre o contrato.\n\n```ts\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<Category>;\n}\n```\n\nInterfaces somem no JavaScript final: são só tipo, custo zero em runtime.",
+      "deep": "No projeto real a interface mora em `application/ports/` — o nome \"porta\" vem da arquitetura hexagonal: a aplicação declara a porta, e adaptadores (determinístico, LLM) se plugam nela.\n\nA tipagem é **estrutural**: um objeto literal `{ classify: async () => ... }` também satisfaz o contrato, sem `class` nem `implements` — é exatamente o que o teste de erro faz.\n\nTrade-off: uma interface com uma única implementação é cerimônia. Ela se paga aqui porque já existem duas implementações reais em vista, além do fake de teste."
+    },
+    {
+      "id": "di",
+      "conceptId": "dependency-inversion",
+      "title": "O classificador chega pelo construtor",
+      "quick": "`TriageTicket` recebe o classificador pronto em vez de criá-lo. Quem monta o sistema escolhe qual.",
+      "normal": "```ts\nconstructor(private readonly classifier: TriageClassifier) {}\n```\n\n`private readonly` no parâmetro declara e atribui o campo de uma vez. Como o tipo é a interface, `TriageTicket` compila sem saber que `DeterministicTriageClassifier` existe.",
+      "deep": "Inversão de dependência: o módulo de alto nível (caso de uso) e o de baixo nível (regras de palavras-chave) passam a depender de uma abstração. A seta de dependência de código aponta para o contrato, não para a implementação.\n\nNão há container de injeção: um `new` no ponto de montagem basta. No projeto real, esse ponto é `src/index.ts` — o único arquivo que conhece todas as implementações concretas."
+    },
+    {
+      "id": "use-case",
+      "conceptId": "use-case",
+      "title": "TriageTicket é o caso de uso",
+      "quick": "Uma classe por intenção de negócio: \"triar um ticket\". Ela orquestra; não sabe de HTTP, banco ou regex.",
+      "normal": "Hoje `execute` só delega — parece fino demais. O valor está no lugar que ele reserva: toda regra de *orquestração* futura (combinar classificadores, decidir revisão humana) entra aqui, sem tocar em quem chama nem nos classificadores.",
+      "deep": "Separar caso de uso de protocolo evita o erro clássico de colocar a lógica dentro da rota HTTP. O caso de uso é testável com um fake em microssegundos; a rota fica só com tradução de entrada/saída.\n\nO nome em forma de verbo (`TriageTicket.execute`) é uma convenção comum de *use case classes*; o projeto real mantém isso."
+    },
+    {
+      "id": "async",
+      "conceptId": "async-contract",
+      "title": "Por que async, se as regras são instantâneas?",
+      "quick": "O contrato é assíncrono para aceitar classificadores que dependem de I/O — rede, disco, um modelo.",
+      "normal": "Uma função `async` sempre devolve `Promise`. A versão determinística resolve imediatamente; o custo é desprezível. Se o contrato fosse síncrono, qualquer implementação lenta ficaria de fora sem mudar todos os chamadores.",
+      "deep": "Tornar um contrato assíncrono depois é uma mudança que se espalha: todo chamador precisa virar `async` e usar `await`. Decidir na fronteira, cedo, é barato.\n\nConsequência para erros: uma exceção dentro de `async classify` vira uma *Promise rejeitada*, que o `await` em `execute` repropaga — é o que o último teste verifica."
+    },
+    {
+      "id": "fake",
+      "conceptId": "test-double",
+      "title": "O fake do teste",
+      "quick": "`FakeClassifier` implementa o mesmo contrato, responde uma categoria fixa e anota as chamadas.",
+      "normal": "Com ele o teste verifica o que importa em `TriageTicket` — delegou uma vez, com o mesmo ticket — sem depender das regras de palavras-chave. Só é possível porque o caso de uso depende da interface.",
+      "deep": "Fake vs mock: aqui é um *fake* escrito à mão, com comportamento real e simples, em vez de uma biblioteca de mocks que verifica chamadas por mágica. Fica explícito, tipado pelo contrato e quebra na compilação se o contrato mudar."
+    }
+  ],
+  "originalCodeRefs": [
+    {
+      "path": "src/application/ports/triage-classifier.ts",
+      "startLine": 1,
+      "endLine": 5,
+      "symbol": "TriageClassifier",
+      "replayFile": "triage-classifier.ts",
+      "note": "Mesmo contrato, em application/ports/. Em produção devolve um resultado mais rico que só a categoria."
+    },
+    {
+      "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+      "startLine": 78,
+      "endLine": 114,
+      "symbol": "DeterministicTriageClassifier",
+      "replayFile": "deterministic-triage-classifier.ts",
+      "note": "A mesma ideia: as regras de palavra-chave viram a implementação de classify(). Em produção o método também calcula prioridade, risco e confiança."
+    },
+    {
+      "path": "src/application/triage-ticket.ts",
+      "startLine": 24,
+      "endLine": 45,
+      "symbol": "TriageTicket",
+      "replayFile": "triage-ticket.ts",
+      "note": "Em produção o construtor recebe um modo de operação e uma política, mas continua dependendo apenas de TriageClassifier."
+    },
+    {
+      "path": "src/index.ts",
+      "startLine": 15,
+      "endLine": 28,
+      "symbol": "composition root",
+      "replayFile": "triage-ticket.ts",
+      "note": "É aqui que `new DeterministicTriageClassifier()` acontece e é injetado em TriageTicket — o único lugar que conhece as classes concretas."
+    }
+  ],
+  "exercise": {
+    "instructions": "Implemente `DeterministicTriageClassifier` (reaproveitando `classify` da Stage 1) e `TriageTicket`, recebendo o classificador pelo construtor. `triage.ts` e `triage-classifier.ts` já estão prontos (veja em *Código pronto*). Os testes usam um classificador falso.",
+    "starterFiles": ["deterministic-triage-classifier.ts", "triage-ticket.ts"],
+    "supportFiles": ["triage.ts", "triage-classifier.ts"]
+  },
+  "toolbox": [
+    {
+      "id": "interface",
+      "name": "interface / implements",
+      "signature": "interface X { m(a: A): R }  ·  class Y implements X",
+      "summary": "Declara um formato; implements pede ao compilador para conferir a classe.",
+      "example": "interface Greeter { greet(name: string): string }\nclass Hi implements Greeter {\n  greet(name: string) { return \"hi \" + name; }\n}"
+    },
+    {
+      "id": "param-props",
+      "name": "private readonly no construtor",
+      "signature": "constructor(private readonly dep: Dep) {}",
+      "summary": "Declara e atribui o campo em uma linha; readonly impede reatribuir.",
+      "example": "class Service {\n  constructor(private readonly clock: Clock) {}\n  now() { return this.clock.now(); }\n}"
+    },
+    {
+      "id": "async-await",
+      "name": "async / await",
+      "signature": "async function f(): Promise<T>",
+      "summary": "async sempre devolve Promise; await espera e repropaga rejeições.",
+      "example": "async function load(): Promise<number> {\n  const n = await fetchCount();\n  return n + 1;\n}"
+    },
+    {
+      "id": "import-alias",
+      "name": "import { a as b }",
+      "summary": "Renomeia um import para evitar conflito ou deixar a intenção clara.",
+      "example": "import { classify as classifyByKeywords } from \"./triage.ts\";"
+    },
+    {
+      "id": "import-type",
+      "name": "import type",
+      "summary": "Importa só o tipo; some do JavaScript final.",
+      "example": "import type { TriageClassifier } from \"./triage-classifier.ts\";"
+    }
+  ],
+  "checkpoint": {
+    "question": "Por que TriageTicket depende de TriageClassifier e não de DeterministicTriageClassifier?",
+    "answer": "Para que qualquer classificador — o determinístico, um LLM, ou um fake no teste — possa ser plugado sem mudar o caso de uso. Quem escolhe a implementação é o ponto de montagem (src/index.ts), não TriageTicket."
+  },
+  "summary": {
+    "added": ["TriageClassifier", "DeterministicTriageClassifier", "TriageTicket"],
+    "why": "Desacoplar o caso de uso da implementação de classificação.",
+    "flow": ["Ticket", "TriageTicket", "TriageClassifier", "DeterministicTriageClassifier"]
+  }
+}

@@ -1,0 +1,136 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TriageMode {
+  DETERMINISTIC
+  OLLAMA
+  HYBRID
+}
+
+enum TriageRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  ABANDONED
+}
+
+enum TriageFailureCode {
+  TIMEOUT
+  UNAVAILABLE
+  INVALID_RESPONSE
+  UNEXPECTED
+  ABANDONED
+}
+
+enum Category {
+  INCIDENT
+  BUG
+  FEATURE_REQUEST
+  CONTENT_CHANGE
+  SUPPORT
+  ACCESS
+  OTHER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum Risk {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum SuggestedTeam {
+  DEVELOPMENT
+  INFRASTRUCTURE
+  CONTENT
+  SUPPORT
+  PRODUCT
+  HUMAN_REVIEW
+}
+
+enum DecisionSource {
+  DETERMINISTIC
+  LLM
+  HYBRID
+  DETERMINISTIC_FALLBACK
+}
+
+enum HumanReviewReason {
+  CLASSIFIER_DISAGREEMENT
+  LOW_CONFIDENCE
+  HIGH_SEVERITY
+  LLM_UNAVAILABLE
+}
+
+model Ticket {
+  id          String       @id @db.Uuid
+  title       String       @db.Text
+  description String       @db.Text
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  runs        TriageRun[]
+}
+
+model TriageRun {
+  id           String           @id @db.Uuid
+  ticketId     String           @db.Uuid
+  mode         TriageMode
+  status       TriageRunStatus
+  failureCode  TriageFailureCode?
+  startedAt    DateTime         @default(now()) @db.Timestamptz(6)
+  completedAt  DateTime?        @db.Timestamptz(6)
+  ticket       Ticket           @relation(fields: [ticketId], references: [id])
+  decision     TriageDecision?
+
+  @@index([ticketId])
+  @@index([startedAt])
+}
+
+model TriageDecision {
+  id                 String             @id @db.Uuid
+  triageRunId        String             @unique @db.Uuid
+  category           Category
+  priority           Priority
+  risk               Risk
+  suggestedTeam      SuggestedTeam
+  confidence         Decimal            @db.Decimal(2, 1)
+  summary            String             @db.Text
+  rationale          String             @db.Text
+  decisionSource     DecisionSource
+  requiresHumanReview Boolean
+  reviewReasons      HumanReviewReason[]
+  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
+  triageRun          TriageRun          @relation(fields: [triageRunId], references: [id])
+  feedback           Feedback[]
+}
+
+model Feedback {
+  id                       String        @id @db.Uuid
+  decisionId               String        @db.Uuid
+  reviewedBy               String        @db.Text
+  correctedCategory        Category
+  correctedPriority        Priority
+  correctedRisk            Risk
+  correctedSuggestedTeam   SuggestedTeam
+  comment                  String?       @db.Text
+  createdAt                DateTime      @default(now()) @db.Timestamptz(6)
+  decision                 TriageDecision @relation(fields: [decisionId], references: [id])
+
+  @@index([decisionId])
+}

@@ -61,6 +61,19 @@ function storeFor(journeyId: string): ProgressStore {
 
 async function route(): Promise<void> {
   leaveStage();
+  // The previous view stays visible while the next loads, but must not be actionable:
+  // a quick second click would otherwise act on a stage the learner already left.
+  main.inert = true;
+  main.setAttribute("aria-busy", "true");
+  try {
+    await render();
+  } finally {
+    main.inert = false;
+    main.removeAttribute("aria-busy");
+  }
+}
+
+async function render(): Promise<void> {
   const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
   try {
     if (parts[0] !== "j" || !parts[1]) return await showHome();
@@ -134,16 +147,20 @@ function stageActions(journey: JourneyOutline, store: ProgressStore, stage: Stag
     location.hash = next ? stageHref(journey.id, next.order) : `#/j/${journey.id}`;
   };
   const elapsed = (): number => Math.round(current?.watch.elapsed() ?? 0);
+  const isCurrent = (): boolean => current?.stage.id === stage.id;
   return {
     complete: () => {
+      if (!isCurrent()) return;
       store.setStatus(stage.id, "completed", { timeSpentMs: elapsed() });
       advance();
     },
     skipKnown: () => {
+      if (!isCurrent()) return;
       store.setStatus(stage.id, "skipped_known", { timeSpentMs: elapsed(), knownConcepts: stage.introduces });
       advance();
     },
     skip: () => {
+      if (!isCurrent()) return;
       store.setStatus(stage.id, "skipped", { timeSpentMs: elapsed() });
       advance();
     },

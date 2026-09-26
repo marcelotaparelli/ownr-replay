@@ -1,0 +1,157 @@
+{
+  "title": "Um classificador LLM",
+  "subtitle": "Mesmo contrato, uma dependência que falha",
+  "goal": "Plugar um LLM como mais uma implementação de TriageClassifier — sem deixar suas falhas e respostas inventadas vazarem para o resto do sistema.",
+  "problem": "Palavras-chave não entendem \"the site is not loading for anyone\". Um LLM entende, mas é remoto, lento, pode cair, travar ou responder texto livre com uma categoria que não existe. Como usar essa capacidade mantendo o contrato previsível?",
+  "estimatedMinutes": 8,
+  "introduces": ["adapter", "injected-fetch", "abort-timeout", "typed-errors", "structured-output"],
+  "prerequisites": ["interface-contract", "async-contract", "structured-result", "test-double"],
+  "architecture": {
+    "nodes": [
+      { "id": "triage-ticket", "label": "TriageTicket", "kind": "class", "col": 0, "row": 0 },
+      { "id": "triage-classifier", "label": "TriageClassifier", "kind": "interface", "col": 1, "row": 0 },
+      { "id": "deterministic", "label": "Deterministic…", "kind": "class", "col": 1, "row": 1 },
+      { "id": "llm", "label": "LlmTriageClassifier", "kind": "class", "col": 2, "row": 1 },
+      { "id": "validator", "label": "parseLlmResult()", "kind": "function", "col": 2, "row": 2 },
+      { "id": "ollama", "label": "LLM (HTTP)", "kind": "external", "col": 3, "row": 1 }
+    ],
+    "edges": [
+      { "from": "triage-ticket", "to": "triage-classifier", "rel": "depends_on" },
+      { "from": "deterministic", "to": "triage-classifier", "rel": "implements" },
+      { "from": "llm", "to": "triage-classifier", "rel": "implements" },
+      { "from": "llm", "to": "ollama", "rel": "calls" },
+      { "from": "llm", "to": "validator", "rel": "validates" }
+    ]
+  },
+  "referenceCode": ["llm-triage-classifier.ts", "classifier-errors.ts", "llm-result.ts", "triage-classifier.ts"],
+  "explanation": [
+    {
+      "id": "adapter",
+      "conceptId": "adapter",
+      "title": "Um adapter atrás do mesmo contrato",
+      "quick": "`LlmTriageClassifier implements TriageClassifier`: para o caso de uso, é só mais um classificador.",
+      "normal": "Tudo que é específico do LLM — URL, formato do corpo, envelope de resposta, parsing — fica dentro do adapter. `TriageTicket` não muda uma linha.\n\nPor isso a interface da Stage 2 valeu o custo: esta é a segunda implementação real.",
+      "deep": "No projeto real o adapter fala com Ollama (LLM local) e mora em `src/infrastructure/ollama/` — fora da camada de aplicação. A direção da dependência se mantém: infraestrutura importa a porta da aplicação, nunca o contrário.\n\nO prompt e o JSON Schema de saída ficam em arquivos próprios (`ollama-prompt-v1.ts`, `ollama-result-schema.ts`), versionados — mudar o prompt é uma mudança de comportamento que o projeto avalia com datasets."
+    },
+    {
+      "id": "fetch",
+      "conceptId": "injected-fetch",
+      "title": "fetch injetado",
+      "quick": "O construtor recebe `fetchImpl` (padrão: o `fetch` global). Nos testes, um fetch falso simula cada falha.",
+      "normal": "```ts\nconstructor(\n  private readonly config: LlmClassifierConfig,\n  private readonly fetchImpl: HttpFetch = fetch,\n) {}\n```\n\nSem isso, testar timeout, HTTP 500 ou JSON quebrado exigiria um servidor LLM de verdade — lento e não determinístico.",
+      "deep": "`HttpFetch` é um tipo de função mínimo — só o que o adapter usa. Tipos estreitos tornam fakes triviais (os testes criam cada um em uma linha) e documentam a dependência real."
+    },
+    {
+      "id": "timeout",
+      "conceptId": "abort-timeout",
+      "title": "Timeout que cancela de verdade",
+      "quick": "Um timer chama `controller.abort()`; o `signal` passado ao fetch cancela a requisição.",
+      "normal": "```ts\nconst controller = new AbortController();\nconst timer = setTimeout(() => controller.abort(), timeoutMs);\ntry { ... fetch(url, { signal: controller.signal }) ... }\nfinally { clearTimeout(timer); }\n```\n\nNo `catch`, `controller.signal.aborted` distingue \"demorou demais\" de \"não conectou\".",
+      "deep": "Cancelar é diferente de só parar de esperar: com `Promise.race`, o fetch continuaria consumindo conexão e memória. O `finally` garante que o timer não sobrevive à chamada — em um servidor, timers esquecidos são vazamento.\n\nO projeto real também verifica `aborted` ao ler o corpo: o timeout pode estourar no meio da leitura."
+    },
+    {
+      "id": "errors",
+      "conceptId": "typed-errors",
+      "title": "Três erros, três consequências",
+      "quick": "Timeout, indisponível e resposta inválida viram classes distintas, para que quem chama possa reagir diferente.",
+      "normal": "Um `Error(\"falhou\")` genérico obrigaria quem chama a interpretar mensagens. Com classes, `error instanceof ClassifierTimeoutError` é uma decisão tipada.\n\n`override readonly name` faz o nome aparecer certo em logs e stack traces.",
+      "deep": "Os erros moram na camada de aplicação (`application/errors/`), não no adapter: são parte do *contrato* de classificadores, e qualquer implementação remota futura deve lançar os mesmos.\n\nNote o que **não** vira erro tipado: bugs de programação continuam propagando como estão — só falhas esperadas de dependência são traduzidas."
+    },
+    {
+      "id": "validation",
+      "conceptId": "structured-output",
+      "title": "Nunca confie na saída do LLM",
+      "quick": "A resposta é JSON validado contra um schema estrito antes de virar `ClassifierResult`; qualquer desvio → resposta inválida.",
+      "normal": "O LLM pode responder prosa, inventar a categoria `SECURITY`, ou incluir campos extras (como tentar escolher o time). `parseLlmResult` aceita apenas o formato exato.\n\nO time sugerido é sempre recalculado pela tabela da Stage 3.",
+      "deep": "O projeto real usa Zod (`z.strictObject` + `z.enum(Category)`) e ainda envia o JSON Schema derivado (`z.toJSONSchema`) como `format` para o Ollama — o modelo é *guiado* pelo schema e a resposta é *verificada* por ele. Guiar reduz falhas; verificar as torna impossíveis de passar adiante.\n\nAqui a validação é escrita à mão porque o sandbox não tem dependências; a lógica é a mesma que o schema expressa."
+    }
+  ],
+  "originalCodeRefs": [
+    {
+      "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+      "startLine": 36,
+      "endLine": 108,
+      "symbol": "OllamaTriageClassifier",
+      "replayFile": "llm-triage-classifier.ts",
+      "note": "Mesmo fluxo: timeout com AbortController, tradução de falhas em erros tipados, validação em duas camadas (envelope e conteúdo) e time derivado da categoria."
+    },
+    {
+      "path": "src/infrastructure/ollama/ollama-result-schema.ts",
+      "startLine": 1,
+      "endLine": 19,
+      "symbol": "OllamaClassifierResultSchema",
+      "replayFile": "llm-result.ts",
+      "note": "A validação escrita à mão no replay é este schema Zod estrito — que também vira JSON Schema para guiar o modelo."
+    },
+    {
+      "path": "src/application/errors/classifier-errors.ts",
+      "startLine": 1,
+      "endLine": 23,
+      "symbol": "ClassifierTimeoutError",
+      "replayFile": "classifier-errors.ts",
+      "note": "Idênticos. Moram na camada de aplicação porque fazem parte do contrato de qualquer classificador."
+    },
+    {
+      "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+      "startLine": 19,
+      "endLine": 28,
+      "symbol": "HttpFetch",
+      "replayFile": "llm-triage-classifier.ts",
+      "note": "O tipo mínimo de fetch que torna o adapter testável."
+    }
+  ],
+  "exercise": {
+    "instructions": "Complete `LlmTriageClassifier.classify` para que **toda** falha vire um erro tipado e só um resultado válido passe. O esqueleto atual funciona no caminho feliz e mais nada. Os testes simulam o LLM com fetch falsos.",
+    "starterFiles": ["llm-triage-classifier.ts"],
+    "supportFiles": ["triage.ts", "triage-classifier.ts", "classifier-errors.ts", "llm-result.ts", "suggested-team.ts"]
+  },
+  "toolbox": [
+    {
+      "id": "abort-controller",
+      "name": "AbortController",
+      "signature": "const c = new AbortController(); fetch(url, { signal: c.signal }); c.abort();",
+      "summary": "Cancela operações que aceitam um signal; signal.aborted diz se já foi cancelado.",
+      "example": "const c = new AbortController();\nsetTimeout(() => c.abort(), 1000);\nawait fetch(url, { signal: c.signal });"
+    },
+    {
+      "id": "try-finally",
+      "name": "try / finally",
+      "summary": "O bloco finally roda sempre — sucesso, erro ou return. Ideal para limpeza.",
+      "example": "const timer = setTimeout(fn, ms);\ntry {\n  return await work();\n} finally {\n  clearTimeout(timer);\n}"
+    },
+    {
+      "id": "instanceof",
+      "name": "instanceof",
+      "summary": "Verifica se um valor foi criado por uma classe (incluindo subclasses).",
+      "example": "if (error instanceof ClassifierTimeoutError) retryLater();"
+    },
+    {
+      "id": "response-ok",
+      "name": "Response.ok / .json()",
+      "signature": "response.ok: boolean  ·  response.json(): Promise<any>",
+      "summary": "ok é true para status 200–299; json() rejeita se o corpo não for JSON.",
+      "example": "if (!response.ok) throw new Error(String(response.status));\nconst body = await response.json();"
+    },
+    {
+      "id": "json-parse",
+      "name": "JSON.parse()",
+      "summary": "Converte texto em valor; lança SyntaxError se o texto não for JSON.",
+      "example": "try { JSON.parse(\"Claro!\"); } catch (e) { e instanceof SyntaxError; // true }"
+    },
+    {
+      "id": "unknown",
+      "name": "unknown + narrowing",
+      "summary": "Trate dado externo como unknown e estreite o tipo com verificações antes de usar.",
+      "example": "function isText(v: unknown): v is string {\n  return typeof v === \"string\" && v.length > 0;\n}"
+    }
+  ],
+  "checkpoint": {
+    "question": "Se o LLM ficar fora do ar, o que acontece com TriageTicket hoje? E o que precisaria existir para a triagem continuar funcionando?",
+    "answer": "Hoje o ClassifierUnavailableError sobe até quem chamou e a triagem falha. Para continuar, algo acima do adapter precisa reconhecer esse erro tipado e recorrer a outro classificador — o determinístico, que não depende de rede."
+  },
+  "summary": {
+    "added": ["LlmTriageClassifier", "erros tipados", "parseLlmResult"],
+    "why": "Ganhar a compreensão de linguagem de um LLM sem aceitar suas falhas e invenções como verdade.",
+    "flow": ["TriageTicket", "TriageClassifier", "LlmTriageClassifier → LLM (HTTP)", "parseLlmResult()", "ClassifierResult | erro tipado"]
+  }
+}

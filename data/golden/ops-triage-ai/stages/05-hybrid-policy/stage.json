@@ -1,0 +1,135 @@
+{
+  "title": "HybridPolicy: um vigia o outro",
+  "subtitle": "Combinar baseline e LLM em vez de escolher",
+  "goal": "Usar o LLM como decisor e o classificador determinístico como vigia e rede de segurança.",
+  "problem": "Temos dois classificadores: um previsível e limitado, outro flexível e falível. Escolher só um desperdiça o outro. Como combiná-los de modo que o sistema continue funcionando quando o LLM cai — e peça ajuda humana justamente quando os dois discordam?",
+  "estimatedMinutes": 8,
+  "introduces": ["discriminated-union", "hybrid-policy", "graceful-fallback"],
+  "prerequisites": ["human-review", "typed-errors", "confidence", "structured-result"],
+  "architecture": {
+    "nodes": [
+      { "id": "ticket", "label": "Ticket", "kind": "data", "col": 0, "row": 1 },
+      { "id": "triage-ticket", "label": "TriageTicket", "kind": "class", "col": 1, "row": 1 },
+      { "id": "deterministic", "label": "Deterministic…", "kind": "class", "col": 2, "row": 0 },
+      { "id": "llm", "label": "LlmTriageClassifier", "kind": "class", "col": 2, "row": 2 },
+      { "id": "policy", "label": "HybridPolicy", "kind": "class", "col": 3, "row": 1 },
+      { "id": "decision", "label": "TriageDecision", "kind": "data", "col": 4, "row": 1 }
+    ],
+    "edges": [
+      { "from": "ticket", "to": "triage-ticket", "rel": "flows_to" },
+      { "from": "triage-ticket", "to": "deterministic", "rel": "calls" },
+      { "from": "triage-ticket", "to": "llm", "rel": "calls" },
+      { "from": "triage-ticket", "to": "policy", "rel": "calls" },
+      { "from": "policy", "to": "decision", "rel": "creates" }
+    ]
+  },
+  "referenceCode": ["hybrid-policy.ts", "triage-ticket.ts", "triage-decision.ts"],
+  "explanation": [
+    {
+      "id": "policy",
+      "conceptId": "hybrid-policy",
+      "title": "O LLM decide, o determinístico vigia",
+      "quick": "Quando os dois respondem, a decisão é do LLM; se discordarem em categoria, prioridade ou risco, um humano revisa.",
+      "normal": "Discordância é um sinal barato e poderoso de incerteza: dois métodos independentes errando *do mesmo jeito* é menos provável que um só errando.\n\nSeveridade e baixa confiança são avaliadas nos **dois** resultados (`results.some(...)`): se qualquer um vê perigo, a decisão pede revisão. Errar para o lado conservador é intencional.",
+      "deep": "Por que o LLM decide em vez do determinístico? No projeto real, as avaliações em datasets mostraram melhor qualidade do LLM, enquanto o determinístico tem maior previsibilidade — a política combina as duas propriedades. Essa escolha é documentada em `docs/architecture/hybrid-policy.md` e medida com `eval:hybrid:dev`.\n\n`Set` + `REVIEW_REASON_ORDER.filter(...)` deduplica motivos e garante ordem estável independente da ordem em que foram detectados — saída determinística facilita testes, logs e comparação entre execuções."
+    },
+    {
+      "id": "union",
+      "conceptId": "discriminated-union",
+      "title": "LlmOutcome: respondeu ou falhou",
+      "quick": "`{ status: \"available\", result } | { status: \"failed\", reason }` — o campo `status` diz qual formato você tem.",
+      "normal": "```ts\nif (input.llm.status === \"failed\") {\n  // aqui o TypeScript sabe que existe .reason e NÃO existe .result\n}\n```\n\nNão há `null` ambíguo: é impossível ler `result` de uma falha sem o compilador reclamar.",
+      "deep": "Isso separa *falha esperada* (dado) de *bug* (exceção): `classifyWithFallback` converte só os três erros tipados em `{ status: \"failed\" }`; qualquer outro erro continua sendo lançado. Engolir tudo esconderia bugs como se fossem instabilidade do LLM.\n\n`reason` preserva o porquê (TIMEOUT, UNAVAILABLE, INVALID_RESPONSE) para logs e métricas, mesmo que a política trate os três igual."
+    },
+    {
+      "id": "fallback",
+      "conceptId": "graceful-fallback",
+      "title": "Fallback: degradar, não cair",
+      "quick": "LLM falhou → usa o determinístico, marca `DETERMINISTIC_FALLBACK` e pede revisão com `LLM_UNAVAILABLE`.",
+      "normal": "A triagem nunca para por causa do LLM. Mas a decisão carrega a verdade: veio do plano B, e por isso um humano deve conferir.\n\n`decisionSource` distingue HYBRID de DETERMINISTIC_FALLBACK — dá para medir com que frequência o fallback acontece.",
+      "deep": "Note a ordem em `TriageTicket.execute`: o determinístico roda primeiro e sem proteção. Se ele falhar, é bug — deve estourar. O LLM, dependência externa, é o único envolvido por `classifyWithFallback`.\n\nNo projeto real, `TriageTicket` ainda aceita modos `deterministic` e `ollama` puros (usando `decideSingle`), o que permite comparar as três estratégias com o mesmo código."
+    }
+  ],
+  "originalCodeRefs": [
+    {
+      "path": "src/application/policies/hybrid-policy.ts",
+      "startLine": 12,
+      "endLine": 57,
+      "symbol": "HybridPolicy",
+      "replayFile": "hybrid-policy.ts",
+      "note": "Praticamente idêntico ao replay: mesma união LlmOutcome, mesma ordem de motivos, mesmo critério de discordância."
+    },
+    {
+      "path": "src/application/policies/hybrid-policy.ts",
+      "startLine": 59,
+      "endLine": 104,
+      "symbol": "reviewReasons",
+      "replayFile": "hybrid-policy.ts",
+      "note": "Set para deduplicar + filter pela ordem fixa."
+    },
+    {
+      "path": "src/application/triage-ticket.ts",
+      "startLine": 15,
+      "endLine": 65,
+      "symbol": "TriageTicket",
+      "replayFile": "triage-ticket.ts",
+      "note": "Em produção o caso de uso recebe um modo (deterministic | ollama | hybrid) como união discriminada; o modo hybrid é o do replay."
+    },
+    {
+      "path": "src/domain/triage-decision.ts",
+      "startLine": 3,
+      "endLine": 21,
+      "symbol": "DecisionSource",
+      "replayFile": "triage-decision.ts",
+      "note": "As quatro fontes e os quatro motivos de revisão completos."
+    }
+  ],
+  "exercise": {
+    "instructions": "Implemente `HybridPolicy.decide` (e as funções auxiliares que quiser). `decideSingle`, `isHighSeverity`, `decision` e `REVIEW_REASON_ORDER` já existem.",
+    "starterFiles": ["hybrid-policy.ts"],
+    "supportFiles": ["triage.ts", "triage-decision.ts", "triage-classifier.ts", "classifier-errors.ts", "triage-ticket.ts"]
+  },
+  "toolbox": [
+    {
+      "id": "narrowing",
+      "name": "Narrowing por discriminante",
+      "summary": "Comparar o campo discriminante estreita o tipo dentro do if.",
+      "example": "if (outcome.status === \"failed\") {\n  outcome.reason; // ok\n} else {\n  outcome.result; // ok\n}"
+    },
+    {
+      "id": "set",
+      "name": "Set<T>",
+      "signature": "new Set<T>()  ·  .add(v)  ·  .has(v)",
+      "summary": "Coleção sem duplicatas com consulta O(1).",
+      "example": "const seen = new Set<string>();\nseen.add(\"a\"); seen.add(\"a\");\nseen.size; // 1",
+      "complexity": "add/has O(1)"
+    },
+    {
+      "id": "array-some",
+      "name": "Array.some()",
+      "summary": "true se ao menos um item satisfaz a condição; para no primeiro.",
+      "example": "[r1, r2].some((r) => r.confidence === 0.5);"
+    },
+    {
+      "id": "array-filter",
+      "name": "Array.filter()",
+      "summary": "Novo array com os itens que passam — preserva a ordem original.",
+      "example": "ORDER.filter((reason) => found.has(reason));"
+    },
+    {
+      "id": "as-const",
+      "name": "as const",
+      "summary": "Mantém o tipo literal em vez de alargar para string.",
+      "example": "const failed = { status: \"failed\" as const, reason: \"TIMEOUT\" as const };"
+    }
+  ],
+  "checkpoint": {
+    "question": "Por que classifyWithFallback relança erros que não são os três erros tipados, em vez de tratar tudo como \"LLM indisponível\"?",
+    "answer": "Porque outros erros são bugs (no adapter, na política, em qualquer lugar), não instabilidade do LLM. Convertê-los em fallback esconderia o bug atrás de um comportamento aparentemente normal — a triagem seguiria, só que sempre com o determinístico, sem ninguém perceber."
+  },
+  "summary": {
+    "added": ["HybridPolicy", "LlmOutcome", "fallback determinístico"],
+    "why": "Somar a flexibilidade do LLM à previsibilidade do baseline — e pedir um humano quando eles discordam.",
+    "flow": ["Ticket", "TriageTicket", "Deterministic + LLM (ou falha)", "HybridPolicy", "TriageDecision"]
+  }
+}

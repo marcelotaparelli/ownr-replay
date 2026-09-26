@@ -9,7 +9,14 @@
     "sha": "840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67"
   },
   "stages": [
-    "01-classify"
+    "01-classify",
+    "02-classifier-port",
+    "03-structured-decision",
+    "04-llm-classifier",
+    "05-hybrid-policy",
+    "06-persistence",
+    "07-http-api",
+    "08-resilience"
   ],
   "concepts": [
     {

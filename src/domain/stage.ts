@@ -63,6 +63,8 @@ export const Exercise = z.strictObject({
   instructions: z.string().min(1),
   starterFiles: z.array(CodeFile).min(1),
   solutionFiles: z.array(CodeFile).min(1),
+  /** Read-only files from earlier stages the exercise builds on; always sent by the server. */
+  supportFiles: z.array(CodeFile),
   /** Owned by the server; the client never supplies tests. */
   testFile: CodeFile,
 });

@@ -1,0 +1,141 @@
+{
+  "title": "Resiliência e observabilidade",
+  "subtitle": "Sobreviver a picos e saber o que aconteceu",
+  "goal": "Proteger o serviço contra sobrecarga e requisições eternas, e deixar cada decisão visível em logs e métricas.",
+  "problem": "Em produção, cem tickets chegam de uma vez e o LLM leva segundos por chamada. Sem limites, as requisições se acumulam até derrubar o processo. E quando algo dá errado às 3h da manhã, \"funcionou na minha máquina\" não responde nada: o que aconteceu, onde, quanto demorou, com que frequência?",
+  "estimatedMinutes": 6,
+  "introduces": ["concurrency-limit", "promise-race-timeout", "structured-logging", "metrics"],
+  "prerequisites": ["abort-timeout", "error-status-mapping", "composition-root", "graceful-fallback"],
+  "architecture": {
+    "nodes": [
+      { "id": "client", "label": "Cliente HTTP", "kind": "external", "col": 0, "row": 0 },
+      { "id": "limiter", "label": "ConcurrencyLimiter", "kind": "class", "col": 1, "row": 0 },
+      { "id": "timeout", "label": "withTimeout()", "kind": "function", "col": 2, "row": 0 },
+      { "id": "service", "label": "PersistedTriage…", "kind": "class", "col": 3, "row": 0 },
+      { "id": "metrics", "label": "Metrics", "kind": "class", "col": 2, "row": 1 },
+      { "id": "logger", "label": "JSON logs", "kind": "infra", "col": 3, "row": 1 }
+    ],
+    "edges": [
+      { "from": "client", "to": "limiter", "rel": "calls" },
+      { "from": "limiter", "to": "timeout", "rel": "wraps" },
+      { "from": "timeout", "to": "service", "rel": "wraps" },
+      { "from": "timeout", "to": "metrics", "rel": "writes" },
+      { "from": "service", "to": "logger", "rel": "writes" }
+    ]
+  },
+  "referenceCode": ["resilience.ts", "observability.ts"],
+  "explanation": [
+    {
+      "id": "limit",
+      "conceptId": "concurrency-limit",
+      "title": "Recusar cedo é melhor que cair tarde",
+      "quick": "No máximo N triagens simultâneas; a (N+1)-ésima recebe 429 com `retry-after` na hora.",
+      "normal": "```ts\nif (!limiter.tryAcquire()) return json(429, ...);\ntry { ... } finally { limiter.release(); }\n```\n\nO `finally` garante que a vaga volta mesmo se a triagem falhar — senão o limite \"vaza\" até o serviço recusar tudo.",
+      "deep": "Sem limite, cada requisição extra espera o LLM, segura memória e conexões, e a latência de *todas* piora — a fila cresce mais rápido do que esvazia. Recusar rápido (*load shedding*) mantém o serviço útil para quem entrou.\n\n`Math.max(0, active - 1)` protege contra um `release` duplicado em algum caminho de erro. É um contador simples porque o Bun roda o handler em uma única thread: não há corrida entre `tryAcquire` e `release`."
+    },
+    {
+      "id": "race",
+      "conceptId": "promise-race-timeout",
+      "title": "Um teto de tempo para a requisição inteira",
+      "quick": "`Promise.race` entre o trabalho e um timer que rejeita: o cliente sempre recebe resposta em até T.",
+      "normal": "O timeout da Stage 4 protege uma chamada ao LLM; este protege a requisição inteira (classificadores + banco). Estourou → 504 `request_timeout`.\n\nO `finally` com `clearTimeout` evita que o timer continue vivo depois que o trabalho terminou.",
+      "deep": "Diferença crucial para o AbortController: `Promise.race` **não cancela** o trabalho perdedor — ele continua rodando em segundo plano. Por isso os dois mecanismos coexistem: o timeout interno cancela de verdade o fetch; o externo garante o contrato de tempo com o cliente.\n\nNo projeto real o valor padrão (310 s) é maior que o timeout do LLM, para que o fallback tenha chance de acontecer antes do corte."
+    },
+    {
+      "id": "logs",
+      "conceptId": "structured-logging",
+      "title": "Logs como eventos",
+      "quick": "Uma linha JSON por evento, com campos fixos: `requestId`, `durationMs`, `decisionSource`, `code`.",
+      "normal": "`{\"event\":\"triage_completed\",\"requestId\":\"…\",\"durationMs\":812,\"decisionSource\":\"HYBRID\"}` pode ser filtrado (\"todos os fallbacks de hoje\") e correlacionado pelo `requestId`, que também volta ao cliente no header `x-request-id`.",
+      "deep": "O projeto real restringe os campos a um tipo `LogFields` fechado — é difícil logar o ticket inteiro ou um segredo por acidente. O `requestId` recebido é aceito só se casar com `/^[A-Za-z0-9._-]{1,128}$/`, evitando injeção em logs."
+    },
+    {
+      "id": "metrics",
+      "conceptId": "metrics",
+      "title": "Métricas que respondem perguntas",
+      "quick": "Contadores e durações com labels: triagens por fonte, revisões humanas, timeouts, fallbacks.",
+      "normal": "`metricKey` ordena os labels para que a mesma combinação sempre gere a mesma chave — senão `{a,b}` e `{b,a}` virariam duas séries.\n\nCada métrica existe por uma pergunta: \"com que frequência caímos no fallback?\" → `triage_total{decisionSource=DETERMINISTIC_FALLBACK}`.",
+      "deep": "O projeto real expõe as métricas em `GET /metrics` (protegido por API key) como JSON, em memória. Não há Prometheus nem OpenTelemetry: para um serviço único, é o suficiente — e o formato `nome{label=valor}` já é o do Prometheus, facilitando a migração quando for necessária."
+    }
+  ],
+  "originalCodeRefs": [
+    {
+      "path": "src/server.ts",
+      "startLine": 165,
+      "endLine": 175,
+      "symbol": "withTimeout",
+      "replayFile": "resilience.ts",
+      "note": "withTimeout e ConcurrencyLimiter idênticos ao replay, escritos de forma compacta."
+    },
+    {
+      "path": "src/observability.ts",
+      "startLine": 16,
+      "endLine": 62,
+      "symbol": "Metrics",
+      "replayFile": "observability.ts",
+      "note": "Logger com campos tipados e Metrics com contadores, durações e metricKey ordenado."
+    },
+    {
+      "path": "src/server.ts",
+      "startLine": 190,
+      "endLine": 208,
+      "symbol": "startServer",
+      "replayFile": "resilience.ts",
+      "note": "Graceful shutdown: ao receber SIGTERM o servidor para de aceitar (503 + retry-after) e espera as requisições em andamento."
+    },
+    {
+      "path": "src/index.ts",
+      "startLine": 53,
+      "endLine": 71,
+      "symbol": "shutdown",
+      "replayFile": "observability.ts",
+      "note": "Sinais do sistema e erros não tratados passam pelo mesmo desligamento ordenado, com log."
+    }
+  ],
+  "exercise": {
+    "instructions": "Implemente `ConcurrencyLimiter`, `withTimeout` e `metricKey`. São pequenos — o objetivo é entender os casos de borda que os testes verificam.",
+    "starterFiles": ["resilience.ts", "observability.ts"]
+  },
+  "toolbox": [
+    {
+      "id": "promise-race",
+      "name": "Promise.race()",
+      "signature": "Promise.race([a, b]): Promise",
+      "summary": "Resolve/rejeita com a primeira promise que terminar. As outras NÃO são canceladas.",
+      "example": "await Promise.race([work(), timeoutAfter(1000)]);"
+    },
+    {
+      "id": "promise-never",
+      "name": "new Promise<never>",
+      "summary": "Uma promise que só pode rejeitar — o tipo never diz isso ao compilador.",
+      "example": "const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(\"t\")), ms));"
+    },
+    {
+      "id": "object-entries",
+      "name": "Object.entries() + sort",
+      "summary": "Pares [chave, valor]; ordene para obter uma representação estável.",
+      "example": "Object.entries({ b: 1, a: 2 }).sort(([x], [y]) => x.localeCompare(y)); // [[\"a\",2],[\"b\",1]]"
+    },
+    {
+      "id": "nullish",
+      "name": "?? (nullish coalescing)",
+      "summary": "Valor padrão só para null/undefined — 0 continua sendo 0.",
+      "example": "counters.set(key, (counters.get(key) ?? 0) + 1);"
+    },
+    {
+      "id": "math-max",
+      "name": "Math.max()",
+      "summary": "O maior dos argumentos — útil para impor um piso.",
+      "example": "active = Math.max(0, active - 1);"
+    }
+  ],
+  "checkpoint": {
+    "question": "Se já existe o timeout com AbortController no classificador LLM, por que ainda precisamos de withTimeout na requisição?",
+    "answer": "São contratos diferentes. O AbortController cancela uma chamada específica ao LLM (e permite o fallback). O withTimeout garante ao cliente um teto para a requisição inteira — incluindo determinístico, política e banco. E como Promise.race não cancela nada, o trabalho de baixo continua precisando dos seus próprios timeouts."
+  },
+  "summary": {
+    "added": ["ConcurrencyLimiter", "withTimeout", "Metrics + logs JSON"],
+    "why": "Manter o serviço de pé sob carga e tornar cada decisão observável.",
+    "flow": ["Cliente", "ConcurrencyLimiter (429?)", "withTimeout (504?)", "PersistedTriageService → TriageTicket → HybridPolicy", "logs + métricas"]
+  }
+}
