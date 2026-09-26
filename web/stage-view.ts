@@ -1,0 +1,431 @@
+import type { JourneyOutline } from "../src/domain/journey.ts";
+import type { RunResult } from "../src/domain/progress.ts";
+import type { Concept, ExplanationBlock, OriginalCodeReference } from "../src/domain/stage.ts";
+import type { TutorSelection } from "../src/domain/tutor.ts";
+import { api, type StageDetail } from "./api.ts";
+import { architectureView } from "./arch.ts";
+import { codeView, selectionFromCodeView } from "./code-view.ts";
+import { h } from "./dom.ts";
+import { createEditor, type Editor } from "./editor.ts";
+import { md } from "./md.ts";
+import { runExercise } from "./runner.ts";
+import { drafts, reportSyncFailure, type ProgressStore } from "./store.ts";
+
+export type StageActions = {
+  complete(): void;
+  skipKnown(): void;
+  skip(): void;
+  goto(order: number): void;
+  explain(selection: TutorSelection): void;
+};
+
+export type StageViewDeps = {
+  journey: JourneyOutline;
+  stage: StageDetail;
+  previous: StageDetail | undefined;
+  store: ProgressStore;
+  actions: StageActions;
+};
+
+type Depth = "quick" | "normal" | "deep";
+
+export type MountedStage = { element: HTMLElement; run(): void; editorSelection(): TutorSelection | undefined };
+
+export function renderStage(deps: StageViewDeps): MountedStage {
+  const { journey, stage, store, actions } = deps;
+  const concepts = new Map(journey.concepts.map((c) => [c.id, c]));
+  const exercise = buildExercise(deps);
+
+  const element = h(
+    "article",
+    { class: "stage", "aria-labelledby": "stage-title" },
+    header(deps),
+    justCompletedCard(deps),
+    fastPath(deps, concepts),
+    prerequisiteNotice(deps, concepts),
+    section("contexto", "Contexto",
+      h("p", { class: "problem" }, stage.problem),
+      h("p", { class: "goal" }, h("strong", {}, "Objetivo: "), stage.goal),
+    ),
+    section("codigo", "Código pronto", fileTabs(stage.referenceCode.map((f) => ({ label: f.path, render: () => codeView(f.path, f.content) })))),
+    section("arquitetura", "Arquitetura", architectureView(stage.architecture, deps.previous?.architecture)),
+    section("conceitos", "Conceitos", ...stage.explanation.map((block) => explanationBlock(block, block.conceptId ? concepts.get(block.conceptId) : undefined, deps))),
+    stage.originalCodeRefs.length ? section("projeto-real", "No projeto real", originalRefs(stage)) : null,
+    exercise ? section("reconstrua", "Reconstrua", exercise.element) : null,
+    stage.checkpoint ? section("checagem", "Checar entendimento", checkpoint(stage)) : null,
+    actionBar(deps),
+  );
+
+  trackAnchors(element, stage.id, store);
+  attachExplainButton(element, actions, () => exercise?.selection());
+
+  return {
+    element,
+    run: () => exercise?.run(),
+    editorSelection: () => exercise?.selection(),
+  };
+}
+
+function header({ journey, stage, store }: StageViewDeps): HTMLElement {
+  const status = store.status(stage.id);
+  return h(
+    "header",
+    { class: "stage-head" },
+    h("p", { class: "eyebrow" }, `Stage ${pad(stage.order)} de ${pad(journey.stages.length)} · ~${stage.estimatedMinutes} min`, statusPill(status)),
+    h("h1", { id: "stage-title" }, stage.title),
+    stage.subtitle ? h("p", { class: "subtitle" }, stage.subtitle) : null,
+  );
+}
+
+function statusPill(status: string): HTMLElement | null {
+  const label: Record<string, string> = { completed: "concluída", skipped_known: "já dominada", skipped: "pulada" };
+  const text = label[status];
+  return text ? h("span", { class: `pill ${status}` }, text) : null;
+}
+
+function justCompletedCard({ journey, stage, store }: StageViewDeps): HTMLElement | null {
+  const id = store.consumeJustCompleted();
+  const done = journey.stages.find((s) => s.id === id);
+  if (!done || done.order !== stage.order - 1) return null;
+  const card = h(
+    "aside",
+    { class: "summary-card", "aria-label": "Resumo da etapa anterior" },
+    h("p", { class: "eyebrow" }, `Stage ${pad(done.order)} consolidada`),
+    h("p", {}, h("strong", {}, "Você adicionou: "), done.summary.added.join(", ")),
+    h("p", {}, h("strong", {}, "Por quê: "), done.summary.why),
+    h("p", { class: "flow" }, done.summary.flow.join("  →  ")),
+    h("button", { type: "button", class: "link", onclick: () => card.remove() }, "Ok"),
+  );
+  return card;
+}
+
+/** Offer to skip a stage whose concepts the learner may already own. */
+function fastPath({ stage, store, actions }: StageViewDeps, concepts: Map<string, Concept>): HTMLElement | null {
+  const status = store.status(stage.id);
+  if (status === "completed" || status === "skipped_known" || stage.introduces.length === 0) return null;
+  const pending = stage.introduces.filter((id) => !store.isKnown(id)).map((id) => concepts.get(id)?.name ?? id);
+  if (pending.length === 0) {
+    return h("aside", { class: "fastpath known" },
+      h("p", {}, "Você já marcou todos os conceitos desta etapa como conhecidos."),
+      h("div", { class: "row" },
+        h("button", { type: "button", class: "btn", onclick: actions.skipKnown }, "Pular etapa"),
+        h("button", { type: "button", class: "link", onclick: (e) => (e.currentTarget as HTMLElement).closest("aside")?.remove() }, "Revisar mesmo assim"),
+      ),
+    );
+  }
+  const box = h(
+    "aside",
+    { class: "fastpath", "aria-label": "Fast Path" },
+    h("p", {}, "Você já domina ", h("strong", {}, list(pending)), "?"),
+    h("div", { class: "row" },
+      h("button", { type: "button", class: "btn", onclick: actions.skipKnown }, "Sim, pular etapa"),
+      h("button", { type: "button", class: "btn ghost", onclick: () => box.remove() }, "Revisar rápido"),
+      h("button", {
+        type: "button",
+        class: "btn ghost",
+        onclick: () => {
+          box.closest(".stage")?.querySelectorAll<HTMLButtonElement>("[data-depth='deep']").forEach((b) => b.click());
+          box.remove();
+        },
+      }, "Entender a fundo"),
+    ),
+  );
+  return box;
+}
+
+function prerequisiteNotice({ journey, stage, store, actions }: StageViewDeps, concepts: Map<string, Concept>): HTMLElement | null {
+  const skipped = stage.prerequisites
+    .map((conceptId) => ({ conceptId, at: journey.stages.find((s) => s.introduces.includes(conceptId)) }))
+    .filter(({ conceptId, at }) => at && store.status(at.id) === "skipped" && !store.isKnown(conceptId));
+  const first = skipped[0];
+  if (!first?.at) return null;
+  const at = first.at;
+  const box = h(
+    "aside",
+    { class: "notice" },
+    h("p", {}, `Esta etapa usa ${concepts.get(first.conceptId)?.name ?? first.conceptId}, introduzido na Stage ${pad(at.order)}.`),
+    h("div", { class: "row" },
+      h("button", { type: "button", class: "btn ghost", onclick: () => actions.goto(at.order) }, "Revisar rapidamente"),
+      h("button", { type: "button", class: "link", onclick: () => box.remove() }, "Continuar"),
+    ),
+  );
+  return box;
+}
+
+function section(anchor: string, title: string, ...children: (Node | null)[]): HTMLElement {
+  return h("section", { class: "block", id: anchor, "data-anchor": title }, h("h2", {}, title), ...children);
+}
+
+type Tab = { label: string; render: () => HTMLElement; extraClass?: string };
+
+function fileTabs(tabs: Tab[]): HTMLElement {
+  const body = h("div", { class: "tab-body" });
+  const bar = h("div", { class: "tabs", role: "tablist" });
+  const select = (index: number): void => {
+    const tab = tabs[index];
+    if (!tab) return;
+    bar.querySelectorAll("button").forEach((b, i) => b.setAttribute("aria-selected", String(i === index)));
+    body.replaceChildren(tab.render());
+  };
+  tabs.forEach((tab, index) => bar.append(h("button", { type: "button", role: "tab", class: tab.extraClass ?? "", onclick: () => select(index) }, tab.label)));
+  select(0);
+  return h("div", { class: "files" }, tabs.length > 1 ? bar : h("div", { class: "tabs single" }, h("span", {}, tabs[0]?.label ?? "")), body);
+}
+
+function explanationBlock(block: ExplanationBlock, concept: Concept | undefined, { stage, store }: StageViewDeps): HTMLElement {
+  const known = concept ? store.isKnown(concept.id) : false;
+  const body = h("div", { class: "explain-body" });
+  const controls = h("div", { class: "depth" });
+  const box = h("div", { class: "explain" + (known ? " known" : "") }, h("h3", {}, block.title, known ? h("span", { class: "pill skipped_known" }, "você já domina") : null), body, controls);
+
+  const show = (depth: Depth): void => {
+    const parts = depth === "quick" ? [block.quick] : depth === "normal" ? [block.quick, block.normal] : [block.quick, block.normal, block.deep];
+    body.innerHTML = parts.map(md).join("");
+    const options: [Depth, string][] =
+      depth === "quick" ? [["normal", "Explique melhor"], ["deep", "Aprofundar"]] : depth === "normal" ? [["deep", "Aprofundar"], ["quick", "Resumir"]] : [["quick", "Resumir"]];
+    controls.replaceChildren(...options.map(([next, label]) => depthButton(next, label, show)));
+    if (depth !== "quick") api.event(stage.id, "explanation_depth", { block: block.id, depth }).catch(reportSyncFailure);
+  };
+  // Known concepts start collapsed to the one-liner; nothing ever starts at Deep.
+  show("quick");
+  return box;
+}
+
+function depthButton(depth: Depth, label: string, show: (d: Depth) => void): HTMLButtonElement {
+  return h("button", { type: "button", class: "link", "data-depth": depth, onclick: () => show(depth) }, label);
+}
+
+function originalRefs(stage: StageDetail): HTMLElement {
+  const replayFiles = new Map(stage.referenceCode.map((f) => [f.path, f.content]));
+  return h(
+    "div",
+    { class: "refs" },
+    h("p", { class: "muted" }, "Mesma ideia, versão de produção. Abra para comparar lado a lado."),
+    ...stage.originalCodeRefs.map((ref) => originalRef(ref, replayFiles.get(ref.replayFile) ?? "")),
+  );
+}
+
+function originalRef(ref: OriginalCodeReference, replaySource: string): HTMLElement {
+  const replay = replayExcerpt(replaySource, ref.symbol);
+  const details = h(
+    "details",
+    { class: "ref" },
+    h("summary", {}, h("code", {}, ref.symbol), h("span", { class: "muted path" }, `${ref.path}:${ref.startLine}-${ref.endLine}`)),
+  );
+  details.addEventListener("toggle", () => {
+    if (!details.open || details.querySelector(".compare")) return;
+    details.append(
+      h("p", { class: "note" }, ref.note),
+      h(
+        "div",
+        { class: "compare" },
+        h("div", {}, h("p", { class: "eyebrow" }, `Replay · ${ref.replayFile}`), replay ? codeView(ref.replayFile, replay.text, replay.firstLine) : h("p", { class: "muted" }, "—")),
+        h("div", {}, h("p", { class: "eyebrow" }, "Produção ", h("a", { href: ref.url, target: "_blank", rel: "noopener noreferrer" }, "GitHub ↗")), codeView(ref.path, ref.snippet, ref.startLine)),
+      ),
+    );
+  }, { once: false });
+  return details;
+}
+
+/** The replay declaration matching a production symbol (names may differ by prefix, e.g. CATEGORY_SIGNALS ↔ SIGNALS). */
+function replayExcerpt(source: string, symbol: string): { text: string; firstLine: number } | undefined {
+  const lines = source.split("\n");
+  const candidates = [symbol, symbol.replace(/^[A-Z]+_/, "")];
+  const start = lines.findIndex((line) => candidates.some((name) => new RegExp(`\\b(function|const|class|interface|enum|type)\\s+${name}\\b`).test(line)));
+  if (start < 0) return undefined;
+  const end = lines.findIndex((line, i) => i > start && /^(\}|\];|\};)/.test(line));
+  const stop = end < 0 ? Math.min(lines.length, start + 30) : end + 1;
+  return { text: lines.slice(start, stop).join("\n"), firstLine: start + 1 };
+}
+
+type ExerciseView = { element: HTMLElement; run(): void; selection(): TutorSelection | undefined };
+
+function buildExercise({ stage, store }: StageViewDeps): ExerciseView | undefined {
+  const exercise = stage.exercise;
+  if (!exercise) return undefined;
+  const saved = drafts(stage.id);
+  const editors = new Map<string, Editor>();
+  for (const file of exercise.starterFiles) {
+    editors.set(file.path, createEditor(file.path, saved.load(file.path) ?? file.content, { onChange: (src) => saved.save(file.path, src) }));
+  }
+  let active = exercise.starterFiles[0]?.path ?? "";
+  let running = false;
+
+  const results = h("div", { class: "results", "aria-live": "polite" });
+  const runButton = h("button", { type: "button", class: "btn primary", onclick: () => run() }, "▶ Rodar testes", h("kbd", {}, "Ctrl/⌘ ↵"));
+  const tabs: Tab[] = [
+    ...exercise.starterFiles.map((file) => ({
+      label: file.path,
+      render: () => {
+        active = file.path;
+        return editors.get(file.path)?.element ?? h("div");
+      },
+    })),
+    { label: `${exercise.testFile.path} (testes)`, extraClass: "secondary", render: () => codeView(exercise.testFile.path, exercise.testFile.content) },
+  ];
+
+  const solution = h("div", { class: "solution", hidden: true },
+    h("p", { class: "eyebrow" }, "Solução de referência"),
+    ...exercise.solutionFiles.map((f) => codeView(f.path, f.content)),
+  );
+
+  const element = h(
+    "div",
+    { class: "exercise" },
+    h("div", { class: "instructions", html: md(exercise.instructions) }),
+    fileTabs(tabs),
+    h("div", { class: "row run-row" },
+      runButton,
+      h("button", {
+        type: "button",
+        class: "link",
+        onclick: () => {
+          for (const file of exercise.starterFiles) {
+            editors.get(file.path)?.setValue(file.content);
+            saved.clear(file.path);
+          }
+          results.replaceChildren();
+        },
+      }, "Restaurar"),
+      h("button", {
+        type: "button",
+        class: "link",
+        onclick: () => {
+          solution.hidden = !solution.hidden;
+          if (!solution.hidden) api.event(stage.id, "solution_revealed").catch(reportSyncFailure);
+        },
+      }, "Ver solução"),
+    ),
+    results,
+    solution,
+  );
+
+  async function run(): Promise<void> {
+    if (running) return;
+    running = true;
+    runButton.disabled = true;
+    results.replaceChildren(h("p", { class: "muted" }, "Rodando…"));
+    const files = exercise?.starterFiles.map((f) => ({ path: f.path, content: editors.get(f.path)?.value() ?? f.content })) ?? [];
+    try {
+      const outcome = await runExercise(stage.id, files);
+      results.replaceChildren(renderResult(outcome.result, outcome.firstPass));
+      if (store.status(stage.id) === "not_started") store.setStatus(stage.id, "in_progress");
+    } catch (error) {
+      results.replaceChildren(h("p", { class: "fail" }, error instanceof Error ? error.message : "Falha ao rodar os testes."));
+    } finally {
+      running = false;
+      runButton.disabled = false;
+    }
+  }
+
+  return { element, run: () => void run(), selection: () => editors.get(active)?.selection() };
+}
+
+function renderResult(result: RunResult, firstPass: boolean): HTMLElement {
+  const passed = result.tests.filter((t) => t.passed).length;
+  const all = passed === result.tests.length && result.tests.length > 0;
+  return h(
+    "div",
+    { class: "result" + (all ? " pass" : " fail") },
+    h("p", { class: "result-head" },
+      all ? `✓ ${passed}/${result.tests.length} testes passaram` : `${passed}/${result.tests.length} testes passaram`,
+      h("span", { class: "muted" }, ` · ${result.latencyMs} ms`),
+      all && firstPass ? h("span", { class: "pill completed" }, "de primeira") : null,
+    ),
+    h("ul", { class: "tests" }, ...result.tests.map((t) => h("li", { class: t.passed ? "ok" : "ko" }, h("span", { class: "mark", "aria-hidden": "true" }, t.passed ? "✓" : "✗"), h("span", {}, t.name, t.error ? h("code", { class: "err" }, t.error) : null)))),
+    result.stdout ? h("pre", { class: "stdout" }, result.stdout) : null,
+    all ? h("p", { class: "muted" }, "Tudo verde. Se entendeu, siga para a próxima evolução.") : null,
+  );
+}
+
+function checkpoint(stage: StageDetail): HTMLElement {
+  const check = stage.checkpoint;
+  if (!check) return h("div");
+  const answer = h("div", { class: "answer", hidden: true }, h("p", {}, check.answer));
+  return h(
+    "div",
+    { class: "checkpoint" },
+    h("p", {}, check.question),
+    h("button", {
+      type: "button",
+      class: "link",
+      onclick: (event) => {
+        answer.hidden = false;
+        (event.currentTarget as HTMLElement).remove();
+        api.event(stage.id, "checkpoint_revealed").catch(reportSyncFailure);
+      },
+    }, "Revelar resposta"),
+    answer,
+  );
+}
+
+function actionBar({ journey, stage, actions }: StageViewDeps): HTMLElement {
+  const isLast = stage.order === journey.stages.length;
+  return h(
+    "footer",
+    { class: "actions" },
+    h("button", { type: "button", class: "btn primary", onclick: actions.complete }, isLast ? "✓ Entendi — concluir jornada" : "✓ Entendi — próxima"),
+    h("button", { type: "button", class: "btn", onclick: actions.skipKnown }, "→ Já domino — pular"),
+    h("button", { type: "button", class: "link", onclick: actions.skip, title: "Avançar sem marcar como dominada" }, "pular por agora"),
+    h("span", { class: "spacer" }),
+    h("span", { class: "muted keys" }, h("kbd", {}, "Alt ←"), " ", h("kbd", {}, "Alt →")),
+  );
+}
+
+/** Remembers the last section in view, for instant resume. */
+function trackAnchors(root: HTMLElement, stageId: string, store: ProgressStore): void {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const visible = entries.find((e) => e.isIntersecting);
+      const anchor = visible?.target.getAttribute("data-anchor");
+      if (anchor) store.setAnchor(stageId, anchor);
+    },
+    { rootMargin: "-20% 0px -60% 0px" },
+  );
+  queueMicrotask(() => root.querySelectorAll("[data-anchor]").forEach((el) => observer.observe(el)));
+}
+
+const SELECTION_SETTLE_MS = 150;
+
+/** Select code anywhere in the stage → a floating "Explain" sends it to the tutor. */
+function attachExplainButton(root: HTMLElement, actions: StageActions, editorSelection: () => TutorSelection | undefined): void {
+  const button = h("button", { type: "button", class: "explain-btn", hidden: true }, "Explain");
+  let pending: TutorSelection | undefined;
+  button.addEventListener("mousedown", (event) => event.preventDefault());
+  button.addEventListener("click", () => {
+    if (pending) actions.explain(pending);
+    button.hidden = true;
+  });
+  root.append(button);
+
+  const update = (): void => {
+    const active = document.activeElement;
+    const fromEditor = active instanceof HTMLTextAreaElement && root.contains(active) ? editorSelection() : undefined;
+    pending = fromEditor ?? selectionFromCodeView();
+    if (!pending) {
+      button.hidden = true;
+      return;
+    }
+    const rect = fromEditor ? active?.getBoundingClientRect() : window.getSelection()?.getRangeAt(0).getBoundingClientRect();
+    if (!rect) return;
+    const host = root.getBoundingClientRect();
+    button.style.top = `${rect.top - host.top - 34}px`;
+    button.style.left = `${Math.max(0, (fromEditor ? rect.right - 90 : rect.left) - host.left)}px`;
+    button.hidden = false;
+  };
+  // selectionchange covers mouse, keyboard and touch selections alike.
+  let scheduled: ReturnType<typeof setTimeout> | undefined;
+  const onSelectionChange = (): void => {
+    if (!root.isConnected) {
+      document.removeEventListener("selectionchange", onSelectionChange);
+      return;
+    }
+    clearTimeout(scheduled);
+    scheduled = setTimeout(update, SELECTION_SETTLE_MS);
+  };
+  document.addEventListener("selectionchange", onSelectionChange);
+}
+
+const pad = (n: number): string => String(n).padStart(2, "0");
+const list = (items: string[]): string =>
+  items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} e ${items.at(-1) ?? ""}`;
