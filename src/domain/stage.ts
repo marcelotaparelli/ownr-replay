@@ -77,6 +77,11 @@ export const Exercise = z.strictObject({
   expose: z.array(Identifier),
   /** Owned by the server; the client never supplies tests. */
   testFile: CodeFile,
+  /**
+   * Present when types are what the stage teaches: learner + support files must pass the real
+   * TypeScript checker, together with these type-level checks (never executed).
+   */
+  typecheck: z.strictObject({ files: z.array(CodeFile) }).optional(),
 });
 export type Exercise = z.infer<typeof Exercise>;
 

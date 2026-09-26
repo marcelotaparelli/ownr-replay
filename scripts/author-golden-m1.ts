@@ -28,6 +28,8 @@ type Micro = {
   exercise: { instructions: string; files: string[]; expose: string[]; support?: string[]; solution?: Record<string, string> };
   /** Valid modules the exercise builds on (with import/export), keyed by file name. */
   given?: Record<string, string>;
+  /** Type-level checks (tsc only, never executed), written to given/. Enables real typechecking. */
+  typecheck?: Record<string, string>;
   tests: string;
   toolbox: Tool[];
   limitation?: string;
@@ -154,6 +156,14 @@ const CATEGORY_ENUM = `enum Category {
   ACCESS = "ACCESS",
   OTHER = "OTHER",
 }`;
+const CHECK_CATEGORY = `import { Category } from "./category.ts";
+
+// Os quatro membros existem e têm o tipo Category.
+export const all: Category[] = [Category.INCIDENT, Category.BUG, Category.ACCESS, Category.OTHER];
+
+// Uma string solta, ainda mais com erro de digitação, NÃO pode ser uma Category.
+// @ts-expect-error
+export const typo: Category = "INCIDNET";`;
 const CLASSIFY_ENUM = `const TIE_BREAK = [Category.INCIDENT, Category.ACCESS, Category.BUG];
 
 function classify(${TICKET}): Category {
@@ -707,29 +717,31 @@ test("outage (4) e error (1) continuam valendo", () => {
     title: "Categorias com nome",
     subtitle: "Um conjunto fechado",
     goal: "Tornar as categorias possíveis um conjunto fechado e nomeado.",
-    problem: 'Qualquer string passa por categoria: "INCIDNET", "incident", "Incident". Queremos que só existam INCIDENT, BUG, ACCESS e OTHER — e que um erro de digitação seja apontado.',
-    example: "Category.INCIDENT → \"INCIDENT\"\nclassify(...) devolve Category.ACCESS, não uma string solta",
+    problem: 'Hoje qualquer string passa por categoria. Um `"INCIDNET"` digitado errado na tabela seria aceito em silêncio — e aquele sinal nunca mais casaria com nada.\n\nQueremos um conjunto **fechado** (INCIDENT, BUG, ACCESS, OTHER) em que um erro de digitação seja **recusado antes de o código rodar**.',
+    example: 'const ok: Category = Category.INCIDENT;   ✓\nconst typo: Category = "INCIDNET";      ✗ erro do TypeScript, antes de rodar',
     minutes: 1,
     introduces: ["string-enum"],
     prerequisites: ["tie-break"],
     arch: ARCH_ENUM,
-    reference: { "category.ts": CATEGORY_ENUM, "rules.ts": RULES_ENUM, "classify.ts": CLASSIFY_ENUM },
+    reference: { "category.ts": CATEGORY_ENUM, "check.ts": CHECK_CATEGORY, "rules.ts": RULES_ENUM, "classify.ts": CLASSIFY_ENUM },
     lineNotes: [
       { match: "enum Category", note: "Declara o conjunto fechado de categorias." },
       { match: 'INCIDENT = "INCIDENT"', note: 'Cada membro tem um nome e um valor. Em runtime, Category.INCIDENT é a própria string "INCIDENT".' },
       { match: "Category.INCIDENT, weight: 5", note: "A tabela passa a usar os nomes. Category.INCIDNET não existe: o TypeScript aponta o erro antes de rodar." },
+      { match: "@ts-expect-error", note: "Diz ao TypeScript: a linha seguinte **tem** que dar erro. Se `Category` aceitasse qualquer string, não haveria erro — e a verificação reprovaria." },
+      { match: 'const typo: Category = "INCIDNET"', note: "Um texto solto não é um membro do enum. É exatamente o erro de digitação que queremos barrar." },
     ],
     explanation: [
       {
         id: "enum",
         conceptId: "string-enum",
         title: "Nomes em vez de strings soltas",
-        quick: "`enum Category` lista as quatro categorias. Tabela e `classify` passam a usar `Category.X`.",
-        normal: 'Em runtime nada muda — `Category.BUG === "BUG"`. O ganho é no editor: digitar `Category.BUGG` é erro de compilação, e o autocompletar mostra as opções.',
+        quick: "`enum Category` lista as quatro categorias. Algo do tipo `Category` só aceita esses membros: `\"INCIDNET\"` vira erro de compilação.",
+        normal: 'Em runtime nada muda — `Category.BUG === "BUG"`. A diferença acontece **antes** de rodar: nesta etapa o seu código passa pelo verificador do TypeScript, e um tipo errado reprova sem executar nenhum teste.',
       },
     ],
     exercise: {
-      instructions: "Crie o `enum Category` com INCIDENT, BUG, ACCESS e OTHER, cada um valendo o próprio nome como texto. A tabela e `classify` (já prontas) usam `Category`.",
+      instructions: 'Crie o `enum Category` com INCIDENT, BUG, ACCESS e OTHER, cada um valendo o próprio nome como texto. A tabela e `classify` (já prontas) usam `Category`.\n\nNesta etapa o código passa pelo **verificador do TypeScript** antes de rodar — a aba "verificação de tipos" mostra o que ele exige. Depois de passar, experimente acrescentar `const c: Category = "BILLIGN";` e rodar de novo.',
       files: ["category.ts"],
       expose: ["Category"],
       support: ["rules.ts", "score.ts", "classify.ts"],
@@ -739,6 +751,7 @@ test("outage (4) e error (1) continuam valendo", () => {
       "score.ts": imp("RULES", "rules.ts") + exp(SCORE_REGEX),
       "classify.ts": imp("Category", "category.ts") + imp("scoreCategory", "score.ts") + exp(CLASSIFY_ENUM),
     },
+    typecheck: { "check.ts": CHECK_CATEGORY },
     tests: `import { test, expect } from "replay:test";
 import { Category } from "./category.ts";
 import { classify } from "./classify.ts";
@@ -832,9 +845,20 @@ const checkpoint: Micro = {
     },
   ],
   exercise: {
-    instructions: "Reconstrua em `classifier.ts`, do zero: `Category`, as regras, `scoreCategory(category, title, description)` e `classify(ticket)`. Os requisitos estão acima; o resto é com você.",
+    instructions: "Reconstrua em `classifier.ts`, do zero: `Category`, as regras, `scoreCategory(category, title, description)` e `classify(ticket)`. Os requisitos estão acima; o resto é com você. O TypeScript verifica os tipos antes dos testes.",
     files: ["classifier.ts"],
     expose: ["Category", "scoreCategory", "classify"],
+  },
+  typecheck: {
+    "check.ts": `import { Category, classify, scoreCategory } from "./classifier.ts";
+
+// classify devolve uma Category; scoreCategory, um número.
+export const decided: Category = classify({ title: "Server down", description: "" });
+export const points: number = scoreCategory(Category.BUG, "bug", "");
+
+// Uma string solta não é uma Category.
+// @ts-expect-error
+export const typo: Category = "INCIDNET";`,
   },
   tests: `import { test, expect } from "replay:test";
 import { Category, classify, scoreCategory } from "./classifier.ts";
@@ -881,9 +905,10 @@ function write(stage: Micro): void {
   const dir = join(ROOT, stage.slug);
   mkdirSync(join(dir, "reference"), { recursive: true });
   for (const [file, content] of Object.entries(stage.reference)) writeFileSync(join(dir, "reference", file), content + "\n");
-  if (stage.given) {
+  const givenFiles = { ...stage.given, ...stage.typecheck };
+  if (Object.keys(givenFiles).length) {
     mkdirSync(join(dir, "given"), { recursive: true });
-    for (const [file, content] of Object.entries(stage.given)) writeFileSync(join(dir, "given", file), content + "\n");
+    for (const [file, content] of Object.entries(givenFiles)) writeFileSync(join(dir, "given", file), content + "\n");
   }
   writeFileSync(join(dir, "tests.ts"), stage.tests);
   const json = {
@@ -906,6 +931,7 @@ function write(stage: Micro): void {
       files: stage.exercise.files,
       ...(stage.exercise.support ? { supportFiles: stage.exercise.support } : {}),
       expose: stage.exercise.expose,
+      ...(stage.typecheck ? { typecheck: { files: Object.keys(stage.typecheck) } } : {}),
     },
     toolbox: stage.toolbox,
     ...(stage.checkpoint ? { checkpoint: stage.checkpoint } : {}),

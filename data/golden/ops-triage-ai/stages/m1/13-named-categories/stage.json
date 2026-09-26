@@ -3,8 +3,8 @@
   "title": "Categorias com nome",
   "subtitle": "Um conjunto fechado",
   "goal": "Tornar as categorias possíveis um conjunto fechado e nomeado.",
-  "problem": "Qualquer string passa por categoria: \"INCIDNET\", \"incident\", \"Incident\". Queremos que só existam INCIDENT, BUG, ACCESS e OTHER — e que um erro de digitação seja apontado.",
-  "example": "Category.INCIDENT → \"INCIDENT\"\nclassify(...) devolve Category.ACCESS, não uma string solta",
+  "problem": "Hoje qualquer string passa por categoria. Um `\"INCIDNET\"` digitado errado na tabela seria aceito em silêncio — e aquele sinal nunca mais casaria com nada.\n\nQueremos um conjunto **fechado** (INCIDENT, BUG, ACCESS, OTHER) em que um erro de digitação seja **recusado antes de o código rodar**.",
+  "example": "const ok: Category = Category.INCIDENT;   ✓\nconst typo: Category = \"INCIDNET\";      ✗ erro do TypeScript, antes de rodar",
   "estimatedMinutes": 1,
   "introduces": [
     "string-enum"
@@ -87,6 +87,7 @@
   },
   "referenceCode": [
     "category.ts",
+    "check.ts",
     "rules.ts",
     "classify.ts"
   ],
@@ -102,6 +103,14 @@
     {
       "match": "Category.INCIDENT, weight: 5",
       "note": "A tabela passa a usar os nomes. Category.INCIDNET não existe: o TypeScript aponta o erro antes de rodar."
+    },
+    {
+      "match": "@ts-expect-error",
+      "note": "Diz ao TypeScript: a linha seguinte **tem** que dar erro. Se `Category` aceitasse qualquer string, não haveria erro — e a verificação reprovaria."
+    },
+    {
+      "match": "const typo: Category = \"INCIDNET\"",
+      "note": "Um texto solto não é um membro do enum. É exatamente o erro de digitação que queremos barrar."
     }
   ],
   "explanation": [
@@ -109,12 +118,12 @@
       "id": "enum",
       "conceptId": "string-enum",
       "title": "Nomes em vez de strings soltas",
-      "quick": "`enum Category` lista as quatro categorias. Tabela e `classify` passam a usar `Category.X`.",
-      "normal": "Em runtime nada muda — `Category.BUG === \"BUG\"`. O ganho é no editor: digitar `Category.BUGG` é erro de compilação, e o autocompletar mostra as opções."
+      "quick": "`enum Category` lista as quatro categorias. Algo do tipo `Category` só aceita esses membros: `\"INCIDNET\"` vira erro de compilação.",
+      "normal": "Em runtime nada muda — `Category.BUG === \"BUG\"`. A diferença acontece **antes** de rodar: nesta etapa o seu código passa pelo verificador do TypeScript, e um tipo errado reprova sem executar nenhum teste."
     }
   ],
   "exercise": {
-    "instructions": "Crie o `enum Category` com INCIDENT, BUG, ACCESS e OTHER, cada um valendo o próprio nome como texto. A tabela e `classify` (já prontas) usam `Category`.",
+    "instructions": "Crie o `enum Category` com INCIDENT, BUG, ACCESS e OTHER, cada um valendo o próprio nome como texto. A tabela e `classify` (já prontas) usam `Category`.\n\nNesta etapa o código passa pelo **verificador do TypeScript** antes de rodar — a aba \"verificação de tipos\" mostra o que ele exige. Depois de passar, experimente acrescentar `const c: Category = \"BILLIGN\";` e rodar de novo.",
     "files": [
       "category.ts"
     ],
@@ -125,7 +134,12 @@
     ],
     "expose": [
       "Category"
-    ]
+    ],
+    "typecheck": {
+      "files": [
+        "check.ts"
+      ]
+    }
   },
   "toolbox": [
     {

@@ -7,6 +7,7 @@ import { silentLogger } from "../src/obs/logger.ts";
 import { Metrics } from "../src/obs/metrics.ts";
 import { loadAllJourneys } from "../src/services/curriculum.ts";
 import { TutorService, type TutorModel } from "../src/services/tutor.ts";
+import type { TypeChecker } from "../src/sandbox/typecheck.ts";
 
 export const goldenJourneys = (): Journey[] => loadAllJourneys(join(import.meta.dir, "../data/golden"));
 
@@ -16,11 +17,11 @@ export function golden(): Journey {
   return journey;
 }
 
-export function testApp(options: { model?: TutorModel } = {}) {
+export function testApp(options: { model?: TutorModel; typeChecker?: TypeChecker | null } = {}) {
   const repository = new Repository(":memory:");
   const metrics = new Metrics();
   const tutor = new TutorService(repository, options.model ?? null, silentLogger, metrics);
-  const api = createApi({ journeys: goldenJourneys(), repository, tutor, sandbox: null, logger: silentLogger, metrics });
+  const api = createApi({ journeys: goldenJourneys(), repository, tutor, sandbox: null, typeChecker: options.typeChecker ?? null, logger: silentLogger, metrics });
   const fetch = createApp(api, new Map(), silentLogger, metrics);
   const call = (method: string, path: string, body?: unknown, headers: Record<string, string> = { "x-learner-id": "learner-test-0001" }) =>
     fetch(

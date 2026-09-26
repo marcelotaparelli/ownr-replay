@@ -58,9 +58,14 @@ type ExerciseParts = { starterFiles: CodeFile[]; supportFiles: CodeFile[]; expos
  *   without declaring them (only the new idea has to be rewritten).
  */
 export function prepareExercise(exercise: ExerciseParts, learnerFiles: CodeFile[]): ModuleSet {
+  return prepareModules(completeExercise(exercise, learnerFiles), exercise.testFile);
+}
+
+/** Learner files with the module plumbing added, followed by the read-only support files. */
+export function completeExercise(exercise: ExerciseParts, learnerFiles: CodeFile[]): CodeFile[] {
   const written = exercise.starterFiles.map((starter) => learnerFiles.find((file) => file.path === starter.path) ?? starter);
   const completed = written.map((file, index) => completeLearnerFile(file, exercise.supportFiles, index === 0 ? exercise.expose : []));
-  return prepareModules([...completed, ...exercise.supportFiles], exercise.testFile);
+  return [...completed, ...exercise.supportFiles];
 }
 
 function completeLearnerFile(file: CodeFile, supportFiles: CodeFile[], expose: string[]): CodeFile {
@@ -84,8 +89,9 @@ function completeLearnerFile(file: CodeFile, supportFiles: CodeFile[], expose: s
     throw new ModuleError(`Não encontrei ${undeclared.map((n) => `\`${n}\``).join(", ")} em ${file.path}. Crie com exatamente esse nome.`);
   }
   const exports = missing.length ? [`export { ${missing.join(", ")} };`] : [];
-  // Imports go on the first line so learner-visible line numbers shift by at most one.
-  return { path: file.path, content: [imports.join(" "), source, ...exports].filter(Boolean).join("\n") };
+  // Imports share the first line, so reported line numbers match what the learner sees.
+  const head = imports.length ? imports.join(" ") + " " : "";
+  return { path: file.path, content: [head + source, ...exports].join("\n") };
 }
 
 const escapeName = (name: string): string => name.replace(/\$/g, "\\$");

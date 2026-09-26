@@ -140,7 +140,7 @@ p { margin: 0.4em 0; }
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); background: var(--sunken); padding: 0 6px; font-family: var(--mono); font-size: 12.5px; }
 .tabs button, .tabs.single span { font: inherit; background: none; border: 0; padding: 7px 10px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
 .tabs button[aria-selected="true"], .tabs.single span { color: var(--text); border-bottom-color: var(--accent); }
-.tabs button.secondary { margin-left: auto; }
+.tabs button:not(.secondary) + button.secondary { margin-left: auto; }
 .code { font: var(--code-size) / var(--code-lh) var(--mono); overflow-x: auto; padding: 10px 0; background: var(--code-bg); tab-size: 2; }
 .code .ln { display: flex; white-space: pre; min-width: max-content; }
 .code .no { width: 44px; flex: none; text-align: right; padding-right: 14px; color: var(--muted); opacity: 0.6; user-select: none; -webkit-user-select: none; }

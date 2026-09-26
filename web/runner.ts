@@ -21,9 +21,21 @@ export async function runExercise(stageId: string, files: CodeFile[]): Promise<R
     }
     throw error;
   }
-  if (response.mode === "server") return { result: response.result, firstPass: false };
+  if (response.mode === "typecheck") {
+    // Nothing ran: the types the stage teaches are wrong. Recorded as a failed attempt.
+    const result: RunResult = {
+      stdout: "",
+      latencyMs: 0,
+      tests: response.diagnostics.map((d) => ({ name: `TypeScript · ${d.file}, linha ${d.line}`, passed: false, error: `${d.code}: ${d.message}` })),
+    };
+    await api.attempt(stageId, result).catch(reportSyncFailure);
+    return { result, firstPass: false };
+  }
+  const typeRow = response.typecheck === "passed" ? [{ name: "TypeScript: sem erros de tipo", passed: true }] : [];
+  if (response.mode === "server") return { result: { ...response.result, tests: [...typeRow, ...response.result.tests] }, firstPass: false };
 
-  const result = await runInWorker(response);
+  const executed = await runInWorker(response);
+  const result: RunResult = { ...executed, tests: [...typeRow, ...executed.tests] };
   const recorded = await api.attempt(stageId, result).catch((error: unknown) => {
     reportSyncFailure(error);
     return { firstPass: false };

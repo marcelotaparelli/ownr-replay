@@ -152,7 +152,7 @@
     }
   ],
   "exercise": {
-    "instructions": "Reconstrua em `classifier.ts`, do zero: `Category`, as regras, `scoreCategory(category, title, description)` e `classify(ticket)`. Os requisitos estão acima; o resto é com você.",
+    "instructions": "Reconstrua em `classifier.ts`, do zero: `Category`, as regras, `scoreCategory(category, title, description)` e `classify(ticket)`. Os requisitos estão acima; o resto é com você. O TypeScript verifica os tipos antes dos testes.",
     "files": [
       "classifier.ts"
     ],
@@ -160,7 +160,12 @@
       "Category",
       "scoreCategory",
       "classify"
-    ]
+    ],
+    "typecheck": {
+      "files": [
+        "check.ts"
+      ]
+    }
   },
   "toolbox": [
     {

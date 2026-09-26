@@ -6,6 +6,7 @@ import { createApp } from "./http/app.ts";
 import { logger } from "./obs/logger.ts";
 import { Metrics } from "./obs/metrics.ts";
 import { DockerSandboxRunner } from "./sandbox/docker-runner.ts";
+import { TypeChecker, locateTsc } from "./sandbox/typecheck.ts";
 import { loadAllJourneys } from "./services/curriculum.ts";
 import { AnthropicTutorModel } from "./services/tutor-anthropic.ts";
 import { TutorService } from "./services/tutor.ts";
@@ -19,7 +20,10 @@ const journeys = loadAllJourneys(join(root, config.DATA_DIR));
 const model = config.ANTHROPIC_API_KEY ? new AnthropicTutorModel(config.ANTHROPIC_API_KEY, config.TUTOR_MODEL) : null;
 const tutor = new TutorService(repository, model, logger, metrics);
 const sandbox = config.RUNNER === "docker" ? new DockerSandboxRunner() : null;
-const api = createApi({ journeys, repository, tutor, sandbox, logger, metrics });
+// Fail at boot, not on the learner's first run, if the checker a stage needs is missing.
+const needsTypecheck = journeys.some((j) => j.stages.some((s) => s.exercise?.typecheck));
+const typeChecker = needsTypecheck ? new TypeChecker(await locateTsc()) : null;
+const api = createApi({ journeys, repository, tutor, sandbox, typeChecker, logger, metrics });
 const assets = await buildWebAssets(join(root, "web"));
 
 const server = Bun.serve({ port: config.PORT, fetch: createApp(api, assets, logger, metrics) });

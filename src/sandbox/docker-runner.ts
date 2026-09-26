@@ -1,5 +1,6 @@
 import type { RunResult } from "../domain/progress.ts";
 import { RunResult as RunResultSchema } from "../domain/progress.ts";
+import { readBounded } from "./process.ts";
 import type { RunInput, SandboxRunner } from "./runner.ts";
 
 export const SANDBOX_IMAGE = "repo-replay-sandbox-ts:latest";
@@ -65,21 +66,6 @@ export class DockerSandboxRunner implements SandboxRunner {
     if (!parsed.success) return failure(stderr.slice(0, 2_000) || `sandbox saiu com código ${exitCode}`, latencyMs);
     return { ...parsed.data, latencyMs };
   }
-}
-
-async function readBounded(stream: ReadableStream<Uint8Array>, maxBytes: number, onOverflow: () => void): Promise<string> {
-  const decoder = new TextDecoder();
-  let text = "";
-  let bytes = 0;
-  for await (const chunk of stream) {
-    bytes += chunk.byteLength;
-    if (bytes > maxBytes) {
-      onOverflow();
-      return text + "\n[saída truncada]";
-    }
-    text += decoder.decode(chunk, { stream: true });
-  }
-  return text + decoder.decode();
 }
 
 function failure(error: string, latencyMs: number, timedOut = false): RunResult {

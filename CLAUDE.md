@@ -5,7 +5,7 @@ Product goal: give a developer technical ownership of an existing repository as 
 Philosophy (Arch-inspired): simple, minimal, explicit, performant, secure, observable, reliable, understandable. Minimal = the least code, dependencies, abstractions and infrastructure needed for a *robust* solution — not improvised code.
 
 ## Stack
-Bun + TypeScript strict, `Bun.serve`, `bun:sqlite`, `bun:test`, Web APIs, HTML + CSS + vanilla TS (bundled with `Bun.build`), Docker only for real isolation. Before adding a dependency: does Bun/TS/the Web Platform already solve it? A dependency must buy complexity reduction, security, reliability, maintainability, performance or interoperability. Runtime deps today: `zod` only.
+Bun + TypeScript strict, `Bun.serve`, `bun:sqlite`, `bun:test`, Web APIs, HTML + CSS + vanilla TS (bundled with `Bun.build`), Docker only for real isolation. Before adding a dependency: does Bun/TS/the Web Platform already solve it? A dependency must buy complexity reduction, security, reliability, maintainability, performance or interoperability. Runtime deps today: `zod` (boundary validation) and `typescript` (its native `tsc`, used only to verify stages that teach types).
 
 ## TypeScript
 `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`. No `any`, no `as unknown as`, no unjustified `!`. Prefer `unknown` + narrowing, discriminated/literal unions, `readonly`, derived types, schemas at the boundary.
@@ -48,3 +48,10 @@ security → correctness → simplicity → clarity → testability → performa
 - `bun test` — tests (includes golden curriculum validation: solution passes, starter fails)
 - `bunx tsc --noEmit` — typecheck
 - `bun run size` — frontend bundle size (gzip)
+
+## Pedagogy (Repo Replay's core algorithm)
+- Before any stage ask: "what is the smallest problem I must teach NOW so that, after several trivial evolutions, the learner arrives naturally at this part of the repo?" If it can be decomposed further without losing meaning, decompose.
+- Micro stage = ONE new idea (two only if inseparable), understandable in 30 s–2 min, born from the previous stage's perceptible limitation: problem → minimal solution → understand → rebuild from an **empty editor** (the task says WHAT, never HOW) → tests → next limitation. Module checkpoint = rebuild everything from scratch, then yours ↔ replay ↔ real code.
+- **Progressive scaffolding**: complexity not yet taught may be hidden (auto `import`/`export`, previously rebuilt code as read-only support files, non-strict typechecking), but must be explicitly handed back to the learner — and rebuilt by them — when it becomes the concept being taught (e.g. modules/imports once modularization appears).
+- When a concept is verifiable, verify it for real (e.g. stages teaching types run the actual TypeScript checker via `exercise.typecheck`).
+- The tutor answers at the learner's current level; skipping (a step or a whole module) is always one click.

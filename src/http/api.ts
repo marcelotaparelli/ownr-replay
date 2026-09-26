@@ -6,7 +6,8 @@ import { CodeFile, type Stage } from "../domain/stage.ts";
 import { TutorRequest } from "../domain/tutor.ts";
 import type { Logger } from "../obs/logger.ts";
 import type { Metrics } from "../obs/metrics.ts";
-import { ModuleError, prepareExercise } from "../sandbox/modules.ts";
+import { ModuleError, completeExercise, prepareExercise } from "../sandbox/modules.ts";
+import { TypecheckBusyError, type TypeChecker, type TypeDiagnostic } from "../sandbox/typecheck.ts";
 import type { SandboxRunner } from "../sandbox/runner.ts";
 import { parseGithubRepoUrl } from "../services/repo-url.ts";
 import type { TutorService } from "../services/tutor.ts";
@@ -18,6 +19,8 @@ export type ApiDeps = {
   tutor: TutorService;
   /** null = development BrowserRunner: the server only prepares modules. */
   sandbox: SandboxRunner | null;
+  /** Needed only by stages that teach types; null disables those runs with a clear error. */
+  typeChecker: TypeChecker | null;
   logger: Logger;
   metrics: Metrics;
 };
@@ -136,14 +139,20 @@ export function createApi(deps: ApiDeps): Router {
         if (error instanceof ModuleError) throw new HttpError(422, "MODULE_REJECTED", error.message);
         throw error;
       }
-      if (!deps.sandbox) return json({ mode: "browser", ...modules });
+      // Types taught in this stage are verified for real, before anything runs.
+      if (exercise.typecheck) {
+        const diagnostics = await typecheck([...completeExercise(exercise, files), ...exercise.typecheck.files], stage.id);
+        if (diagnostics.length > 0) return json({ mode: "typecheck", diagnostics });
+      }
+      const typecheckPassed = exercise.typecheck ? { typecheck: "passed" as const } : {};
+      if (!deps.sandbox) return json({ mode: "browser", ...typecheckPassed, ...modules });
 
       const started = performance.now();
       const result = await deps.sandbox.run({ modules, timeoutMs: RUN_TIMEOUT_MS });
       metrics.observe("sandbox_duration", performance.now() - started);
       if (result.timedOut) metrics.increment("sandbox_timeout_total");
       recordAttempt(learnerId, stage.id, "docker", result);
-      return json({ mode: "server", result });
+      return json({ mode: "server", ...typecheckPassed, result });
     })
     .on("POST", "/api/stages/:id/attempts", async (req, params) => {
       const { journey, stage } = findStage(params.id);
@@ -216,6 +225,21 @@ export function createApi(deps: ApiDeps): Router {
     });
     logger.info("stage_run", { stageId, runner, passed: passed === total, latencyMs: Math.round(result.latencyMs) });
     return firstPass;
+  }
+
+  async function typecheck(files: CodeFile[], stageId: string): Promise<TypeDiagnostic[]> {
+    if (!deps.typeChecker) throw new HttpError(503, "TYPECHECK_UNAVAILABLE", "Verificação de tipos indisponível no servidor.");
+    const started = performance.now();
+    try {
+      const diagnostics = await deps.typeChecker.check(files);
+      const ms = performance.now() - started;
+      metrics.observe("typecheck_duration", ms);
+      logger.info("typecheck", { stageId, errors: diagnostics.length, durationMs: Math.round(ms) });
+      return diagnostics;
+    } catch (error) {
+      if (error instanceof TypecheckBusyError) throw new HttpError(429, "TYPECHECK_BUSY", "Muitas verificações ao mesmo tempo; tente em alguns segundos.");
+      throw error;
+    }
   }
 
   function rateLimitTutor(learnerId: string): void {

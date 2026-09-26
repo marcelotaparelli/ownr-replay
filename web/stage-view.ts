@@ -450,6 +450,7 @@ function buildExercise({ stage, store }: StageViewDeps, options: { onPass?: () =
       },
     })),
     { label: "o que os testes verificam", extraClass: "secondary", render: () => codeView(exercise.testFile.path, exercise.testFile.content) },
+    ...(exercise.typecheck?.files ?? []).map((file) => ({ label: "verificação de tipos", extraClass: "secondary", render: () => codeView(file.path, file.content) })),
   ];
   const values = (): CodeFile[] => exercise.starterFiles.map((f) => ({ path: f.path, content: editors.get(f.path)?.value() ?? f.content }));
 

@@ -5,7 +5,11 @@ import type { TutorReply, TutorSelection } from "../src/domain/tutor.ts";
 import type { ModuleSet } from "../src/sandbox/modules.ts";
 
 export type StageDetail = Stage & { runner: "browser" | "docker" };
-export type RunResponse = ({ mode: "browser" } & ModuleSet) | { mode: "server"; result: RunResult };
+export type TypeDiagnostic = { file: string; line: number; code: string; message: string };
+export type RunResponse =
+  | ({ mode: "browser"; typecheck?: "passed" } & ModuleSet)
+  | { mode: "server"; typecheck?: "passed"; result: RunResult }
+  | { mode: "typecheck"; diagnostics: TypeDiagnostic[] };
 export type JourneyCard = Pick<JourneyOutline, "id" | "title" | "description" | "repo" | "status"> & { stageCount: number };
 
 export class ApiError extends Error {

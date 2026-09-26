@@ -80,6 +80,7 @@ const StageSource = z.strictObject({
       supportFiles: z.array(z.string()).default([]),
       expose: z.array(z.string()).default([]),
       testFile: z.string().default("tests.ts"),
+      typecheck: z.strictObject({ files: z.array(z.string()) }).optional(),
     })
     .optional(),
   toolbox: z.array(ToolReference),
@@ -186,6 +187,9 @@ function loadStage(dir: string, journey: JourneySource, moduleId: string, path: 
             supportFiles: exercise.supportFiles.map((file) => readFirst(["given", "reference"], file)),
             expose: exercise.expose,
             testFile: CodeFile.parse({ path: exercise.testFile, content: readFileSync(join(stageDir, exercise.testFile), "utf8") }),
+            ...(exercise.typecheck === undefined
+              ? {}
+              : { typecheck: { files: exercise.typecheck.files.map((file) => readFirst(["given", "reference"], file)) } }),
           },
         }),
     toolbox: source.toolbox,
