@@ -106,6 +106,19 @@
       "why": "Sem placar, a primeira pista encontrada vence mesmo quando outra categoria tem mais evidência."
     },
     {
+      "id": "compare-scores",
+      "name": "Comparar placares",
+      "group": "Domínio",
+      "aliases": [
+        "comparar",
+        "compare",
+        ">",
+        "maior que"
+      ],
+      "quick": "Duas categorias, dois placares: vence a que tem mais pistas.",
+      "why": "Sem comparar placares, a primeira regra que casa decide mesmo quando outra categoria tem mais evidência."
+    },
+    {
       "id": "highest-score",
       "name": "Maior placar vence",
       "group": "Domínio",
@@ -609,13 +622,15 @@
         "m1/06-rules-as-data",
         "m1/07-more-signals",
         "m1/08-count-evidence",
-        "m1/09-pick-strongest",
-        "m1/10-title-weight",
-        "m1/11-signal-weights",
-        "m1/12-safe-tie-break",
-        "m1/13-whole-words",
-        "m1/14-category-enum",
-        "m1/15-rules-use-enum",
+        "m1/09-compare-two",
+        "m1/10-best-so-far",
+        "m1/11-title-weight",
+        "m1/12-signal-weights",
+        "m1/13-safe-tie-break",
+        "m1/14-whole-words",
+        "m1/15-category-enum",
+        "m1/16-classify-returns-category",
+        "m1/17-rules-use-enum",
         "m1/99-checkpoint"
       ]
     },

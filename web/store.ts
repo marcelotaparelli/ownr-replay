@@ -18,8 +18,9 @@ export type LocalJourney = {
 
 type OutboxItem = { stageId: string; update: ProgressUpdate };
 
-// v2: Module 1 became a cumulative workspace; v1 drafts belonged to different stage contents.
-const VERSION = "rr:v2";
+// Bumped whenever stage contents change under the same ids (v3: Module 1 re-split into 17
+// micro stages); drafts and accepted code of older contents must not seed the new steps.
+const VERSION = "rr:v3";
 const OUTBOX_KEY = `${VERSION}:outbox`;
 const OUTBOX_LIMIT = 200;
 

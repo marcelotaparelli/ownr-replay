@@ -1,0 +1,149 @@
+{
+  "kind": "micro",
+  "title": "Palavra inteira",
+  "subtitle": "\"debug\" não é \"bug\"",
+  "goal": "Fazer cada pista casar só com a palavra inteira.",
+  "problem": "\"debug\" contém \"bug\"; \"downloads\" contém \"down\". Precisamos casar a **palavra**, não um pedaço dela.",
+  "examples": [
+    {
+      "expr": "scoreCategory(\"BUG\", \"debug mode is slow\", \"\")",
+      "equals": "0"
+    },
+    {
+      "expr": "scoreCategory(\"INCIDENT\", \"\", \"downloads are slow\")",
+      "equals": "0"
+    },
+    {
+      "expr": "scoreCategory(\"BUG\", \"bug in checkout\", \"\")",
+      "equals": "6"
+    }
+  ],
+  "estimatedMinutes": 2,
+  "introduces": [
+    "regex-word-boundary"
+  ],
+  "prerequisites": [
+    "weighted-signals"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
+        "col": 2,
+        "row": 1
+      },
+      {
+        "id": "tie",
+        "label": "TIE_BREAK",
+        "kind": "data",
+        "col": 0,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "score",
+        "rel": "calls"
+      },
+      {
+        "from": "score",
+        "to": "rules",
+        "rel": "reads"
+      },
+      {
+        "from": "classify",
+        "to": "tie",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "/\\bdown\\b/",
+      "note": "Uma express\\u00E3o regular. \\b marca onde uma palavra come\\u00E7a ou termina: casa \"down\", n\\u00E3o \"downloads\"."
+    },
+    {
+      "match": "rule.pattern.test(title)",
+      "note": "`.test` pergunta se o padrão casa no texto — o papel que `includes` fazia."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "regex",
+      "conceptId": "regex-word-boundary",
+      "title": "Padrões em vez de pedaços",
+      "quick": "Cada regra guarda um padrão (`/\\bbug\\b/`) em vez de uma palavra. `\\b` exige que seja uma palavra inteira."
+    }
+  ],
+  "exercise": {
+    "instructions": "Faça cada pista casar só com a palavra inteira: \"debug\" não é \"bug\", \"downloads\" não é \"down\". Mesmas pistas, categorias e pesos.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "classify",
+      "scoreCategory"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "regex-test",
+      "name": "RegExp.test()",
+      "signature": "/padrão/.test(texto): boolean",
+      "summary": "true se o padrão casa em algum lugar do texto.",
+      "example": "/cat/.test(\"concatenate\"); // true"
+    },
+    {
+      "id": "word-boundary",
+      "name": "\\b (fronteira de palavra)",
+      "summary": "Casa onde uma palavra começa ou termina.",
+      "example": "/\\bcat\\b/.test(\"concatenate\"); // false\n/\\bcat\\b/.test(\"my cat\"); // true"
+    }
+  ],
+  "limitation": "As categorias são strings soltas. Um **\"INCIDNET\"** digitado errado passaria em silêncio — e aquela categoria nunca mais seria escolhida.",
+  "noveltyException": "6 das 8 linhas são a mesma troca mecânica na tabela (`word: \"bug\"` → `pattern: /\\bbug\\b/`); a ideia é uma só. Tratar só parte das regras exigiria código para dois formatos de regra ao mesmo tempo."
+}

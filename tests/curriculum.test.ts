@@ -16,8 +16,13 @@ import { goldenJourneys } from "./helpers.ts";
 
 const journeys = goldenJourneys();
 const checker = new TypeChecker(await locateTsc());
-/** Relevant new lines above which a micro stage must be decomposed (or justify why not). */
-const NOVELTY_BUDGET = 10;
+/**
+ * Novelty heuristic (protects cognitive flow; not a rigid rule):
+ * 1–4 ideal · 5 acceptable · 6–7 alert, review whether it can be split · 8+ assume it must be
+ * decomposed: fails unless the stage justifies it (noveltyException).
+ */
+const NOVELTY_MUST_JUSTIFY = 8;
+const tier = (n: number): string => (n <= 4 ? "ideal" : n === 5 ? "aceitável" : n <= 7 ? "ALERTA: revisar divisão" : "precisa de justificativa");
 
 async function run(exercise: Exercise, files: CodeFile[]): Promise<RunResult | ModuleError> {
   try {
@@ -114,8 +119,8 @@ for (const journey of journeys) {
 
     test("micro stages stay within the novelty budget", () => {
       const report = noveltyReport(journey.stages);
-      console.log("\nNovelty per micro stage (relevant new lines):\n" + report.map((r) => `  ${r.stageId.padEnd(22)} ${String(r.newLines).padStart(2)}  ${r.title}`).join("\n"));
-      expect(report.filter((r) => r.newLines > NOVELTY_BUDGET && !r.exception).map((r) => `${r.stageId}: ${r.newLines}`)).toEqual([]);
+      console.log("\nNovelty per micro stage (relevant new lines):\n" + report.map((r) => `  ${r.stageId.padEnd(22)} ${String(r.newLines).padStart(2)}  ${tier(r.newLines).padEnd(24)} ${r.title}${r.exception ? "  [justificada]" : ""}`).join("\n"));
+      expect(report.filter((r) => r.newLines >= NOVELTY_MUST_JUSTIFY && !r.exception).map((r) => `${r.stageId}: ${r.newLines}`)).toEqual([]);
     });
   });
 }

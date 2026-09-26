@@ -143,7 +143,7 @@
       "endLine": 114,
       "symbol": "classify",
       "replayFile": "classify.ts",
-      "note": "Nosso classify, mais: confiança pela margem entre 1º e 2º colocados, prioridade, risco, time sugerido e justificativa."
+      "note": "Nosso classify guarda só a melhor categoria e recalcula o placar dela; o real guarda o placar de todas (scores, highestScore, leaders) porque também precisa do 2º colocado para a confiança — além de prioridade, risco, time sugerido e justificativa."
     },
     {
       "path": "src/application/classifiers/deterministic-triage-classifier.ts",

@@ -1,17 +1,10 @@
-enum Category {
-  INCIDENT = "INCIDENT",
-  BUG = "BUG",
-  ACCESS = "ACCESS",
-  OTHER = "OTHER",
-}
-
 const RULES = [
-  { pattern: /\bdown\b/, category: Category.INCIDENT, weight: 5 },
-  { pattern: /\boutage\b/, category: Category.INCIDENT, weight: 4 },
-  { pattern: /\bbug\b/, category: Category.BUG, weight: 3 },
-  { pattern: /\berror\b/, category: Category.BUG, weight: 1 },
-  { pattern: /\blogin\b/, category: Category.ACCESS, weight: 4 },
-  { pattern: /\bpassword\b/, category: Category.ACCESS, weight: 2 },
+  { pattern: /\bdown\b/, category: "INCIDENT", weight: 5 },
+  { pattern: /\boutage\b/, category: "INCIDENT", weight: 4 },
+  { pattern: /\bbug\b/, category: "BUG", weight: 3 },
+  { pattern: /\berror\b/, category: "BUG", weight: 1 },
+  { pattern: /\blogin\b/, category: "ACCESS", weight: 4 },
+  { pattern: /\bpassword\b/, category: "ACCESS", weight: 2 },
 ];
 
 function scoreCategory(category: string, title: string, description: string): number {
@@ -28,12 +21,12 @@ function scoreCategory(category: string, title: string, description: string): nu
 }
 
 // Em empate vence quem vem primeiro: ignorar um incidente é o erro mais caro.
-const TIE_BREAK = [Category.INCIDENT, Category.ACCESS, Category.BUG];
+const TIE_BREAK = ["INCIDENT", "ACCESS", "BUG"];
 
-function classify(ticket: { title: string; description: string }): Category {
+function classify(ticket: { title: string; description: string }): string {
   const title = ticket.title.toLowerCase();
   const description = ticket.description.toLowerCase();
-  let best = Category.OTHER;
+  let best = "OTHER";
   for (const category of TIE_BREAK) {
     if (scoreCategory(category, title, description) > scoreCategory(best, title, description)) {
       best = category;

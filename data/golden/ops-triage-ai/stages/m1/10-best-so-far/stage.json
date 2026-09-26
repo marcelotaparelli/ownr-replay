@@ -1,0 +1,141 @@
+{
+  "kind": "micro",
+  "title": "Percorrer todas as categorias",
+  "subtitle": "A melhor até agora",
+  "goal": "Comparar todas as categorias, não só um par.",
+  "problem": "Comparar par a par não escala: com 3 categorias já são 3 comparações; com as 7 do projeto real, 21. E se percorrêssemos as categorias guardando **a melhor até agora**?",
+  "examples": [
+    {
+      "expr": "classify({ title: \"Checkout down\", description: \"error: bug found\" })",
+      "equals": "\"BUG\""
+    },
+    {
+      "expr": "classify({ title: \"Lunch\", description: \"menu\" })",
+      "equals": "\"OTHER\""
+    }
+  ],
+  "estimatedMinutes": 2,
+  "introduces": [
+    "highest-score"
+  ],
+  "prerequisites": [
+    "compare-scores",
+    "default-category"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
+        "col": 2,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "score",
+        "rel": "calls"
+      },
+      {
+        "from": "score",
+        "to": "rules",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "const CATEGORIES",
+      "note": "As categorias que disputam. A ordem importa só em empate."
+    },
+    {
+      "match": "let best = \"OTHER\"",
+      "note": "Começa em OTHER. OTHER não tem regras, então o placar dele é 0: se ninguém pontuar, é a resposta."
+    },
+    {
+      "match": "scoreCategory(category, lower) > scoreCategory(best, lower)",
+      "note": "A mesma comparação da etapa anterior, agora entre a categoria da vez e a melhor até agora."
+    },
+    {
+      "match": "best = category",
+      "note": "Achou uma melhor: ela vira a melhor até agora. Só troca se for estritamente maior — em empate, fica quem veio antes."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "max",
+      "conceptId": "highest-score",
+      "title": "Guardar a melhor até agora",
+      "quick": "Percorre as categorias e troca a melhor sempre que aparece uma com mais pistas. Ninguém pontuou → OTHER. Empate → vence a que veio primeiro."
+    }
+  ],
+  "exercise": {
+    "instructions": "Troque a comparação ACCESS × BUG e o laço de regras por um laço sobre as categorias (INCIDENT, BUG, ACCESS) que guarda a de maior placar. Nenhuma pista → `\"OTHER\"`; empate → a que vem primeiro.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "classify",
+      "scoreCategory"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "for-of",
+      "name": "for...of",
+      "signature": "for (const item of lista) { ... }",
+      "summary": "Percorre os itens de uma lista, em ordem.",
+      "example": "const fruits = [{ name: \"maçã\", color: \"red\" }];\n\nfunction firstRed(): string {\n  for (const fruit of fruits) {\n    if (fruit.color === \"red\") {\n      return fruit.name;\n    }\n  }\n  return \"nenhuma\";\n}"
+    },
+    {
+      "id": "running-max",
+      "name": "Guardar o maior até agora",
+      "summary": "Duas variáveis: o melhor item e seu valor; troque quando achar um maior.",
+      "example": "const players = [{ name: \"Ana\", points: 3 }, { name: \"Bia\", points: 5 }];\nlet best = \"\";\nlet bestPoints = 0;\nfor (const p of players) {\n  if (p.points > bestPoints) {\n    best = p.name;\n    bestPoints = p.points;\n  }\n}\n// best === \"Bia\""
+    }
+  ],
+  "limitation": "Título **\"Cannot login\"**, descrição \"maybe a bug\": 1 × 1, e o empate dá BUG. Mas quem abriu o ticket resumiu o problema no título — ele deveria pesar mais."
+}

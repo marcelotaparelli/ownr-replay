@@ -1,0 +1,121 @@
+{
+  "kind": "micro",
+  "title": "Comparar dois placares",
+  "subtitle": "ACCESS × BUG",
+  "goal": "Usar o placar para decidir entre duas categorias.",
+  "problem": "No ticket \"Cannot login after password reset — the page shows a bug\", ACCESS tem 2 pistas e BUG tem 1. Com `scoreCategory` em mãos, dá para **comparar** os dois placares.",
+  "examples": [
+    {
+      "expr": "classify({ title: \"Cannot login\", description: \"after password reset the page shows a bug\" })",
+      "equals": "\"ACCESS\""
+    }
+  ],
+  "estimatedMinutes": 1,
+  "introduces": [
+    "compare-scores"
+  ],
+  "prerequisites": [
+    "evidence-score"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
+        "col": 2,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "score",
+        "rel": "calls"
+      },
+      {
+        "from": "score",
+        "to": "rules",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "scoreCategory(\"ACCESS\", lower) > scoreCategory(\"BUG\", lower)",
+      "note": "Dois placares, uma comparação: quem tem mais pistas?"
+    },
+    {
+      "match": "return \"ACCESS\"",
+      "note": "ACCESS venceu a comparação. O resto da função continua igual para os outros casos."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "compare",
+      "conceptId": "compare-scores",
+      "title": "Mais pistas vence",
+      "quick": "Em vez da primeira regra que casa, comparamos quantas pistas cada categoria tem."
+    }
+  ],
+  "exercise": {
+    "instructions": "Antes de percorrer as regras, faça `classify` devolver `\"ACCESS\"` quando ACCESS tiver mais pistas que BUG.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "classify",
+      "scoreCategory"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "compare",
+      "name": "Comparar números (>)",
+      "summary": "a > b é true quando a é estritamente maior que b.",
+      "example": "const a = 2;\nconst b = 1;\nif (a > b) {\n  console.log(\"a vence\");\n}"
+    }
+  ],
+  "limitation": "Ticket **\"Checkout down\"**, descrição \"error: bug found\": BUG tem 2 pistas e INCIDENT 1, mas vence INCIDENT. E um `if` para cada par de categorias não escala."
+}

@@ -13,7 +13,7 @@ function typedExercise(id: string): { exercise: Exercise; checks: CodeFile[] } {
   return { exercise, checks: exercise.typecheck.files };
 }
 
-const TYPED_STAGE = "ops-triage-ai.m1-14";
+const TYPED_STAGE = "ops-triage-ai.m1-15";
 
 describe("the enum stage: types are verified for real", () => {
   const { exercise, checks } = typedExercise(TYPED_STAGE);

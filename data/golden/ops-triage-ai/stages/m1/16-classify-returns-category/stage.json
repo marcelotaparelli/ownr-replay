@@ -1,0 +1,141 @@
+{
+  "kind": "micro",
+  "title": "classify devolve Category",
+  "subtitle": "A resposta vem do conjunto",
+  "goal": "Fazer o TypeScript garantir que classify só devolve categorias válidas.",
+  "problem": "`classify` ainda promete devolver qualquer `string`. Queremos que a promessa seja `Category` — e que o verificador a cobre.",
+  "examples": [
+    {
+      "expr": "classify({ title: \"Cannot login\", description: \"\" })",
+      "equals": "Category.ACCESS"
+    }
+  ],
+  "estimatedMinutes": 1,
+  "introduces": [],
+  "prerequisites": [
+    "string-enum"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "Category",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
+        "col": 2,
+        "row": 1
+      },
+      {
+        "id": "tie",
+        "label": "TIE_BREAK",
+        "kind": "data",
+        "col": 0,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "score",
+        "rel": "calls"
+      },
+      {
+        "from": "score",
+        "to": "rules",
+        "rel": "reads"
+      },
+      {
+        "from": "classify",
+        "to": "tie",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "TIE_BREAK = [Category.",
+      "note": "A ordem de desempate passa a usar os membros do enum."
+    },
+    {
+      "match": "): Category {",
+      "note": "`classify` promete devolver uma `Category` — o TypeScript confere."
+    },
+    {
+      "match": "let best = Category.OTHER",
+      "note": "O padrão também é um membro do enum."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "returns",
+      "conceptId": "string-enum",
+      "title": "A promessa no tipo de retorno",
+      "quick": "Com `: Category` no retorno, devolver uma string solta vira erro de compilação — antes de qualquer teste."
+    }
+  ],
+  "exercise": {
+    "instructions": "Faça `classify` devolver `Category` (e use o enum na ordem de desempate e na resposta padrão).",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "Category",
+      "classify"
+    ],
+    "typecheck": {
+      "files": [
+        "check.ts"
+      ]
+    }
+  },
+  "toolbox": [
+    {
+      "id": "enum",
+      "name": "enum",
+      "signature": "enum Nome { A = \"A\", B = \"B\" }",
+      "summary": "Um conjunto fechado de valores com nome.",
+      "example": "enum Color {\n  RED = \"RED\",\n  BLUE = \"BLUE\",\n}\n\nconst c: Color = Color.RED; // \"RED\""
+    }
+  ],
+  "limitation": "A tabela ainda usa strings soltas: um `category: \"INCIDNET\"` ali continuaria passando sem aviso."
+}
