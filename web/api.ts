@@ -80,6 +80,6 @@ export const api = {
     ),
   progressUpdate: (stageId: string, update: ProgressUpdate) =>
     request<{ ok: true }>("POST", `/api/stages/${encodeURIComponent(stageId)}/progress`, update),
-  event: (stageId: string, type: "stage_opened" | "explanation_depth" | "solution_revealed" | "checkpoint_revealed", data?: Record<string, string | number | boolean>) =>
+  event: (stageId: string, type: "stage_opened" | "explanation_depth" | "solution_revealed" | "checkpoint_revealed" | "reconstruct_started", data?: Record<string, string | number | boolean>) =>
     request<{ ok: true }>("POST", `/api/stages/${encodeURIComponent(stageId)}/events`, { type, ...(data ? { data } : {}) }),
 };

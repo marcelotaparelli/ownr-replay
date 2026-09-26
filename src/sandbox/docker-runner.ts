@@ -1,6 +1,5 @@
 import type { RunResult } from "../domain/progress.ts";
 import { RunResult as RunResultSchema } from "../domain/progress.ts";
-import { prepareModules } from "./modules.ts";
 import type { RunInput, SandboxRunner } from "./runner.ts";
 
 export const SANDBOX_IMAGE = "repo-replay-sandbox-ts:latest";
@@ -30,7 +29,7 @@ export function dockerArgs(name: string, image = SANDBOX_IMAGE): string[] {
 
 /**
  * Ephemeral hardened container per run (default seccomp profile).
- * Modules are transpiled on the host (no execution) and executed only inside
+ * Modules arrive transpiled from the host (no execution there) and run only inside
  * the container. A warm SandboxPool can replace this behind the same interface.
  * NOT VERIFIED in this environment: Docker is unavailable here.
  */
@@ -39,10 +38,9 @@ export class DockerSandboxRunner implements SandboxRunner {
 
   async run(input: RunInput): Promise<RunResult> {
     const started = performance.now();
-    const modules = prepareModules(input.files, input.testFile);
     const name = `rr-${crypto.randomUUID()}`;
     const proc = Bun.spawn(["docker", ...dockerArgs(name, this.image)], {
-      stdin: new Blob([JSON.stringify(modules)]),
+      stdin: new Blob([JSON.stringify(input.modules)]),
       stdout: "pipe",
       stderr: "pipe",
     });

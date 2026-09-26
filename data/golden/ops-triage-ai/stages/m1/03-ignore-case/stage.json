@@ -1,0 +1,87 @@
+{
+  "kind": "micro",
+  "title": "Maiúsculas não importam",
+  "subtitle": "Normalizar antes de comparar",
+  "goal": "Reconhecer a palavra independentemente de maiúsculas.",
+  "problem": "\"Production DOWN\" é claramente um incidente, mas `includes(\"down\")` não encontra \"DOWN\".\n\nComo fazer \"Down\", \"DOWN\" e \"down\" valerem o mesmo?",
+  "example": "classify(\"Production DOWN\") → \"INCIDENT\"",
+  "estimatedMinutes": 1,
+  "introduces": [
+    "text-normalization"
+  ],
+  "prerequisites": [
+    "keyword-match"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "text",
+        "label": "texto",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      }
+    ],
+    "edges": [
+      {
+        "from": "text",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "toLowerCase",
+      "note": "Uma cópia do texto toda em minúsculas. Comparamos sempre com essa cópia."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "lower",
+      "conceptId": "text-normalization",
+      "title": "Normalizar uma vez",
+      "quick": "Convertemos o texto para minúsculas antes de procurar. Assim só precisamos procurar \"down\"."
+    }
+  ],
+  "exercise": {
+    "instructions": "Faça `classify` reconhecer \"down\" com qualquer combinação de maiúsculas e minúsculas.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "classify"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "to-lower",
+      "name": "String.toLowerCase()",
+      "summary": "Cópia do texto em minúsculas.",
+      "example": "\"Server DOWN\".toLowerCase(); // \"server down\""
+    }
+  ],
+  "limitation": "Tickets reais têm **título e descrição**. Título \"Checkout\", descrição \"the site is down\": como olhar os dois?"
+}

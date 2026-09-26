@@ -33,7 +33,7 @@ export function prepareModules(files: CodeFile[], testFile: CodeFile): ModuleSet
       scanned = transpiler.scanImports(file.content);
       code = transpiler.transformSync(file.content);
     } catch (error) {
-      throw new ModuleError(`${file.path}: erro de sintaxe — ${firstLine(error)}`);
+      throw new ModuleError(`${file.path}: ${syntaxMessage(error)}`);
     }
     for (const { path, kind } of scanned) {
       if (path === HARNESS_SPECIFIER && kind === "import-statement") continue;
@@ -46,6 +46,56 @@ export function prepareModules(files: CodeFile[], testFile: CodeFile): ModuleSet
     return { path: file.path, code, imports };
   });
   return { entry: testFile.path, modules: orderByDependencies(modules) };
+}
+
+type ExerciseParts = { starterFiles: CodeFile[]; supportFiles: CodeFile[]; expose: string[]; testFile: CodeFile };
+
+/**
+ * Builds the runnable module set for an exercise from what the learner wrote.
+ * The learner writes plain code from a blank editor; module plumbing is done here:
+ * - names the tests need are exported if the learner didn't write `export`;
+ * - names provided by read-only support files are imported when the learner uses them
+ *   without declaring them (only the new idea has to be rewritten).
+ */
+export function prepareExercise(exercise: ExerciseParts, learnerFiles: CodeFile[]): ModuleSet {
+  const written = exercise.starterFiles.map((starter) => learnerFiles.find((file) => file.path === starter.path) ?? starter);
+  const completed = written.map((file, index) => completeLearnerFile(file, exercise.supportFiles, index === 0 ? exercise.expose : []));
+  return prepareModules([...completed, ...exercise.supportFiles], exercise.testFile);
+}
+
+function completeLearnerFile(file: CodeFile, supportFiles: CodeFile[], expose: string[]): CodeFile {
+  const source = file.content;
+  const exported = new Set(scanExports(file));
+  const declared = (name: string): boolean =>
+    new RegExp(`\\b(?:function\\*?|const|let|var|class|enum|interface|type)\\s+${escapeName(name)}\\b`).test(source) ||
+    // Learners who write their own imports keep them; nothing is added twice.
+    new RegExp(`\\bimport\\b[^;]*[\\s{,]${escapeName(name)}[\\s},][^;]*\\bfrom\\b`).test(source);
+
+  const imports = supportFiles.flatMap((support) => {
+    const names = scanExports(support).filter(
+      (name) => name !== "default" && !declared(name) && new RegExp(`(^|[^\\w$])${escapeName(name)}($|[^\\w$])`).test(source),
+    );
+    return names.length ? [`import { ${names.join(", ")} } from "./${support.path}";`] : [];
+  });
+
+  const missing = expose.filter((name) => !exported.has(name));
+  const undeclared = missing.filter((name) => !declared(name));
+  if (undeclared.length > 0) {
+    throw new ModuleError(`Não encontrei ${undeclared.map((n) => `\`${n}\``).join(", ")} em ${file.path}. Crie com exatamente esse nome.`);
+  }
+  const exports = missing.length ? [`export { ${missing.join(", ")} };`] : [];
+  // Imports go on the first line so learner-visible line numbers shift by at most one.
+  return { path: file.path, content: [imports.join(" "), source, ...exports].filter(Boolean).join("\n") };
+}
+
+const escapeName = (name: string): string => name.replace(/\$/g, "\\$");
+
+function scanExports(file: CodeFile): string[] {
+  try {
+    return transpiler.scan(file.content).exports;
+  } catch (error) {
+    throw new ModuleError(`${file.path}: ${syntaxMessage(error)}`);
+  }
 }
 
 function resolveRelative(specifier: string): string | undefined {
@@ -74,7 +124,10 @@ function orderByDependencies(modules: PreparedModule[]): PreparedModule[] {
   return ordered;
 }
 
-function firstLine(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.split("\n")[0] ?? message;
+/** Bun reports parse failures as an AggregateError whose entries carry line/column. */
+function syntaxMessage(error: unknown): string {
+  const first = error instanceof AggregateError ? (error.errors[0] as { message?: unknown; position?: { line?: unknown } } | undefined) : undefined;
+  const line = typeof first?.position?.line === "number" ? `linha ${first.position.line}: ` : "";
+  const detail = typeof first?.message === "string" ? first.message : error instanceof Error ? error.message : String(error);
+  return `erro de sintaxe — ${line}${detail}`;
 }

@@ -34,7 +34,7 @@ export function systemPrompt(context: TutorContext): string {
     .map((ref) => `${ref.path}:${ref.startLine}-${ref.endLine} (${ref.symbol}) — ${ref.note}\n${fence(ref.path, ref.snippet)}`)
     .join("\n");
   const history = previousStages
-    .map((s) => `- Stage ${s.order} "${s.title}": adicionou ${s.summary.added.join(", ")} — ${s.summary.why}`)
+    .map((s) => `- ${s.order}. "${s.title}": ${s.summary ? `adicionou ${s.summary.added.join(", ")} — ${s.summary.why}` : s.goal}`)
     .join("\n");
 
   return `Você é o tutor do Repo Replay. O desenvolvedor está reconstruindo o repositório ${journey.repo.owner}/${journey.repo.name} etapa por etapa para adquirir propriedade técnica sobre ele.
@@ -45,6 +45,7 @@ Regras:
 - Não entregue a solução do exercício pronta; explique o raciocínio e aponte a ferramenta certa.
 - Quando útil, conecte com o projeto real citando caminho:linhas.
 - Nada de respostas acadêmicas genéricas: use os nomes e o código desta etapa.
+- Nível do aluno: ele só viu as etapas listadas abaixo. Use apenas conceitos e vocabulário que já apareceram. Não fale de arquitetura (interfaces, injeção de dependência, camadas, ports/adapters, políticas, LLM) se ainda não apareceu — explique no nível mais simples que resolve a dúvida.
 
 Etapa atual: Stage ${stage.order} — ${stage.title}
 Objetivo: ${stage.goal}
@@ -54,9 +55,8 @@ Conceitos disponíveis até aqui: ${knownSoFar.map((c) => c.name).join(", ")}
 
 Código pedagógico desta etapa:
 ${code}
-${stage.exercise ? `\nExercício: ${stage.exercise.instructions}\n` : ""}
-Código real correspondente (${journey.repo.sha.slice(0, 7)}):
-${originals}`;
+${stage.exercise ? `\nExercício (o aluno reescreve do zero, sem olhar; dê pistas, não a resposta): ${stage.exercise.instructions}\n` : ""}${stage.limitation ? `\nLimitação que motiva a próxima etapa (não resolva ainda): ${stage.limitation}\n` : ""}
+${originals ? `Código real correspondente (${journey.repo.sha.slice(0, 7)}):\n${originals}` : ""}`;
 }
 
 export function userPrompt(message: string, selection?: TutorSelection): string {

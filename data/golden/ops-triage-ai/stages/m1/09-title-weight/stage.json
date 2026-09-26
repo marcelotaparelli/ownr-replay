@@ -1,0 +1,131 @@
+{
+  "kind": "micro",
+  "title": "O título pesa o dobro",
+  "subtitle": "Onde a pista aparece importa",
+  "goal": "Dar mais peso a pistas no título do que na descrição.",
+  "problem": "O título é onde a pessoa resume o problema. Uma pista ali deveria valer **mais** do que a mesma pista perdida na descrição.",
+  "example": "scoreCategory(\"BUG\", \"bug in checkout\", \"\")    → 2\nscoreCategory(\"BUG\", \"\", \"bug in checkout\")    → 1",
+  "estimatedMinutes": 2,
+  "introduces": [
+    "title-weight"
+  ],
+  "prerequisites": [
+    "evidence-score"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 2,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "score",
+        "rel": "calls"
+      },
+      {
+        "from": "score",
+        "to": "rules",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "score.ts",
+    "classify.ts",
+    "rules.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "title.includes(rule.word)) score += 2",
+      "note": "Pista no título: 2 pontos."
+    },
+    {
+      "match": "description.includes(rule.word)) score += 1",
+      "note": "Pista na descrição: 1 ponto. A mesma palavra nos dois lugares soma 3."
+    },
+    {
+      "match": "const title = ticket.title.toLowerCase()",
+      "note": "classify agora normaliza título e descrição separadamente, para o placar saber onde cada pista estava."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "title",
+      "conceptId": "title-weight",
+      "title": "Posição é evidência",
+      "quick": "Mesma pista, pesos diferentes: título vale 2, descrição vale 1.",
+      "normal": "É uma hipótese de produto, não uma verdade: o projeto real mede se ela melhora a classificação com datasets de avaliação."
+    }
+  ],
+  "exercise": {
+    "instructions": "Reescreva `scoreCategory(category, title, description)`: cada pista da categoria vale 2 no título e 1 na descrição. `RULES` já existe.",
+    "files": [
+      "score.ts"
+    ],
+    "supportFiles": [
+      "rules.ts"
+    ],
+    "expose": [
+      "scoreCategory"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "and",
+      "name": "&& (e)",
+      "summary": "Verdadeiro só se os dois lados forem.",
+      "example": "if (fruit.color === \"red\" && fruit.ripe) eat(fruit);"
+    },
+    {
+      "id": "counter",
+      "name": "Contador (+=)",
+      "summary": "Comece em 0 e some dentro do laço.",
+      "example": "let total = 0;\nfor (const n of [1, 2, 3]) total += n;\n// total === 6"
+    }
+  ],
+  "limitation": "\"error\" aparece em quase todo ticket; \"down\" é quase certeza de incidente. Hoje **as duas pistas valem o mesmo**."
+}

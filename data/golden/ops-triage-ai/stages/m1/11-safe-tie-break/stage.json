@@ -1,0 +1,133 @@
+{
+  "kind": "micro",
+  "title": "Empate seguro",
+  "subtitle": "A ordem vira uma decisão",
+  "goal": "Decidir, de propósito, quem vence um empate.",
+  "problem": "Em empate, qual erro é mais caro? Tratar um incidente como bug deixa produção fora do ar esperando na fila. Tratar um bug como incidente custa alguns minutos de atenção.",
+  "example": "{ title: \"\", description: \"login fails with a bug error\" }\n→ \"ACCESS\"   (empate 4 × 4: ACCESS vem antes de BUG)",
+  "estimatedMinutes": 1,
+  "introduces": [
+    "tie-break"
+  ],
+  "prerequisites": [
+    "highest-score"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 2,
+        "row": 1
+      },
+      {
+        "id": "tie",
+        "label": "TIE_BREAK",
+        "kind": "data",
+        "col": 0,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "score",
+        "rel": "calls"
+      },
+      {
+        "from": "score",
+        "to": "rules",
+        "rel": "reads"
+      },
+      {
+        "from": "classify",
+        "to": "tie",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts",
+    "score.ts",
+    "rules.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "const TIE_BREAK",
+      "note": "Mesma lista de antes, com nome e ordem escolhidos: incidentes primeiro, depois acesso, depois bug."
+    },
+    {
+      "match": "for (const category of TIE_BREAK)",
+      "note": "Como só troca com placar estritamente maior, a primeira da lista vence os empates."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "tie",
+      "conceptId": "tie-break",
+      "title": "Errar para o lado seguro",
+      "quick": "A lista `TIE_BREAK` torna explícita uma decisão de produto: em empate, INCIDENT > ACCESS > BUG."
+    }
+  ],
+  "exercise": {
+    "instructions": "Reescreva `classify(ticket)` com a ordem de desempate INCIDENT, ACCESS, BUG. Continua: maior placar vence, nenhum ponto → `\"OTHER\"`. `scoreCategory(category, title, description)` e `RULES` já existem.",
+    "files": [
+      "classify.ts"
+    ],
+    "supportFiles": [
+      "rules.ts",
+      "score.ts"
+    ],
+    "expose": [
+      "classify"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "running-max",
+      "name": "Guardar o maior até agora",
+      "summary": "Duas variáveis: o melhor item e seu valor; troque quando achar um maior.",
+      "example": "let best = \"\";\nlet bestValue = 0;\nfor (const p of players) {\n  if (p.points > bestValue) {\n    best = p.name;\n    bestValue = p.points;\n  }\n}"
+    }
+  ],
+  "limitation": "**\"Debug mode is slow\"** virou BUG: \"bug\" está dentro de \"debug\". `includes` procura pedaços, não palavras."
+}

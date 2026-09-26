@@ -132,7 +132,7 @@ export function mountTutor(root: HTMLElement): TutorPanel {
       stage = next;
       suggestions = nextSuggestions;
       attached = undefined;
-      title.textContent = `Stage ${String(next.order).padStart(2, "0")}`;
+      title.textContent = next.title;
       render();
     },
     idle() {

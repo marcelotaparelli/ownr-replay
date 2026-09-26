@@ -100,7 +100,7 @@
   ],
   "exercise": {
     "instructions": "Implemente `DeterministicTriageClassifier` (reaproveitando `classify` da Stage 1) e `TriageTicket`, recebendo o classificador pelo construtor. `triage.ts` e `triage-classifier.ts` já estão prontos (veja em *Código pronto*). Os testes usam um classificador falso.",
-    "starterFiles": ["deterministic-triage-classifier.ts", "triage-ticket.ts"],
+    "files": ["deterministic-triage-classifier.ts", "triage-ticket.ts"],
     "supportFiles": ["triage.ts", "triage-classifier.ts"]
   },
   "toolbox": [

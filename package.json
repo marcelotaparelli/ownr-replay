@@ -8,7 +8,8 @@
     "start": "bun src/index.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "size": "bun scripts/bundle-size.ts"
+    "size": "bun scripts/bundle-size.ts",
+    "author:m1": "bun scripts/author-golden-m1.ts"
   },
   "dependencies": {
     "zod": "^4"

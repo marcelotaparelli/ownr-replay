@@ -86,7 +86,7 @@
   ],
   "exercise": {
     "instructions": "Implemente `parseTicketInput` (validação estrita na borda) e `classifierResponse` (erro → status). `handleTriage` já usa as duas.",
-    "starterFiles": ["triage-request.ts", "http.ts"],
+    "files": ["triage-request.ts", "http.ts"],
     "supportFiles": ["triage.ts", "triage-decision.ts", "classifier-errors.ts"]
   },
   "toolbox": [

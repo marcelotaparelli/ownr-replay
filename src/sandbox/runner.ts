@@ -1,13 +1,11 @@
-import type { CodeFile } from "../domain/stage.ts";
 import type { RunResult } from "../domain/progress.ts";
+import type { ModuleSet } from "./modules.ts";
 
 export type { RunResult };
 
 export type RunInput = {
-  /** Learner files, already restricted to the exercise's file names. */
-  files: CodeFile[];
-  /** Server-owned tests; never supplied by the client. */
-  testFile: CodeFile;
+  /** Learner files + support files + server-owned tests, transpiled but never executed on the host. */
+  modules: ModuleSet;
   timeoutMs: number;
 };
 

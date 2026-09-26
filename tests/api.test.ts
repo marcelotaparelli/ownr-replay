@@ -4,7 +4,8 @@ import { golden, testApp } from "./helpers.ts";
 
 const stage = golden().stages[0];
 if (!stage?.exercise) throw new Error("stage 1 exercise missing");
-const starter = stage.exercise.starterFiles;
+const learnerFile = stage.exercise.starterFiles[0]?.path ?? "";
+const solution = stage.exercise.solutionFiles;
 
 describe("stage flow", () => {
   test("journey → stage → run → attempt → progress", async () => {
@@ -13,7 +14,7 @@ describe("stage flow", () => {
     const detail = await (await call("GET", `/api/stages/${stage.id}`)).json();
     expect(detail.runner).toBe("browser");
 
-    const run = await call("POST", `/api/stages/${stage.id}/run`, { files: starter });
+    const run = await call("POST", `/api/stages/${stage.id}/run`, { files: solution });
     expect(run.status).toBe(200);
     expect((await run.json()).mode).toBe("browser");
 
@@ -44,6 +45,30 @@ describe("stage flow", () => {
   });
 });
 
+describe("empty-editor exercises", () => {
+  test("the learner writes plain code: no export needed", async () => {
+    const { call } = testApp();
+    const files = [{ path: learnerFile, content: `function classify(text: string) {\n  return "INCIDENT";\n}` }];
+    const response = await call("POST", `/api/stages/${stage.id}/run`, { files });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.modules.find((m: { path: string }) => m.path === learnerFile).code).toContain("export");
+  });
+
+  test("a missing function is reported by name, not as a crash", async () => {
+    const { call } = testApp();
+    const response = await call("POST", `/api/stages/${stage.id}/run`, { files: [{ path: learnerFile, content: "" }] });
+    expect(response.status).toBe(422);
+    expect((await response.json()).error.message).toContain("`classify`");
+  });
+
+  test("syntax errors point to the line", async () => {
+    const { call } = testApp();
+    const response = await call("POST", `/api/stages/${stage.id}/run`, { files: [{ path: learnerFile, content: "function classify(text {\n  return 1\n}" }] });
+    expect((await response.json()).error.message).toMatch(/linha \d+/);
+  });
+});
+
 describe("boundaries", () => {
   test("errors have a consistent shape and a request id", async () => {
     const { call } = testApp();
@@ -67,7 +92,7 @@ describe("boundaries", () => {
 
   test("external imports are rejected before anything runs", async () => {
     const { call } = testApp();
-    const files = [{ path: "triage.ts", content: `import { $ } from "bun"; export const x = $;` }];
+    const files = [{ path: learnerFile, content: `import { $ } from "bun"; export const x = $;` }];
     const response = await call("POST", `/api/stages/${stage.id}/run`, { files });
     expect(response.status).toBe(422);
     expect((await response.json()).error.code).toBe("MODULE_REJECTED");
@@ -75,7 +100,7 @@ describe("boundaries", () => {
 
   test("oversized source is refused", async () => {
     const { call } = testApp();
-    const response = await call("POST", `/api/stages/${stage.id}/run`, { files: [{ path: "triage.ts", content: "x".repeat(70_000) }] });
+    const response = await call("POST", `/api/stages/${stage.id}/run`, { files: [{ path: learnerFile, content: "x".repeat(70_000) }] });
     expect(response.status).toBe(413);
   });
 
@@ -98,7 +123,7 @@ describe("tutor", () => {
     const { call } = testApp();
     const reply = await (await call("POST", `/api/stages/${stage.id}/tutor`, { message: "onde isso está no projeto real?" })).json();
     expect(reply.source).toBe("offline");
-    expect(reply.reply).toContain("src/");
+    expect(reply.reply).toContain("checkpoint do módulo");
   });
 
   test("uses the configured model, keeps the thread, and falls back offline when it fails", async () => {

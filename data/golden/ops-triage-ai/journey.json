@@ -8,22 +8,141 @@
     "url": "https://github.com/marcelotaparelli/ops-triage-ai",
     "sha": "840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67"
   },
-  "stages": [
-    "01-classify",
-    "02-classifier-port",
-    "03-structured-decision",
-    "04-llm-classifier",
-    "05-hybrid-policy",
-    "06-persistence",
-    "07-http-api",
-    "08-resilience"
-  ],
   "concepts": [
+    {
+      "id": "function-io",
+      "name": "Função: entra, sai",
+      "group": "Linguagem",
+      "aliases": [
+        "função",
+        "function",
+        "return",
+        "classify",
+        "parâmetro",
+        "text"
+      ],
+      "quick": "Uma função recebe um valor (o texto) e devolve outro (a categoria).",
+      "why": "Sem uma função, não há um lugar único onde a decisão acontece."
+    },
+    {
+      "id": "keyword-match",
+      "name": "Detectar uma palavra",
+      "group": "Domínio",
+      "aliases": [
+        "includes",
+        "palavra",
+        "pista",
+        "contém"
+      ],
+      "quick": "Se o texto contém uma pista (\"down\"), escolhemos a categoria dela.",
+      "why": "Sem olhar o texto, todo ticket recebe a mesma resposta."
+    },
+    {
+      "id": "default-category",
+      "name": "Resposta padrão",
+      "group": "Domínio",
+      "aliases": [
+        "other",
+        "padrão",
+        "default",
+        "fallback"
+      ],
+      "quick": "Nenhuma pista encontrada → OTHER.",
+      "why": "Sem um padrão, a função ficaria sem resposta para tickets desconhecidos."
+    },
+    {
+      "id": "text-normalization",
+      "name": "Normalizar o texto",
+      "group": "Linguagem",
+      "aliases": [
+        "tolowercase",
+        "minúsculas",
+        "maiúsculas",
+        "normalize",
+        "lower"
+      ],
+      "quick": "Tudo em minúsculas antes de procurar, para \"DOWN\" e \"down\" valerem o mesmo.",
+      "why": "Sem normalizar, cada variação de caixa exigiria uma regra própria."
+    },
+    {
+      "id": "ordered-checks",
+      "name": "Perguntas em ordem",
+      "group": "Domínio",
+      "aliases": [
+        "ordem",
+        "if",
+        "primeira",
+        "várias categorias"
+      ],
+      "quick": "Várias verificações em sequência; a primeira que casa decide.",
+      "why": "Sem ordem definida, dois sinais no mesmo ticket gerariam respostas imprevisíveis."
+    },
+    {
+      "id": "rules-as-data",
+      "name": "Regras como dados",
+      "group": "Domínio",
+      "aliases": [
+        "rules",
+        "tabela",
+        "lista",
+        "for",
+        "dados"
+      ],
+      "quick": "As regras viram uma lista; a função só a percorre.",
+      "why": "Sem a tabela, cada regra nova é mais um if espalhado no código."
+    },
+    {
+      "id": "evidence-score",
+      "name": "Placar de evidências",
+      "group": "Domínio",
+      "aliases": [
+        "score",
+        "scorecategory",
+        "placar",
+        "contar",
+        "pontos"
+      ],
+      "quick": "Cada categoria soma pontos pelas pistas que aparecem.",
+      "why": "Sem placar, a primeira pista encontrada vence mesmo quando outra categoria tem mais evidência."
+    },
+    {
+      "id": "highest-score",
+      "name": "Maior placar vence",
+      "group": "Domínio",
+      "aliases": [
+        "best",
+        "bestscore",
+        "maior",
+        "vencedor",
+        "máximo"
+      ],
+      "quick": "Percorre as categorias guardando a de maior placar; zero pontos → OTHER.",
+      "why": "Sem escolher pelo placar, contar evidências não mudaria a decisão."
+    },
+    {
+      "id": "title-weight",
+      "name": "Título pesa o dobro",
+      "group": "Domínio",
+      "aliases": [
+        "título",
+        "title",
+        "dobro",
+        "descrição",
+        "description"
+      ],
+      "quick": "Uma pista no título vale o dobro da mesma pista na descrição.",
+      "why": "Sem isso, um detalhe perdido na descrição valeria tanto quanto o resumo do problema."
+    },
     {
       "id": "ticket-input",
       "name": "TicketInput",
       "group": "Domínio",
-      "aliases": ["ticket", "input", "title", "description"],
+      "aliases": [
+        "ticket",
+        "input",
+        "title",
+        "description"
+      ],
       "quick": "O dado de entrada do sistema: título + descrição de um ticket.",
       "why": "Sem um tipo explícito de entrada, cada parte do código assumiria um formato diferente de ticket."
     },
@@ -31,7 +150,11 @@
       "id": "string-enum",
       "name": "Enum de strings",
       "group": "Linguagem",
-      "aliases": ["enum", "category", "categoria"],
+      "aliases": [
+        "enum",
+        "category",
+        "categoria"
+      ],
       "quick": "Conjunto fechado de valores nomeados; em runtime cada valor é a própria string.",
       "why": "Sem ele, qualquer string seria uma categoria válida e erros de digitação só apareceriam em produção."
     },
@@ -39,7 +162,16 @@
       "id": "weighted-signals",
       "name": "Sinais com peso",
       "group": "Domínio",
-      "aliases": ["signal", "signals", "sinal", "sinais", "weight", "peso", "score", "scorecategory"],
+      "aliases": [
+        "signal",
+        "signals",
+        "sinal",
+        "sinais",
+        "weight",
+        "peso",
+        "score",
+        "scorecategory"
+      ],
       "quick": "Regras como dados: cada regex contribui com um peso para o score de uma categoria.",
       "why": "Sem pesos, 'error' valeria tanto quanto 'production is down' e o classificador não teria como preferir evidência forte."
     },
@@ -47,7 +179,14 @@
       "id": "regex-word-boundary",
       "name": "RegExp e \\b",
       "group": "Linguagem",
-      "aliases": ["regex", "regexp", "pattern", "\\b", "normalize", "test"],
+      "aliases": [
+        "regex",
+        "regexp",
+        "pattern",
+        "\\b",
+        "normalize",
+        "test"
+      ],
       "quick": "`\\b` casa apenas em fronteiras de palavra: /\\bbug\\b/ casa 'bug', não 'debug'.",
       "why": "Sem fronteiras de palavra, substrings geram falsos positivos ('debug' viraria BUG)."
     },
@@ -55,7 +194,13 @@
       "id": "tie-break",
       "name": "Desempate explícito",
       "group": "Domínio",
-      "aliases": ["tie", "tie_break", "empate", "desempate", "ordem"],
+      "aliases": [
+        "tie",
+        "tie_break",
+        "empate",
+        "desempate",
+        "ordem"
+      ],
       "quick": "Uma lista ordenada decide empates: categorias operacionais sensíveis vencem.",
       "why": "Sem ordem explícita, o resultado de um empate dependeria de detalhes acidentais de iteração."
     },
@@ -63,7 +208,12 @@
       "id": "record-type",
       "name": "Record<K, V>",
       "group": "Linguagem",
-      "aliases": ["record", "mapa", "map", "objeto"],
+      "aliases": [
+        "record",
+        "mapa",
+        "map",
+        "objeto"
+      ],
       "quick": "Objeto cujas chaves são exatamente os valores de K — faltar uma chave é erro de compilação.",
       "why": "Sem Record, esquecer uma categoria nova na tabela só seria percebido em runtime."
     },
@@ -71,7 +221,14 @@
       "id": "interface-contract",
       "name": "Interface como contrato",
       "group": "Arquitetura",
-      "aliases": ["interface", "implements", "contrato", "port", "porta", "triageclassifier"],
+      "aliases": [
+        "interface",
+        "implements",
+        "contrato",
+        "port",
+        "porta",
+        "triageclassifier"
+      ],
       "quick": "TriageClassifier define o que qualquer classificador precisa oferecer: classify(input).",
       "why": "Sem o contrato, o caso de uso conheceria uma implementação concreta e trocar de classificador exigiria reescrevê-lo."
     },
@@ -79,7 +236,15 @@
       "id": "dependency-inversion",
       "name": "Inversão de dependência",
       "group": "Arquitetura",
-      "aliases": ["dependency", "inversion", "injeção", "injection", "constructor", "construtor", "di"],
+      "aliases": [
+        "dependency",
+        "inversion",
+        "injeção",
+        "injection",
+        "constructor",
+        "construtor",
+        "di"
+      ],
       "quick": "O caso de uso depende da abstração e recebe a implementação pelo construtor.",
       "why": "Sem isso, TriageTicket criaria o próprio classificador e não daria para testá-lo com um fake nem plugar um LLM."
     },
@@ -87,7 +252,12 @@
       "id": "use-case",
       "name": "Caso de uso",
       "group": "Arquitetura",
-      "aliases": ["use case", "triageticket", "execute", "application"],
+      "aliases": [
+        "use case",
+        "triageticket",
+        "execute",
+        "application"
+      ],
       "quick": "TriageTicket orquestra a regra de negócio 'triar um ticket', independente de HTTP ou banco.",
       "why": "Sem um caso de uso, a orquestração acabaria dentro da rota HTTP, misturando protocolo e regra."
     },
@@ -95,7 +265,11 @@
       "id": "async-contract",
       "name": "Contrato assíncrono",
       "group": "Linguagem",
-      "aliases": ["async", "await", "promise"],
+      "aliases": [
+        "async",
+        "await",
+        "promise"
+      ],
       "quick": "classify devolve Promise para que implementações lentas (rede, disco) caibam no mesmo contrato.",
       "why": "Um contrato síncrono excluiria qualquer classificador que dependa de I/O."
     },
@@ -103,7 +277,13 @@
       "id": "test-double",
       "name": "Fake em teste",
       "group": "Arquitetura",
-      "aliases": ["fake", "mock", "stub", "double", "teste"],
+      "aliases": [
+        "fake",
+        "mock",
+        "stub",
+        "double",
+        "teste"
+      ],
       "quick": "Uma implementação mínima da interface usada só no teste, para isolar o caso de uso.",
       "why": "Sem fakes, testar o caso de uso exigiria o classificador real (e depois um LLM real)."
     },
@@ -111,7 +291,14 @@
       "id": "structured-result",
       "name": "Resultado estruturado",
       "group": "Domínio",
-      "aliases": ["classifierresult", "result", "priority", "risk", "summary", "rationale"],
+      "aliases": [
+        "classifierresult",
+        "result",
+        "priority",
+        "risk",
+        "summary",
+        "rationale"
+      ],
       "quick": "Além da categoria: prioridade, risco, time sugerido, confiança, resumo e justificativa.",
       "why": "Só uma categoria não diz quão urgente é, quem deve atender nem por que a decisão foi tomada."
     },
@@ -119,7 +306,13 @@
       "id": "confidence",
       "name": "Confiança discreta",
       "group": "IA",
-      "aliases": ["confidence", "confiança", "0.5", "0.7", "0.9"],
+      "aliases": [
+        "confidence",
+        "confiança",
+        "0.5",
+        "0.7",
+        "0.9"
+      ],
       "quick": "Confiança em três degraus (0.5, 0.7, 0.9), não um float arbitrário.",
       "why": "Um float contínuo sugere uma precisão que uma heurística não tem e é difícil de usar em regras."
     },
@@ -127,7 +320,15 @@
       "id": "human-review",
       "name": "Revisão humana",
       "group": "Domínio",
-      "aliases": ["review", "revisão", "requireshumanreview", "humanreviewreason", "triagedecision", "decision", "decisão"],
+      "aliases": [
+        "review",
+        "revisão",
+        "requireshumanreview",
+        "humanreviewreason",
+        "triagedecision",
+        "decision",
+        "decisão"
+      ],
       "quick": "A decisão final carrega se precisa de revisão humana e os motivos.",
       "why": "Sem isso, um classificador incerto decidiria sozinho em casos de alto risco."
     },
@@ -135,7 +336,13 @@
       "id": "adapter",
       "name": "Adapter de infraestrutura",
       "group": "Arquitetura",
-      "aliases": ["adapter", "ollama", "llm", "infra", "infrastructure"],
+      "aliases": [
+        "adapter",
+        "ollama",
+        "llm",
+        "infra",
+        "infrastructure"
+      ],
       "quick": "OllamaTriageClassifier implementa a mesma interface falando HTTP com um LLM.",
       "why": "Sem o adapter, detalhes de HTTP e JSON do LLM vazariam para o caso de uso."
     },
@@ -143,7 +350,11 @@
       "id": "injected-fetch",
       "name": "fetch injetado",
       "group": "Arquitetura",
-      "aliases": ["fetch", "fetchimpl", "httpfetch"],
+      "aliases": [
+        "fetch",
+        "fetchimpl",
+        "httpfetch"
+      ],
       "quick": "O adapter recebe fetch pelo construtor; testes passam um fetch falso.",
       "why": "Sem injeção, testar timeout e respostas inválidas exigiria um servidor LLM real."
     },
@@ -151,7 +362,13 @@
       "id": "abort-timeout",
       "name": "AbortController + timeout",
       "group": "Linguagem",
-      "aliases": ["abort", "abortcontroller", "signal", "timeout", "settimeout"],
+      "aliases": [
+        "abort",
+        "abortcontroller",
+        "signal",
+        "timeout",
+        "settimeout"
+      ],
       "quick": "Um timer chama controller.abort(), que cancela o fetch em andamento.",
       "why": "Sem timeout, um LLM travado prenderia a requisição indefinidamente."
     },
@@ -159,7 +376,15 @@
       "id": "typed-errors",
       "name": "Erros tipados",
       "group": "Arquitetura",
-      "aliases": ["error", "erro", "throw", "instanceof", "classifiertimeouterror", "classifierunavailableerror", "classifierinvalidresponseerror"],
+      "aliases": [
+        "error",
+        "erro",
+        "throw",
+        "instanceof",
+        "classifiertimeouterror",
+        "classifierunavailableerror",
+        "classifierinvalidresponseerror"
+      ],
       "quick": "Três classes de erro distinguem timeout, indisponível e resposta inválida.",
       "why": "Sem tipos distintos, quem chama não saberia se deve tentar de novo, cair para outro classificador ou falhar."
     },
@@ -167,7 +392,14 @@
       "id": "structured-output",
       "name": "Saída estruturada validada",
       "group": "IA",
-      "aliases": ["zod", "schema", "safeparse", "json", "structured output", "validação"],
+      "aliases": [
+        "zod",
+        "schema",
+        "safeparse",
+        "json",
+        "structured output",
+        "validação"
+      ],
       "quick": "A resposta do LLM é JSON validado contra um schema antes de virar ClassifierResult.",
       "why": "Sem validação, um LLM que inventa uma categoria corromperia decisões silenciosamente."
     },
@@ -175,7 +407,13 @@
       "id": "discriminated-union",
       "name": "União discriminada",
       "group": "Linguagem",
-      "aliases": ["union", "união", "status", "llmoutcome", "discriminated"],
+      "aliases": [
+        "union",
+        "união",
+        "status",
+        "llmoutcome",
+        "discriminated"
+      ],
       "quick": "LlmOutcome é { status: 'available', result } ou { status: 'failed', reason }.",
       "why": "Sem a união, 'LLM falhou' seria um null ambíguo e o compilador não forçaria tratar os dois casos."
     },
@@ -183,7 +421,16 @@
       "id": "hybrid-policy",
       "name": "Política híbrida",
       "group": "IA",
-      "aliases": ["hybrid", "híbrido", "hybridpolicy", "policy", "política", "decide", "disagreement", "discordância"],
+      "aliases": [
+        "hybrid",
+        "híbrido",
+        "hybridpolicy",
+        "policy",
+        "política",
+        "decide",
+        "disagreement",
+        "discordância"
+      ],
       "quick": "Combina baseline determinístico e LLM: usa o LLM, mas pede revisão quando eles discordam.",
       "why": "Sem a política, seria preciso escolher entre um baseline previsível e um LLM mais flexível — em vez de usar um para vigiar o outro."
     },
@@ -191,7 +438,12 @@
       "id": "graceful-fallback",
       "name": "Fallback gracioso",
       "group": "IA",
-      "aliases": ["fallback", "deterministic_fallback", "indisponível", "unavailable"],
+      "aliases": [
+        "fallback",
+        "deterministic_fallback",
+        "indisponível",
+        "unavailable"
+      ],
       "quick": "Se o LLM falha, a decisão cai para o determinístico e marca LLM_UNAVAILABLE.",
       "why": "Sem fallback, uma queda do LLM derrubaria toda a triagem."
     },
@@ -199,7 +451,14 @@
       "id": "repository-port",
       "name": "Porta de repositório",
       "group": "Arquitetura",
-      "aliases": ["repository", "repositório", "triagerunrepository", "prisma", "persistence", "persistência"],
+      "aliases": [
+        "repository",
+        "repositório",
+        "triagerunrepository",
+        "prisma",
+        "persistence",
+        "persistência"
+      ],
       "quick": "A aplicação define a interface de persistência; Prisma é só uma implementação.",
       "why": "Sem a porta, o caso de uso importaria Prisma e não daria para testar sem PostgreSQL."
     },
@@ -207,7 +466,16 @@
       "id": "run-lifecycle",
       "name": "Ciclo de vida da execução",
       "group": "Infraestrutura",
-      "aliases": ["run", "start", "complete", "fail", "running", "succeeded", "failed", "markfailed"],
+      "aliases": [
+        "run",
+        "start",
+        "complete",
+        "fail",
+        "running",
+        "succeeded",
+        "failed",
+        "markfailed"
+      ],
       "quick": "Cada triagem é um run: start → complete ou fail, gravado antes e depois da classificação.",
       "why": "Sem o registro de início, uma execução que morre no meio desapareceria sem rastro."
     },
@@ -215,7 +483,12 @@
       "id": "audit-trail",
       "name": "Trilha de auditoria",
       "group": "Infraestrutura",
-      "aliases": ["audit", "auditoria", "feedback", "append-only"],
+      "aliases": [
+        "audit",
+        "auditoria",
+        "feedback",
+        "append-only"
+      ],
       "quick": "Tickets, runs, decisões e feedback humano ficam gravados e nunca são sobrescritos.",
       "why": "Sem auditoria, não há como explicar uma decisão passada nem medir o classificador contra correções humanas."
     },
@@ -223,7 +496,15 @@
       "id": "boundary-validation",
       "name": "Validação na fronteira",
       "group": "Arquitetura",
-      "aliases": ["parse", "parseticketinput", "validation", "validação", "422", "body", "request"],
+      "aliases": [
+        "parse",
+        "parseticketinput",
+        "validation",
+        "validação",
+        "422",
+        "body",
+        "request"
+      ],
       "quick": "O corpo HTTP é validado e convertido em TicketInput antes de chegar ao caso de uso.",
       "why": "Sem validar na borda, dados inválidos chegariam ao domínio e cada camada teria que se defender."
     },
@@ -231,7 +512,15 @@
       "id": "error-status-mapping",
       "name": "Erro → status HTTP",
       "group": "Infraestrutura",
-      "aliases": ["status", "504", "503", "502", "500", "classifierresponse", "http"],
+      "aliases": [
+        "status",
+        "504",
+        "503",
+        "502",
+        "500",
+        "classifierresponse",
+        "http"
+      ],
       "quick": "Cada erro tipado vira um status: timeout 504, indisponível 503, resposta inválida 502.",
       "why": "Sem o mapeamento, todo erro viraria 500 e clientes não saberiam se vale tentar de novo."
     },
@@ -239,7 +528,13 @@
       "id": "composition-root",
       "name": "Composition root",
       "group": "Arquitetura",
-      "aliases": ["index", "index.ts", "main", "wiring", "config"],
+      "aliases": [
+        "index",
+        "index.ts",
+        "main",
+        "wiring",
+        "config"
+      ],
       "quick": "index.ts é o único lugar que escolhe implementações concretas e conecta tudo.",
       "why": "Sem um ponto único de montagem, decisões de configuração se espalhariam por todo o código."
     },
@@ -247,7 +542,12 @@
       "id": "structured-logging",
       "name": "Log estruturado",
       "group": "Infraestrutura",
-      "aliases": ["log", "logger", "stdoutlogger", "json log"],
+      "aliases": [
+        "log",
+        "logger",
+        "stdoutlogger",
+        "json log"
+      ],
       "quick": "Cada evento é uma linha JSON com campos fixos (requestId, durationMs, code).",
       "why": "Sem estrutura, logs não podem ser filtrados nem agregados por ferramenta."
     },
@@ -255,7 +555,14 @@
       "id": "metrics",
       "name": "Métricas em memória",
       "group": "Infraestrutura",
-      "aliases": ["metrics", "métricas", "counter", "increment", "observe", "labels"],
+      "aliases": [
+        "metrics",
+        "métricas",
+        "counter",
+        "increment",
+        "observe",
+        "labels"
+      ],
       "quick": "Contadores e durações com labels, expostos em /metrics.",
       "why": "Sem métricas, não dá para ver taxa de fallback, latência ou revisões humanas em produção."
     },
@@ -263,7 +570,14 @@
       "id": "concurrency-limit",
       "name": "Limite de concorrência",
       "group": "Infraestrutura",
-      "aliases": ["concurrency", "concorrência", "limiter", "429", "tryacquire", "release"],
+      "aliases": [
+        "concurrency",
+        "concorrência",
+        "limiter",
+        "429",
+        "tryacquire",
+        "release"
+      ],
       "quick": "No máximo N triagens simultâneas; a próxima recebe 429 imediatamente.",
       "why": "Sem limite, um pico de requisições enfileiraria chamadas ao LLM até esgotar memória e tempo."
     },
@@ -271,9 +585,93 @@
       "id": "promise-race-timeout",
       "name": "Timeout com Promise.race",
       "group": "Linguagem",
-      "aliases": ["race", "promise.race", "withtimeout", "cleartimeout"],
+      "aliases": [
+        "race",
+        "promise.race",
+        "withtimeout",
+        "cleartimeout"
+      ],
       "quick": "Promise.race entre o trabalho e um timer que rejeita: vence quem terminar primeiro.",
       "why": "Sem um teto de tempo por requisição, o cliente não teria garantia de resposta."
+    }
+  ],
+  "modules": [
+    {
+      "id": "m1",
+      "title": "Classificação determinística",
+      "subtitle": "Do primeiro if até o classificador por pontuação",
+      "stages": [
+        "m1/01-fixed-answer",
+        "m1/02-look-at-text",
+        "m1/03-ignore-case",
+        "m1/04-title-and-description",
+        "m1/05-more-categories",
+        "m1/06-rules-as-data",
+        "m1/07-count-evidence",
+        "m1/08-pick-strongest",
+        "m1/09-title-weight",
+        "m1/10-signal-weights",
+        "m1/11-safe-tie-break",
+        "m1/12-whole-words",
+        "m1/13-named-categories",
+        "m1/99-checkpoint"
+      ]
+    },
+    {
+      "id": "m2",
+      "title": "Um contrato",
+      "subtitle": "TriageClassifier e o caso de uso",
+      "stages": [
+        "02-classifier-port"
+      ]
+    },
+    {
+      "id": "m3",
+      "title": "Decisão estruturada",
+      "subtitle": "Resultado, time e revisão humana",
+      "stages": [
+        "03-structured-decision"
+      ]
+    },
+    {
+      "id": "m4",
+      "title": "Classificador LLM",
+      "subtitle": "Adapter, timeout, erros e validação",
+      "stages": [
+        "04-llm-classifier"
+      ]
+    },
+    {
+      "id": "m5",
+      "title": "Política híbrida",
+      "subtitle": "Um classificador vigia o outro",
+      "stages": [
+        "05-hybrid-policy"
+      ]
+    },
+    {
+      "id": "m6",
+      "title": "Persistência",
+      "subtitle": "Toda decisão deixa rastro",
+      "stages": [
+        "06-persistence"
+      ]
+    },
+    {
+      "id": "m7",
+      "title": "HTTP",
+      "subtitle": "A fronteira",
+      "stages": [
+        "07-http-api"
+      ]
+    },
+    {
+      "id": "m8",
+      "title": "Resiliência",
+      "subtitle": "Carga, tempo e observabilidade",
+      "stages": [
+        "08-resilience"
+      ]
     }
   ]
 }

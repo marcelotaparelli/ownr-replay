@@ -6,7 +6,7 @@ import { CodeFile, type Stage } from "../domain/stage.ts";
 import { TutorRequest } from "../domain/tutor.ts";
 import type { Logger } from "../obs/logger.ts";
 import type { Metrics } from "../obs/metrics.ts";
-import { ModuleError, prepareModules } from "../sandbox/modules.ts";
+import { ModuleError, prepareExercise } from "../sandbox/modules.ts";
 import type { SandboxRunner } from "../sandbox/runner.ts";
 import { parseGithubRepoUrl } from "../services/repo-url.ts";
 import type { TutorService } from "../services/tutor.ts";
@@ -129,22 +129,17 @@ export function createApi(deps: ApiDeps): Router {
       if (files.reduce((n, f) => n + f.content.length, 0) > MAX_SOURCE_BYTES) {
         throw new HttpError(413, "SOURCE_TOO_LARGE", "Código grande demais para esta stage.");
       }
-      // Files the learner did not send keep their starter content.
-      const merged = [
-        ...exercise.starterFiles.map((f) => files.find((sent) => sent.path === f.path) ?? f),
-        ...exercise.supportFiles,
-      ];
-
-      if (!deps.sandbox) {
-        try {
-          return json({ mode: "browser", ...prepareModules(merged, exercise.testFile) });
-        } catch (error) {
-          if (error instanceof ModuleError) throw new HttpError(422, "MODULE_REJECTED", error.message);
-          throw error;
-        }
+      let modules;
+      try {
+        modules = prepareExercise(exercise, files);
+      } catch (error) {
+        if (error instanceof ModuleError) throw new HttpError(422, "MODULE_REJECTED", error.message);
+        throw error;
       }
+      if (!deps.sandbox) return json({ mode: "browser", ...modules });
+
       const started = performance.now();
-      const result = await deps.sandbox.run({ files: merged, testFile: exercise.testFile, timeoutMs: RUN_TIMEOUT_MS });
+      const result = await deps.sandbox.run({ modules, timeoutMs: RUN_TIMEOUT_MS });
       metrics.observe("sandbox_duration", performance.now() - started);
       if (result.timedOut) metrics.increment("sandbox_timeout_total");
       recordAttempt(learnerId, stage.id, "docker", result);

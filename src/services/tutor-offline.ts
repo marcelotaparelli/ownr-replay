@@ -21,9 +21,15 @@ export function offlineAnswer(context: TutorContext, message: string): string {
 
   if (future && !concept) {
     const at = journey.stages.find((s) => s.introduces.includes(future.id));
-    return `**${future.name}** aparece mais adiante${at ? ` (Stage ${String(at.order).padStart(2, "0")} — ${at.title})` : ""}. Por enquanto, o foco é: ${stage.goal}`;
+    return `**${future.name}** aparece mais adiante${at ? ` (em "${at.title}")` : ""}. Por enquanto, o foco é: ${stage.goal}`;
   }
 
+  if (/\blinhas?\b/.test(question) && !selected && stage.lineNotes.length > 0) {
+    return stage.lineNotes.map((n) => `- \`${n.match}\` — ${n.note}`).join("\n") + "\n\nClique numa linha da solução para ver a nota dela, ou selecione um trecho e use **Explain**.";
+  }
+  if (/limita/.test(question) && stage.limitation) {
+    return `Esta versão resolve só o problema desta etapa. A limitação que vem a seguir: ${stage.limitation}`;
+  }
   if (wantsOriginal && !concept && !tool) return originalAnswer(stage.originalCodeRefs);
 
   const parts: string[] = [];
@@ -31,7 +37,7 @@ export function offlineAnswer(context: TutorContext, message: string): string {
     parts.push(`**${concept.name}** — ${concept.quick}`);
     if (wantsWhatIf || !tool) parts.push(`**Sem isso:** ${concept.why}`);
     const block = stage.explanation.find((b) => b.conceptId === concept.id);
-    if (block && (wantsDepth || selected)) parts.push(block.normal);
+    if (block?.normal && (wantsDepth || selected)) parts.push(block.normal);
     const ref = relatedRef(stage.originalCodeRefs, concept, haystack);
     if (ref) parts.push(`No projeto real: \`${ref.path}:${ref.startLine}-${ref.endLine}\` (${ref.symbol}). ${ref.note}`);
   }
@@ -96,7 +102,7 @@ function toolAnswer(tool: ToolReference): string {
 }
 
 function originalAnswer(refs: OriginalCodeReference[]): string {
-  if (refs.length === 0) return "Esta etapa não tem correspondência direta no repositório real.";
+  if (refs.length === 0) return "Esta etapa ainda é uma versão mínima. A ligação com o código real aparece no checkpoint do módulo, quando as peças já estão juntas.";
   return (
     "No projeto real:\n\n" +
     refs.map((ref) => `- \`${ref.path}:${ref.startLine}-${ref.endLine}\` **${ref.symbol}** — ${ref.note}`).join("\n")

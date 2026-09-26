@@ -102,7 +102,7 @@
   ],
   "exercise": {
     "instructions": "Complete `LlmTriageClassifier.classify` para que **toda** falha vire um erro tipado e só um resultado válido passe. O esqueleto atual funciona no caminho feliz e mais nada. Os testes simulam o LLM com fetch falsos.",
-    "starterFiles": ["llm-triage-classifier.ts"],
+    "files": ["llm-triage-classifier.ts"],
     "supportFiles": ["triage.ts", "triage-classifier.ts", "classifier-errors.ts", "llm-result.ts", "suggested-team.ts"]
   },
   "toolbox": [

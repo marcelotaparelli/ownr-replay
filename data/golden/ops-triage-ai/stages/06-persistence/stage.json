@@ -88,7 +88,7 @@
   ],
   "exercise": {
     "instructions": "Complete `PersistedTriageService.execute`: registre o run antes de classificar, feche como sucesso ou falha e **nunca** deixe uma falha ao gravar esconder o erro original. `markFailed` e `failureCode` já estão prontos.",
-    "starterFiles": ["persisted-triage-service.ts"],
+    "files": ["persisted-triage-service.ts"],
     "supportFiles": ["triage.ts", "triage-decision.ts", "classifier-errors.ts", "triage-persistence.ts", "in-memory-runs.ts"]
   },
   "toolbox": [

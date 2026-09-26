@@ -1,0 +1,105 @@
+{
+  "kind": "micro",
+  "title": "Olhar o texto",
+  "subtitle": "Uma palavra decide",
+  "goal": "Decidir a categoria a partir de uma palavra do texto.",
+  "problem": "\"lunch menu\" não é um incidente, mas a função diz que é.\n\nComo decidir **olhando o texto**?",
+  "example": "classify(\"production down\") → \"INCIDENT\"\nclassify(\"lunch menu\")      → \"OTHER\"",
+  "estimatedMinutes": 1,
+  "introduces": [
+    "keyword-match",
+    "default-category"
+  ],
+  "prerequisites": [
+    "function-io"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "text",
+        "label": "texto",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      }
+    ],
+    "edges": [
+      {
+        "from": "text",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "text.includes(\"down\")",
+      "note": "`includes` responde true/false: o texto contém \"down\"? Se sim, devolvemos INCIDENT e a função termina ali."
+    },
+    {
+      "match": "return \"OTHER\"",
+      "note": "Se nenhuma condição acima devolveu nada, cai aqui: a resposta padrão."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "word",
+      "conceptId": "keyword-match",
+      "title": "Uma pista no texto",
+      "quick": "Se o texto contém \"down\", é INCIDENT."
+    },
+    {
+      "id": "default",
+      "conceptId": "default-category",
+      "title": "Uma resposta padrão",
+      "quick": "Quando nenhuma pista aparece, a resposta é OTHER — nunca ficamos sem resposta."
+    }
+  ],
+  "exercise": {
+    "instructions": "Faça `classify` devolver `\"INCIDENT\"` quando o texto mencionar \"down\", e `\"OTHER\"` em qualquer outro caso.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "classify"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "includes",
+      "name": "String.includes()",
+      "signature": "texto.includes(pedaço): boolean",
+      "summary": "true se o texto contém o pedaço.",
+      "example": "\"server down\".includes(\"down\"); // true"
+    },
+    {
+      "id": "if",
+      "name": "if",
+      "summary": "Executa algo só quando a condição é verdadeira.",
+      "example": "if (idade >= 18) return \"adulto\";\nreturn \"menor\";"
+    }
+  ],
+  "limitation": "**\"Production DOWN\"**, em maiúsculas, virou OTHER."
+}

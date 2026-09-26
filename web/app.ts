@@ -125,12 +125,15 @@ async function showStage(journey: JourneyOutline, store: ProgressStore, order: n
   if (store.status(stage.id) === "not_started") store.setStatus(stage.id, "in_progress");
   api.event(stage.id, "stage_opened").catch(reportSyncFailure);
 
-  const mounted = renderStage({ journey, stage, previous, store, actions: stageActions(journey, store, stage) });
+  const module = journey.modules.find((m) => m.id === stage.moduleId);
+  if (!module) throw new Error(`Módulo ${stage.moduleId} não existe nesta jornada.`);
+  const moduleStages = journey.stages.filter((s) => s.moduleId === module.id);
+  const mounted = renderStage({ journey, stage, previous, module, moduleStages, store, actions: stageActions(journey, store, stage) });
   current = { journey, stage, mounted, store, watch: stopwatch() };
 
   main.replaceChildren(mounted.element);
   restoreAnchor(store.snapshot.stages[stage.id]?.anchor, store.status(stage.id));
-  setCrumb(journey, `Stage ${String(order).padStart(2, "0")} · ${stage.title}`);
+  setCrumb(journey, `${module.title} · ${stage.title}`);
   renderNav(nav, journey, store, stage.id);
   tutor.setStage(stage, suggestionsFor(journey, stage));
   renderToolbox(toolboxRoot, stage.toolbox, (question) => tutor.ask(question));
@@ -164,6 +167,16 @@ function stageActions(journey: JourneyOutline, store: ProgressStore, stage: Stag
       store.setStatus(stage.id, "skipped", { timeSpentMs: elapsed() });
       advance();
     },
+    skipModule: () => {
+      if (!isCurrent()) return;
+      const inModule = journey.stages.filter((s) => s.moduleId === stage.moduleId);
+      for (const s of inModule) {
+        if (s.kind !== "micro" || ["completed", "skipped_known"].includes(store.status(s.id))) continue;
+        store.setStatus(s.id, "skipped_known", { knownConcepts: s.introduces, ...(s.id === stage.id ? { timeSpentMs: elapsed() } : {}) });
+      }
+      const checkpoint = inModule.find((s) => s.kind === "checkpoint") ?? journey.stages.find((s) => s.order === (inModule.at(-1)?.order ?? 0) + 1);
+      location.hash = checkpoint ? stageHref(journey.id, checkpoint.order) : `#/j/${journey.id}`;
+    },
     goto: (order: number) => {
       location.hash = stageHref(journey.id, order);
     },
@@ -173,10 +186,9 @@ function stageActions(journey: JourneyOutline, store: ProgressStore, stage: Stag
 
 function suggestionsFor(journey: JourneyOutline, stage: StageDetail): string[] {
   const concept = journey.concepts.find((c) => c.id === stage.introduces[0]);
-  return [
-    "Onde isso está no projeto real?",
-    ...(concept ? [`O que acontece sem ${concept.name}?`] : []),
-  ];
+  const why = concept ? [`O que acontece sem ${concept.name}?`] : [];
+  if (stage.kind === "micro") return ["O que cada linha faz?", "Qual é a limitação desta versão?"];
+  return ["Onde isso está no projeto real?", ...why];
 }
 
 function leaveStage(): void {

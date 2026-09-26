@@ -59,9 +59,10 @@ export type LearningEventType =
   | "explanation_depth"
   | "concept_known"
   | "solution_revealed"
-  | "checkpoint_revealed";
+  | "checkpoint_revealed"
+  | "reconstruct_started";
 
 export const ClientEvent = z.strictObject({
-  type: z.enum(["stage_opened", "explanation_depth", "solution_revealed", "checkpoint_revealed"]),
+  type: z.enum(["stage_opened", "explanation_depth", "solution_revealed", "checkpoint_revealed", "reconstruct_started"]),
   data: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });

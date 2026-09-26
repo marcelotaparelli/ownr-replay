@@ -1,6 +1,6 @@
 import type { JourneyOutline, StageOutline } from "../src/domain/journey.ts";
 import type { KnowledgeLevel, StageStatus } from "../src/domain/progress.ts";
-import type { Concept } from "../src/domain/stage.ts";
+import type { Concept, Module } from "../src/domain/stage.ts";
 import { ApiError, api, type JourneyCard } from "./api.ts";
 import { h } from "./dom.ts";
 import { mdInline } from "./md.ts";
@@ -24,34 +24,55 @@ const STATUS_LABEL: Record<StageStatus, string> = {
 
 export const stageHref = (journeyId: string, order: number): string => `#/j/${journeyId}/s/${order}`;
 
+const DONE: readonly StageStatus[] = ["completed", "skipped_known"];
+
 export function renderNav(root: HTMLElement, journey: JourneyOutline, store: ProgressStore, currentStageId: string | undefined): void {
-  const done = journey.stages.filter((s) => ["completed", "skipped_known"].includes(store.status(s.id))).length;
+  const done = journey.stages.filter((s) => DONE.includes(store.status(s.id))).length;
+  const current = journey.stages.find((s) => s.id === currentStageId);
+  // With no stage open, expand the module where the learner should continue.
+  const focusModule = current?.moduleId ?? journey.stages.find((s) => !DONE.includes(store.status(s.id)))?.moduleId;
   root.replaceChildren(
     h("div", { class: "panel-head" }, h("h2", {}, h("a", { href: `#/j/${journey.id}` }, "Journey")), h("span", { class: "muted" }, `${done}/${journey.stages.length}`)),
     meter(done, journey.stages.length),
+    h("ol", { class: "module-list" }, ...journey.modules.map((module, index) => moduleItem(journey, module, index, store, currentStageId, module.id === focusModule))),
+    h("a", { class: "nav-link", href: `#/j/${journey.id}/mapa` }, "Mapa de conhecimento"),
+  );
+}
+
+function moduleItem(journey: JourneyOutline, module: Module, index: number, store: ProgressStore, currentStageId: string | undefined, open: boolean): HTMLElement {
+  const stages = journey.stages.filter((s) => s.moduleId === module.id);
+  const done = stages.filter((s) => DONE.includes(store.status(s.id))).length;
+  const complete = done === stages.length;
+  const first = stages.find((s) => !DONE.includes(store.status(s.id))) ?? stages[0];
+  const head = h(
+    "a",
+    { class: "module-head" + (open ? " open" : ""), href: first ? stageHref(journey.id, first.order) : "#" },
+    h("span", { class: "icon" + (complete ? " done" : "") }, complete ? "✓" : String(index + 1)),
+    h("span", { class: "t" }, module.title),
+    stages.length > 1 ? h("span", { class: "count" }, `${done}/${stages.length}`) : null,
+  );
+  if (!open || stages.length === 1) return h("li", { class: "module" }, head);
+  return h(
+    "li",
+    { class: "module" },
+    head,
     h(
       "ol",
       { class: "stage-list" },
-      ...journey.stages.map((stage) => {
+      ...stages.map((stage) => {
         const status = store.status(stage.id);
         return h(
           "li",
           { class: status },
           h(
             "a",
-            {
-              href: stageHref(journey.id, stage.order),
-              "aria-current": stage.id === currentStageId ? "page" : undefined,
-              title: STATUS_LABEL[status],
-            },
-            h("span", { class: "icon", "aria-label": STATUS_LABEL[status] }, STATUS_ICON[status]),
-            h("span", { class: "n" }, String(stage.order).padStart(2, "0")),
+            { href: stageHref(journey.id, stage.order), "aria-current": stage.id === currentStageId ? "page" : undefined, title: STATUS_LABEL[status] },
+            h("span", { class: "icon", "aria-label": STATUS_LABEL[status] }, stage.kind === "checkpoint" && !DONE.includes(status) ? "◆" : STATUS_ICON[status]),
             h("span", { class: "t" }, stage.title),
           ),
         );
       }),
     ),
-    h("a", { class: "nav-link", href: `#/j/${journey.id}/mapa` }, "Mapa de conhecimento"),
   );
 }
 
@@ -85,26 +106,33 @@ export function renderOverview(journey: JourneyOutline, store: ProgressStore): H
           { class: "resume" },
           last && target.id === last.id
             ? [
-                h("p", {}, "Você estava na ", h("strong", {}, `Stage ${pad(last.order)} — ${last.title}`), "."),
+                h("p", {}, "Você estava em ", h("strong", {}, `${moduleTitle(journey, last)} — ${last.title}`), "."),
                 anchor ? h("p", { class: "muted" }, `Último ponto: ${anchor}.`) : null,
               ]
-            : h("p", {}, next?.order === 1 ? "Comece pelo menor sistema que resolve o problema central." : h("span", {}, "Próxima: ", h("strong", {}, `Stage ${pad(target.order)} — ${target.title}`))),
+            : h("p", {}, next?.order === 1 ? "Comece pelo menor programa possível. Cada etapa acrescenta uma única ideia." : h("span", {}, "Próxima: ", h("strong", {}, `${moduleTitle(journey, target)} — ${target.title}`))),
           h("a", { class: "btn primary", href: stageHref(journey.id, target.order) }, last && target.id === last.id ? "Continuar" : next?.order === 1 ? "Começar" : "Continuar"),
         )
       : h("aside", { class: "resume done" }, h("p", {}, "Jornada concluída. Abra o repositório real e confira se ele agora parece familiar.")),
     h("h2", {}, "Evolução"),
-    h("ol", { class: "evolution" }, ...journey.stages.map((s) => evolutionItem(journey, s, store))),
+    h("ol", { class: "evolution" }, ...journey.modules.map((m) => evolutionItem(journey, m, store))),
   );
 }
 
-function evolutionItem(journey: JourneyOutline, stage: StageOutline, store: ProgressStore): HTMLElement {
-  const status = store.status(stage.id);
+function evolutionItem(journey: JourneyOutline, module: Module, store: ProgressStore): HTMLElement {
+  const stages = journey.stages.filter((s) => s.moduleId === module.id);
+  const done = stages.filter((s) => DONE.includes(store.status(s.id))).length;
+  const first = stages.find((s) => !DONE.includes(store.status(s.id))) ?? stages[0];
+  const minutes = stages.reduce((n, s) => n + s.estimatedMinutes, 0);
   return h(
     "li",
-    { class: status },
-    h("a", { href: stageHref(journey.id, stage.order) }, h("strong", {}, `${pad(stage.order)} · ${stage.title}`)),
-    h("span", { class: "muted" }, ` — ${stage.summary.why}`),
+    { class: done === stages.length ? "completed" : done > 0 ? "in_progress" : "not_started" },
+    h("a", { href: first ? stageHref(journey.id, first.order) : "#" }, h("strong", {}, module.title)),
+    h("span", { class: "muted" }, ` — ${module.subtitle ?? ""} · ${stages.length > 1 ? `${stages.length} etapas, ` : ""}~${minutes} min${done ? ` · ${done}/${stages.length}` : ""}`),
   );
+}
+
+function moduleTitle(journey: JourneyOutline, stage: StageOutline): string {
+  return journey.modules.find((m) => m.id === stage.moduleId)?.title ?? "";
 }
 
 type ConceptRow = { concept: Concept; state: KnowledgeLevel; stage: StageOutline | undefined };
@@ -141,7 +169,7 @@ export function renderKnowledgeMap(journey: JourneyOutline, store: ProgressStore
                 h("span", { class: "icon", "aria-label": state }, state === "known" || state === "mastered" ? "✓" : state === "learning" ? "→" : "○"),
                 h("span", { class: "kname" }, concept.name),
                 h("span", { class: "muted kquick", html: mdInline(concept.quick) }),
-                stage ? h("a", { class: "muted", href: stageHref(journey.id, stage.order) }, `Stage ${pad(stage.order)}`) : null,
+                stage ? h("a", { class: "muted", href: stageHref(journey.id, stage.order) }, stage.title) : null,
                 state === "known" && !store.isKnown(concept.id) ? h("span") : h("button", {
                   type: "button",
                   class: "link",
@@ -202,4 +230,3 @@ export function renderHome(journeys: JourneyCard[]): HTMLElement {
   );
 }
 
-const pad = (n: number): string => String(n).padStart(2, "0");

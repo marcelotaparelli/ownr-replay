@@ -86,7 +86,7 @@
   ],
   "exercise": {
     "instructions": "Implemente `HybridPolicy.decide` (e as funções auxiliares que quiser). `decideSingle`, `isHighSeverity`, `decision` e `REVIEW_REASON_ORDER` já existem.",
-    "starterFiles": ["hybrid-policy.ts"],
+    "files": ["hybrid-policy.ts"],
     "supportFiles": ["triage.ts", "triage-decision.ts", "triage-classifier.ts", "classifier-errors.ts", "triage-ticket.ts"]
   },
   "toolbox": [

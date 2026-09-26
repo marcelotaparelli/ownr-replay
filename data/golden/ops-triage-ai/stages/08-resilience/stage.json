@@ -94,7 +94,7 @@
   ],
   "exercise": {
     "instructions": "Implemente `ConcurrencyLimiter`, `withTimeout` e `metricKey`. São pequenos — o objetivo é entender os casos de borda que os testes verificam.",
-    "starterFiles": ["resilience.ts", "observability.ts"]
+    "files": ["resilience.ts", "observability.ts"]
   },
   "toolbox": [
     {

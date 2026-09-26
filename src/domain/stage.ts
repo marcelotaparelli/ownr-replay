@@ -28,8 +28,8 @@ export const ExplanationBlock = z.strictObject({
   conceptId: z.string().optional(),
   title: z.string().min(1),
   quick: z.string().min(1),
-  normal: z.string().min(1),
-  deep: z.string().min(1),
+  normal: z.string().min(1).optional(),
+  deep: z.string().min(1).optional(),
 });
 export type ExplanationBlock = z.infer<typeof ExplanationBlock>;
 
@@ -52,6 +52,8 @@ export const OriginalCodeReference = z.strictObject({
   symbol: z.string().min(1),
   /** File of the pedagogical version this maps to. */
   replayFile: z.string().min(1),
+  /** Declaration in the replay file, when its name differs from the production symbol. */
+  replaySymbol: z.string().min(1).optional(),
   /** One or two lines: what is different in production and why. */
   note: z.string().min(1),
   snippet: z.string(),
@@ -59,12 +61,20 @@ export const OriginalCodeReference = z.strictObject({
 });
 export type OriginalCodeReference = z.infer<typeof OriginalCodeReference>;
 
+const Identifier = z.string().regex(/^[A-Za-z_$][\w$]*$/);
+
 export const Exercise = z.strictObject({
   instructions: z.string().min(1),
+  /** Files the learner writes. Micro stages and checkpoints start them empty: recall, not fill-in-the-blanks. */
   starterFiles: z.array(CodeFile).min(1),
   solutionFiles: z.array(CodeFile).min(1),
-  /** Read-only files from earlier stages the exercise builds on; always sent by the server. */
+  /**
+   * Read-only files holding what earlier steps already rebuilt (data tables, previous functions).
+   * Their exports are auto-imported into the learner's files, so only the new idea gets rewritten.
+   */
   supportFiles: z.array(CodeFile),
+  /** Names the tests import from the learner's file; exported automatically when the learner omits `export`. */
+  expose: z.array(Identifier),
   /** Owned by the server; the client never supplies tests. */
   testFile: CodeFile,
 });
@@ -84,20 +94,37 @@ export const StageSummary = z.strictObject({
 });
 export type StageSummary = z.infer<typeof StageSummary>;
 
+/**
+ * micro: one small idea; the solution is shown, then rebuilt from an empty editor.
+ * checkpoint: the whole module rebuilt from scratch, then compared with the replay and the real code.
+ * chapter: a larger stage not yet decomposed into micro stages (starter code allowed).
+ */
+export const StageKind = z.enum(["micro", "checkpoint", "chapter"]);
+export type StageKind = z.infer<typeof StageKind>;
+
+export const LineNote = z.strictObject({ match: z.string().min(1), note: z.string().min(1) });
+export type LineNote = z.infer<typeof LineNote>;
+
 export const Stage = z.strictObject({
   id: z.string().min(1),
   order: z.number().int().positive(),
+  moduleId: z.string().min(1),
+  kind: StageKind,
   title: z.string().min(1),
   subtitle: z.string().optional(),
   goal: z.string().min(1),
   problem: z.string().min(1),
+  /** Concrete input → output: says WHAT is expected, never HOW. */
+  example: z.string().optional(),
   estimatedMinutes: z.number().int().positive(),
   /** Concept ids introduced here. */
   introduces: z.array(z.string()),
   /** Concept ids from earlier stages this stage leans on. */
   prerequisites: z.array(z.string()),
-  architecture: ArchitectureGraph,
+  architecture: ArchitectureGraph.optional(),
   referenceCode: z.array(CodeFile).min(1),
+  /** Shown when the learner clicks a solution line containing `match`. */
+  lineNotes: z.array(LineNote),
   explanation: z.array(ExplanationBlock),
   originalCodeRefs: z.array(OriginalCodeReference),
   exercise: Exercise.optional(),
@@ -109,6 +136,17 @@ export const Stage = z.strictObject({
   }),
   completionCriteria: z.array(CompletionCriterion).min(1),
   checkpoint: Checkpoint.optional(),
-  summary: StageSummary,
+  /** The perceptible limitation that motivates the next step. */
+  limitation: z.string().optional(),
+  summary: StageSummary.optional(),
 });
 export type Stage = z.infer<typeof Stage>;
+
+/** A chapter of the journey; the sidebar groups its stages under it. */
+export const Module = z.strictObject({
+  id: z.string().regex(/^[a-z0-9-]+$/),
+  title: z.string().min(1),
+  subtitle: z.string().optional(),
+  stageIds: z.array(z.string()).min(1),
+});
+export type Module = z.infer<typeof Module>;

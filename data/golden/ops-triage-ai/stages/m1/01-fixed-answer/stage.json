@@ -1,0 +1,97 @@
+{
+  "kind": "micro",
+  "title": "Uma resposta fixa",
+  "subtitle": "Entra um texto, sai uma categoria",
+  "goal": "Ter uma função que recebe o texto de um ticket e devolve uma categoria.",
+  "problem": "Queremos classificar o ticket **\"production down\"** como **INCIDENT**.\n\nQual é o programa mais simples possível que faz isso?",
+  "example": "classify(\"production down\")\n→ \"INCIDENT\"",
+  "estimatedMinutes": 1,
+  "introduces": [
+    "function-io"
+  ],
+  "prerequisites": [],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "text",
+        "label": "texto",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      }
+    ],
+    "edges": [
+      {
+        "from": "text",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "function classify",
+      "note": "Declara a função classify. `text` é o que entra; o `: string` depois dos parênteses diz que sai um texto."
+    },
+    {
+      "match": "return \"INCIDENT\"",
+      "note": "Sempre a mesma resposta. A função ainda nem olha o texto — de propósito."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "io",
+      "conceptId": "function-io",
+      "title": "Entra texto, sai categoria",
+      "quick": "Uma função é uma caixa: entra o texto do ticket, sai uma categoria. Esta devolve sempre `\"INCIDENT\"`.",
+      "normal": "`text: string` e `: string` são anotações do TypeScript: dizem o que entra e o que sai. Sem elas, é JavaScript puro — e funcionaria igual."
+    }
+  ],
+  "exercise": {
+    "instructions": "Crie uma função `classify` que recebe um texto e devolve `\"INCIDENT\"`.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "classify"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "function",
+      "name": "function",
+      "signature": "function nome(param) { ... }",
+      "summary": "Declara uma função: recebe parâmetros, devolve um valor com return.",
+      "example": "function double(n: number): number {\n  return n * 2;\n}"
+    },
+    {
+      "id": "return",
+      "name": "return",
+      "summary": "Encerra a função e devolve o valor.",
+      "example": "return \"pronto\";"
+    }
+  ],
+  "limitation": "Mas agora **\"lunch menu\"** também vira INCIDENT."
+}

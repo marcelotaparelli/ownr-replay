@@ -24,7 +24,15 @@ web/            frontend vanilla TS (≈20 KB gzip), progresso local-first
 data/golden/    jornada curada: stage.json + reference/ starter/ tests.ts + trechos originais no SHA fixo
 ```
 
-Adicionar uma stage: crie `data/golden/<journey>/stages/NN-slug/` com `stage.json`, `reference/`, `starter/` e `tests.ts` (importando `replay:test`) e registre o slug em `journey.json`. `bun test` recusa a stage se a solução não passar, se o starter já passar, ou se referências/conceitos/linhas do original forem inconsistentes.
+## Pedagogia: módulos e micro etapas
+
+Cada módulo decompõe um capítulo do repo em **micro etapas** de 1–2 minutos, com **uma ideia nova** cada: problema mínimo → solução mínima (linhas novas destacadas, nota por linha) → entenda → **reconstrua do zero** (editor vazio, solução escondida) → testes → **nova limitação**, que motiva a etapa seguinte. O módulo termina num **checkpoint**: reconstruir tudo do zero e comparar *sua versão ↔ replay consolidado ↔ código real*. "Já sei isso" e "Já domino este módulo" pulam sem bloquear.
+
+O aluno escreve código puro: `export` é adicionado automaticamente para os nomes que os testes usam, e o que etapas anteriores já construíram (tabelas, funções) vem como arquivo fornecido, importado automaticamente. Só a ideia nova é reescrita.
+
+- Module 1 é gerado por `scripts/author-golden-m1.ts` (edite lá e rode `bun scripts/author-golden-m1.ts`).
+- Os módulos 2–8 ainda são capítulos não decompostos (`kind: "chapter"`, com starter).
+- Layout de uma stage: `stage.json`, `reference/` (solução mostrada), `given/` (arquivos fornecidos), `tests.ts` (importa `replay:test`); capítulos também têm `starter/`. `bun test` recusa a jornada se uma solução não passar, se o ponto de partida já passar, se uma micro etapa tiver starter ou não nomear sua limitação.
 
 ## Execução de código
 

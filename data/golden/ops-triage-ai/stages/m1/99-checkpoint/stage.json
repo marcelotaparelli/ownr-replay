@@ -1,0 +1,210 @@
+{
+  "kind": "checkpoint",
+  "title": "Checkpoint: o classificador inteiro",
+  "subtitle": "Do zero, sem olhar",
+  "goal": "Reconstruir sozinho o classificador determinístico completo e compará-lo com o código real.",
+  "problem": "Juntar todas as peças do módulo em um arquivo, começando do editor vazio. Depois, comparar a sua versão com a versão consolidada do Replay e com o código real do ops-triage-ai.",
+  "example": "Categorias: INCIDENT, BUG, ACCESS, OTHER (Category)\nPistas (palavra inteira, sem diferenciar maiúsculas) e pesos:\n  down 5, outage 4 → INCIDENT · bug 3, error 1 → BUG · login 4, password 2 → ACCESS\nscoreCategory(category, title, description): título vale o dobro\nclassify(ticket): maior placar; empate → INCIDENT, ACCESS, BUG; nada → OTHER",
+  "estimatedMinutes": 5,
+  "introduces": [],
+  "prerequisites": [
+    "string-enum",
+    "regex-word-boundary",
+    "tie-break",
+    "weighted-signals",
+    "title-weight"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "Category",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 2,
+        "row": 1
+      },
+      {
+        "id": "tie",
+        "label": "TIE_BREAK",
+        "kind": "data",
+        "col": 0,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "score",
+        "rel": "calls"
+      },
+      {
+        "from": "score",
+        "to": "rules",
+        "rel": "reads"
+      },
+      {
+        "from": "classify",
+        "to": "tie",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classifier.ts"
+  ],
+  "lineNotes": [],
+  "explanation": [
+    {
+      "id": "real",
+      "title": "O que o código real faz a mais",
+      "quick": "O mesmo esqueleto — sinais com peso, título em dobro, desempate explícito — com mais categorias e mais sinais por categoria.",
+      "normal": "No `DeterministicTriageClassifier` real, cada sinal também tem um `label` (\"production_down\") usado para explicar a decisão; `normalize` remove acentos e pontuação; e o resultado não é só a categoria: inclui confiança, prioridade, risco e time sugerido. Esses são os próximos módulos."
+    }
+  ],
+  "originalCodeRefs": [
+    {
+      "path": "src/domain/triage.ts",
+      "startLine": 1,
+      "endLine": 9,
+      "symbol": "Category",
+      "replayFile": "classifier.ts",
+      "note": "O mesmo enum, com 7 categorias (inclui FEATURE_REQUEST, CONTENT_CHANGE e SUPPORT). Mora na camada de domínio."
+    },
+    {
+      "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+      "startLine": 24,
+      "endLine": 66,
+      "symbol": "CATEGORY_SIGNALS",
+      "replayFile": "classifier.ts",
+      "replaySymbol": "RULES",
+      "note": "Nossa tabela RULES, organizada por categoria (Record<Category, ...>), com vários sinais por categoria e um label por sinal para explicar a decisão."
+    },
+    {
+      "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+      "startLine": 68,
+      "endLine": 77,
+      "symbol": "CATEGORY_TIE_BREAK",
+      "replayFile": "classifier.ts",
+      "note": "Nosso TIE_BREAK, com o mesmo raciocínio no comentário: \"Safety-sensitive operational categories win.\""
+    },
+    {
+      "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+      "startLine": 116,
+      "endLine": 132,
+      "symbol": "scoreCategory",
+      "replayFile": "classifier.ts",
+      "note": "Idêntico em lógica: peso × 2 no título, peso na descrição. Também devolve quais sinais casaram (matched)."
+    },
+    {
+      "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+      "startLine": 78,
+      "endLine": 114,
+      "symbol": "classify",
+      "replayFile": "classifier.ts",
+      "note": "Nosso classify, mais: confiança pela margem entre 1º e 2º colocados, prioridade, risco, time sugerido e justificativa."
+    },
+    {
+      "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+      "startLine": 221,
+      "endLine": 229,
+      "symbol": "normalize",
+      "replayFile": "classifier.ts",
+      "replaySymbol": "classify",
+      "note": "Nosso toLowerCase, mais remoção de acentos e pontuação."
+    }
+  ],
+  "exercise": {
+    "instructions": "Reconstrua em `classifier.ts`, do zero: `Category`, as regras, `scoreCategory(category, title, description)` e `classify(ticket)`. Os requisitos estão acima; o resto é com você.",
+    "files": [
+      "classifier.ts"
+    ],
+    "expose": [
+      "Category",
+      "scoreCategory",
+      "classify"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "enum",
+      "name": "enum",
+      "signature": "enum Nome { A = \"A\", B = \"B\" }",
+      "summary": "Um conjunto fechado de valores com nome.",
+      "example": "enum Color { RED = \"RED\", BLUE = \"BLUE\" }\nColor.RED; // \"RED\""
+    },
+    {
+      "id": "regex-test",
+      "name": "RegExp.test()",
+      "signature": "/padrão/.test(texto): boolean",
+      "summary": "true se o padrão casa em algum lugar do texto.",
+      "example": "/cat/.test(\"concatenate\"); // true"
+    },
+    {
+      "id": "word-boundary",
+      "name": "\\b (fronteira de palavra)",
+      "summary": "Casa onde uma palavra começa ou termina.",
+      "example": "/\\bcat\\b/.test(\"concatenate\"); // false\n/\\bcat\\b/.test(\"my cat\");      // true"
+    },
+    {
+      "id": "for-of",
+      "name": "for...of",
+      "signature": "for (const item of lista) { ... }",
+      "summary": "Percorre os itens de uma lista, em ordem.",
+      "example": "for (const fruit of fruits) {\n  if (fruit.color === \"red\") return fruit.name;\n}"
+    },
+    {
+      "id": "running-max",
+      "name": "Guardar o maior até agora",
+      "summary": "Duas variáveis: o melhor item e seu valor; troque quando achar um maior.",
+      "example": "let best = \"\";\nlet bestValue = 0;\nfor (const p of players) {\n  if (p.points > bestValue) {\n    best = p.name;\n    bestValue = p.points;\n  }\n}"
+    },
+    {
+      "id": "to-lower",
+      "name": "String.toLowerCase()",
+      "summary": "Cópia do texto em minúsculas.",
+      "example": "\"Server DOWN\".toLowerCase(); // \"server down\""
+    }
+  ],
+  "checkpoint": {
+    "question": "No código real, por que o título ter peso dobrado é uma decisão que precisa ser medida, e não uma verdade?",
+    "answer": "Porque é uma hipótese sobre como as pessoas escrevem tickets. O projeto real avalia o classificador em datasets rotulados: se dobrar o título piorasse os acertos, o peso mudaria. Os pesos são parâmetros de produto, não fatos."
+  }
+}

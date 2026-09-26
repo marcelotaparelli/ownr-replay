@@ -1,0 +1,92 @@
+{
+  "kind": "micro",
+  "title": "Mais categorias",
+  "subtitle": "Várias perguntas, em ordem",
+  "goal": "Reconhecer INCIDENT, BUG e ACCESS.",
+  "problem": "Tickets de bug e de acesso também chegam: \"Checkout bug\", \"Cannot login\".\n\nComo reconhecer mais de uma categoria?",
+  "example": "{ title: \"Checkout bug\", description: \"\" } → \"BUG\"\n{ title: \"Cannot login\", description: \"\" } → \"ACCESS\"\n{ title: \"Login bug\", description: \"\" }    → \"BUG\"",
+  "estimatedMinutes": 2,
+  "introduces": [
+    "ordered-checks"
+  ],
+  "prerequisites": [
+    "ticket-input",
+    "default-category"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "\"bug\"",
+      "note": "Uma pergunta nova para uma categoria nova."
+    },
+    {
+      "match": "\"login\"",
+      "note": "Só chega aqui se não achou \"down\" nem \"bug\". A ordem das perguntas decide quando duas pistas aparecem."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "order",
+      "conceptId": "ordered-checks",
+      "title": "A primeira pista que aparece vence",
+      "quick": "As perguntas são feitas em ordem e a função termina no primeiro `return`. \"Login bug\" vira BUG porque \"bug\" é perguntado antes de \"login\"."
+    }
+  ],
+  "exercise": {
+    "instructions": "Reconheça três categorias, verificando nesta ordem: \"down\" → `\"INCIDENT\"`, \"bug\" → `\"BUG\"`, \"login\" → `\"ACCESS\"`. Nenhuma → `\"OTHER\"`.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "classify"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "if",
+      "name": "if",
+      "summary": "Executa algo só quando a condição é verdadeira.",
+      "example": "if (idade >= 18) return \"adulto\";\nreturn \"menor\";"
+    }
+  ],
+  "limitation": "Cada categoria real tem **várias** palavras (\"outage\", \"error\", \"password\"…). Com um `if` por palavra, a função vira uma parede de ifs."
+}

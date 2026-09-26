@@ -4,28 +4,106 @@
   "goal": "Transformar a saída do classificador em uma decisão acionável: quem atende, quão urgente, e se um humano precisa olhar.",
   "problem": "\"BUG\" não diz se é urgente, quem deve atender nem quão confiável é a resposta. Uma queda de produção classificada com pouca certeza não deveria seguir sozinha. Que forma deve ter o resultado para que alguém possa agir — e quando pedir revisão humana?",
   "estimatedMinutes": 6,
-  "introduces": ["structured-result", "confidence", "human-review"],
-  "prerequisites": ["string-enum", "record-type", "interface-contract"],
+  "introduces": [
+    "structured-result",
+    "confidence",
+    "human-review",
+    "record-type"
+  ],
+  "prerequisites": [
+    "string-enum",
+    "interface-contract"
+  ],
   "architecture": {
     "nodes": [
-      { "id": "ticket", "label": "Ticket", "kind": "data", "col": 0, "row": 0 },
-      { "id": "triage-ticket", "label": "TriageTicket", "kind": "class", "col": 1, "row": 0 },
-      { "id": "triage-classifier", "label": "TriageClassifier", "kind": "interface", "col": 2, "row": 0 },
-      { "id": "result", "label": "ClassifierResult", "kind": "data", "col": 3, "row": 0 },
-      { "id": "deterministic", "label": "Deterministic…", "kind": "class", "col": 2, "row": 1 },
-      { "id": "team", "label": "suggestedTeam()", "kind": "function", "col": 3, "row": 1 },
-      { "id": "decision", "label": "TriageDecision", "kind": "data", "col": 1, "row": 1 }
+      {
+        "id": "ticket",
+        "label": "Ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "triage-ticket",
+        "label": "TriageTicket",
+        "kind": "class",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "triage-classifier",
+        "label": "TriageClassifier",
+        "kind": "interface",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "result",
+        "label": "ClassifierResult",
+        "kind": "data",
+        "col": 3,
+        "row": 0
+      },
+      {
+        "id": "deterministic",
+        "label": "Deterministic…",
+        "kind": "class",
+        "col": 2,
+        "row": 1
+      },
+      {
+        "id": "team",
+        "label": "suggestedTeam()",
+        "kind": "function",
+        "col": 3,
+        "row": 1
+      },
+      {
+        "id": "decision",
+        "label": "TriageDecision",
+        "kind": "data",
+        "col": 1,
+        "row": 1
+      }
     ],
     "edges": [
-      { "from": "ticket", "to": "triage-ticket", "rel": "flows_to" },
-      { "from": "triage-ticket", "to": "triage-classifier", "rel": "depends_on" },
-      { "from": "triage-classifier", "to": "result", "rel": "creates" },
-      { "from": "deterministic", "to": "triage-classifier", "rel": "implements" },
-      { "from": "deterministic", "to": "team", "rel": "calls" },
-      { "from": "triage-ticket", "to": "decision", "rel": "creates" }
+      {
+        "from": "ticket",
+        "to": "triage-ticket",
+        "rel": "flows_to"
+      },
+      {
+        "from": "triage-ticket",
+        "to": "triage-classifier",
+        "rel": "depends_on"
+      },
+      {
+        "from": "triage-classifier",
+        "to": "result",
+        "rel": "creates"
+      },
+      {
+        "from": "deterministic",
+        "to": "triage-classifier",
+        "rel": "implements"
+      },
+      {
+        "from": "deterministic",
+        "to": "team",
+        "rel": "calls"
+      },
+      {
+        "from": "triage-ticket",
+        "to": "decision",
+        "rel": "creates"
+      }
     ]
   },
-  "referenceCode": ["triage.ts", "suggested-team.ts", "triage-decision.ts"],
+  "referenceCode": [
+    "triage.ts",
+    "suggested-team.ts",
+    "triage-decision.ts"
+  ],
   "explanation": [
     {
       "id": "result",
@@ -96,8 +174,13 @@
   ],
   "exercise": {
     "instructions": "Implemente `suggestedTeamForCategory` com um `Record` e `decideSingle`, que transforma um `ClassifierResult` em `TriageDecision`. Os tipos estão em `triage.ts`.",
-    "starterFiles": ["suggested-team.ts", "triage-decision.ts"],
-    "supportFiles": ["triage.ts"]
+    "files": [
+      "suggested-team.ts",
+      "triage-decision.ts"
+    ],
+    "supportFiles": [
+      "triage.ts"
+    ]
   },
   "toolbox": [
     {
@@ -140,8 +223,18 @@
     "answer": "Para garantir coerência: qualquer classificador que diga ACCESS manda para SUPPORT. Se cada classificador escolhesse o time, combinações inválidas seriam possíveis — e um classificador menos confiável (um LLM, por exemplo) poderia rotear errado."
   },
   "summary": {
-    "added": ["ClassifierResult", "suggestedTeamForCategory", "TriageDecision"],
+    "added": [
+      "ClassifierResult",
+      "suggestedTeamForCategory",
+      "TriageDecision"
+    ],
     "why": "Dar a cada ticket informação suficiente para agir — e um sinal claro de quando um humano precisa revisar.",
-    "flow": ["Ticket", "TriageTicket", "TriageClassifier → ClassifierResult", "decideSingle()", "TriageDecision"]
+    "flow": [
+      "Ticket",
+      "TriageTicket",
+      "TriageClassifier → ClassifierResult",
+      "decideSingle()",
+      "TriageDecision"
+    ]
   }
 }

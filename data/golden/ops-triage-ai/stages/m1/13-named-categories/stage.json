@@ -1,0 +1,140 @@
+{
+  "kind": "micro",
+  "title": "Categorias com nome",
+  "subtitle": "Um conjunto fechado",
+  "goal": "Tornar as categorias possíveis um conjunto fechado e nomeado.",
+  "problem": "Qualquer string passa por categoria: \"INCIDNET\", \"incident\", \"Incident\". Queremos que só existam INCIDENT, BUG, ACCESS e OTHER — e que um erro de digitação seja apontado.",
+  "example": "Category.INCIDENT → \"INCIDENT\"\nclassify(...) devolve Category.ACCESS, não uma string solta",
+  "estimatedMinutes": 1,
+  "introduces": [
+    "string-enum"
+  ],
+  "prerequisites": [
+    "tie-break"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "Category",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "id": "score",
+        "label": "scoreCategory()",
+        "kind": "function",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "id": "rules",
+        "label": "RULES",
+        "kind": "data",
+        "col": 2,
+        "row": 1
+      },
+      {
+        "id": "tie",
+        "label": "TIE_BREAK",
+        "kind": "data",
+        "col": 0,
+        "row": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      },
+      {
+        "from": "classify",
+        "to": "score",
+        "rel": "calls"
+      },
+      {
+        "from": "score",
+        "to": "rules",
+        "rel": "reads"
+      },
+      {
+        "from": "classify",
+        "to": "tie",
+        "rel": "reads"
+      }
+    ]
+  },
+  "referenceCode": [
+    "category.ts",
+    "rules.ts",
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "enum Category",
+      "note": "Declara o conjunto fechado de categorias."
+    },
+    {
+      "match": "INCIDENT = \"INCIDENT\"",
+      "note": "Cada membro tem um nome e um valor. Em runtime, Category.INCIDENT é a própria string \"INCIDENT\"."
+    },
+    {
+      "match": "Category.INCIDENT, weight: 5",
+      "note": "A tabela passa a usar os nomes. Category.INCIDNET não existe: o TypeScript aponta o erro antes de rodar."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "enum",
+      "conceptId": "string-enum",
+      "title": "Nomes em vez de strings soltas",
+      "quick": "`enum Category` lista as quatro categorias. Tabela e `classify` passam a usar `Category.X`.",
+      "normal": "Em runtime nada muda — `Category.BUG === \"BUG\"`. O ganho é no editor: digitar `Category.BUGG` é erro de compilação, e o autocompletar mostra as opções."
+    }
+  ],
+  "exercise": {
+    "instructions": "Crie o `enum Category` com INCIDENT, BUG, ACCESS e OTHER, cada um valendo o próprio nome como texto. A tabela e `classify` (já prontas) usam `Category`.",
+    "files": [
+      "category.ts"
+    ],
+    "supportFiles": [
+      "rules.ts",
+      "score.ts",
+      "classify.ts"
+    ],
+    "expose": [
+      "Category"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "enum",
+      "name": "enum",
+      "signature": "enum Nome { A = \"A\", B = \"B\" }",
+      "summary": "Um conjunto fechado de valores com nome.",
+      "example": "enum Color { RED = \"RED\", BLUE = \"BLUE\" }\nColor.RED; // \"RED\""
+    }
+  ],
+  "limitation": "Você reconstruiu cada peça separadamente. Consegue montar o classificador inteiro, **do zero, sem olhar**?"
+}

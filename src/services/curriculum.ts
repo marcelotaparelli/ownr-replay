@@ -1,31 +1,37 @@
-import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { basename, join } from "node:path";
 import { z } from "zod";
 import { graphProblems } from "../domain/architecture-diff.ts";
+import { ArchitectureGraph } from "../domain/architecture.ts";
 import type { Journey } from "../domain/journey.ts";
 import {
   Checkpoint,
   CodeFile,
   Concept,
   ExplanationBlock,
+  LineNote,
   OriginalCodeReference,
   Stage,
+  StageKind,
   StageSummary,
   ToolReference,
+  type Module,
 } from "../domain/stage.ts";
-import { ArchitectureGraph } from "../domain/architecture.ts";
 
 /**
  * Loads hand-authored journeys from disk. Layout per journey:
- *   journey.json
- *   original/<repo path>          files copied from the real repo at `repo.sha`
- *   stages/<NN-slug>/stage.json   pedagogy
- *   stages/<NN-slug>/reference/   code shown as "código pronto"
- *   stages/<NN-slug>/starter/     exercise starting point
- *   stages/<NN-slug>/solution/    optional; defaults to reference/
- *   stages/<NN-slug>/tests.ts     tests run against the learner's files
+ *   journey.json                   modules → stage paths, concept catalog
+ *   original/<repo path>           files copied from the real repo at `repo.sha`
+ *   stages/<path>/stage.json       pedagogy (path: "NN-slug" or "<module>/NN-slug")
+ *   stages/<path>/reference/       the solution shown to the learner
+ *   stages/<path>/starter/         chapters only: exercise starting point (micro stages start empty)
+ *   stages/<path>/given/           read-only files the exercise builds on (defaults to reference/)
+ *   stages/<path>/solution/        optional; defaults to reference/
+ *   stages/<path>/tests.ts         tests run against the learner's files
  * The future Stage Generator will produce the same `Journey` shape.
  */
+
+const StagePath = z.string().regex(/^(?:[a-z0-9-]+\/)?\d{2}-[a-z0-9-]+$/);
 
 const JourneySource = z.strictObject({
   id: z.string().regex(/^[a-z0-9-]+$/),
@@ -37,34 +43,49 @@ const JourneySource = z.strictObject({
     url: z.string().url(),
     sha: z.string().regex(/^[0-9a-f]{40}$/),
   }),
-  stages: z.array(z.string().regex(/^\d{2}-[a-z0-9-]+$/)).min(1),
+  modules: z
+    .array(
+      z.strictObject({
+        id: z.string().regex(/^[a-z0-9-]+$/),
+        title: z.string().min(1),
+        subtitle: z.string().optional(),
+        stages: z.array(StagePath).min(1),
+      }),
+    )
+    .min(1),
   concepts: z.array(Concept).min(1),
 });
+type JourneySource = z.infer<typeof JourneySource>;
 
 const StageSource = z.strictObject({
+  kind: StageKind.default("chapter"),
   title: z.string().min(1),
   subtitle: z.string().optional(),
   goal: z.string().min(1),
   problem: z.string().min(1),
+  example: z.string().optional(),
   estimatedMinutes: z.number().int().positive(),
   introduces: z.array(z.string()),
   prerequisites: z.array(z.string()),
-  architecture: ArchitectureGraph,
+  architecture: ArchitectureGraph.optional(),
   referenceCode: z.array(z.string()).min(1),
+  lineNotes: z.array(LineNote).default([]),
   explanation: z.array(ExplanationBlock),
-  originalCodeRefs: z.array(OriginalCodeReference.omit({ snippet: true, url: true })),
+  originalCodeRefs: z.array(OriginalCodeReference.omit({ snippet: true, url: true })).default([]),
   exercise: z
     .strictObject({
       instructions: z.string().min(1),
-      starterFiles: z.array(z.string()).min(1),
+      files: z.array(z.string()).min(1),
       solutionFiles: z.array(z.string()).optional(),
       supportFiles: z.array(z.string()).default([]),
+      expose: z.array(z.string()).default([]),
       testFile: z.string().default("tests.ts"),
     })
     .optional(),
   toolbox: z.array(ToolReference),
   checkpoint: Checkpoint.optional(),
-  summary: StageSummary,
+  limitation: z.string().optional(),
+  summary: StageSummary.optional(),
 });
 
 export class CurriculumError extends Error {
@@ -76,9 +97,15 @@ export class CurriculumError extends Error {
 
 export function loadJourney(dir: string): Journey {
   const source = JourneySource.parse(readJson(join(dir, "journey.json")));
-  const stages = source.stages.map((slug, index) =>
-    loadStage(dir, source, slug, index + 1),
-  );
+  const paths = source.modules.flatMap((module) => module.stages.map((path) => ({ module: module.id, path })));
+  const ids = paths.map(({ module, path }) => stageId(source.id, module, path));
+  const stages = paths.map(({ module, path }, index) => loadStage(dir, source, module, path, index + 1, ids.slice(0, index)));
+  const modules: Module[] = source.modules.map((module) => ({
+    id: module.id,
+    title: module.title,
+    ...(module.subtitle === undefined ? {} : { subtitle: module.subtitle }),
+    stageIds: stages.filter((s) => s.moduleId === module.id).map((s) => s.id),
+  }));
   const journey: Journey = {
     id: source.id,
     title: source.title,
@@ -86,6 +113,7 @@ export function loadJourney(dir: string): Journey {
     repo: source.repo,
     status: "ready",
     concepts: source.concepts,
+    modules,
     stages,
   };
   const problems = validateJourney(journey);
@@ -99,32 +127,40 @@ export function loadAllJourneys(root: string): Journey[] {
     .map((entry) => loadJourney(join(root, entry.name)));
 }
 
-function loadStage(
-  dir: string,
-  journey: z.infer<typeof JourneySource>,
-  slug: string,
-  order: number,
-): Stage {
-  const stageDir = join(dir, "stages", slug);
+/** Nested micro stages get "<module>-NN"; top-level chapters keep their historical "NN" ids. */
+function stageId(journeyId: string, moduleId: string, path: string): string {
+  const number = basename(path).slice(0, 2);
+  return path.includes("/") ? `${journeyId}.${moduleId}-${number}` : `${journeyId}.${number}`;
+}
+
+function loadStage(dir: string, journey: JourneySource, moduleId: string, path: string, order: number, previousStages: string[]): Stage {
+  const stageDir = join(dir, "stages", path);
   const source = StageSource.parse(readJson(join(stageDir, "stage.json")));
-  const code = (sub: string, path: string): CodeFile =>
-    CodeFile.parse({ path, content: readFileSync(join(stageDir, sub, path), "utf8") });
-  const reference = source.referenceCode.map((path) => code("reference", path));
-  const id = `${journey.id}.${slug.slice(0, 2)}`;
+  const read = (sub: string, file: string): CodeFile => CodeFile.parse({ path: file, content: readFileSync(join(stageDir, sub, file), "utf8") });
+  const readFirst = (subs: string[], file: string): CodeFile => {
+    const sub = subs.find((candidate) => existsSync(join(stageDir, candidate, file))) ?? subs.at(-1) ?? "reference";
+    return read(sub, file);
+  };
+  const reference = source.referenceCode.map((file) => read("reference", file));
+  const id = stageId(journey.id, moduleId, path);
   const exercise = source.exercise;
 
   return Stage.parse({
     id,
     order,
+    moduleId,
+    kind: source.kind,
     title: source.title,
     ...(source.subtitle === undefined ? {} : { subtitle: source.subtitle }),
     goal: source.goal,
     problem: source.problem,
+    ...(source.example === undefined ? {} : { example: source.example }),
     estimatedMinutes: source.estimatedMinutes,
     introduces: source.introduces,
     prerequisites: source.prerequisites,
-    architecture: source.architecture,
+    ...(source.architecture === undefined ? {} : { architecture: source.architecture }),
     referenceCode: reference,
+    lineNotes: source.lineNotes,
     explanation: source.explanation,
     originalCodeRefs: source.originalCodeRefs.map((ref) => {
       const lines = readFileSync(join(dir, "original", ref.path), "utf8").split("\n");
@@ -142,29 +178,26 @@ function loadStage(
       : {
           exercise: {
             instructions: exercise.instructions,
-            starterFiles: exercise.starterFiles.map((path) => code("starter", path)),
-            solutionFiles: (exercise.solutionFiles ?? exercise.starterFiles).map((path) =>
-              code(existsSync(join(stageDir, "solution", path)) ? "solution" : "reference", path),
+            // Micro stages and checkpoints have no starter/ directory: the editor starts empty.
+            starterFiles: exercise.files.map((file) =>
+              existsSync(join(stageDir, "starter", file)) ? read("starter", file) : { path: file, content: "" },
             ),
-            supportFiles: exercise.supportFiles.map((path) => code("reference", path)),
-            testFile: CodeFile.parse({
-              path: exercise.testFile,
-              content: readFileSync(join(stageDir, exercise.testFile), "utf8"),
-            }),
+            solutionFiles: (exercise.solutionFiles ?? exercise.files).map((file) => readFirst(["solution", "reference"], file)),
+            supportFiles: exercise.supportFiles.map((file) => readFirst(["given", "reference"], file)),
+            expose: exercise.expose,
+            testFile: CodeFile.parse({ path: exercise.testFile, content: readFileSync(join(stageDir, exercise.testFile), "utf8") }),
           },
         }),
     toolbox: source.toolbox,
     tutorContext: {
-      relevantFiles: [
-        ...reference.map((file) => file.path),
-        ...source.originalCodeRefs.map((ref) => ref.path),
-      ],
+      relevantFiles: [...reference.map((file) => file.path), ...source.originalCodeRefs.map((ref) => ref.path)],
       concepts: [...source.prerequisites, ...source.introduces],
-      previousStages: journey.stages.slice(0, order - 1).map((s) => `${journey.id}.${s.slice(0, 2)}`),
+      previousStages,
     },
     completionCriteria: [{ kind: exercise ? "tests_pass" : "acknowledged" }],
     ...(source.checkpoint === undefined ? {} : { checkpoint: source.checkpoint }),
-    summary: source.summary,
+    ...(source.limitation === undefined ? {} : { limitation: source.limitation }),
+    ...(source.summary === undefined ? {} : { summary: source.summary }),
   });
 }
 
@@ -196,7 +229,14 @@ export function validateJourney(journey: Journey): string[] {
     for (const ref of stage.originalCodeRefs) {
       if (!files.has(ref.replayFile)) problems.push(`${where}: ${ref.symbol} maps to missing ${ref.replayFile}`);
     }
-    problems.push(...graphProblems(stage.architecture).map((problem) => `${where}: ${problem}`));
+    if (stage.architecture) problems.push(...graphProblems(stage.architecture).map((problem) => `${where}: ${problem}`));
+    // The core pedagogical rule: rebuilding starts from a blank editor.
+    if (stage.kind !== "chapter" && stage.exercise?.starterFiles.some((file) => file.content.trim() !== "")) {
+      problems.push(`${where}: ${stage.kind} stages must not ship starter code`);
+    }
+    if (stage.kind === "micro" && !stage.limitation && stage.order < journey.stages.length) {
+      problems.push(`${where}: micro stages must name the limitation that motivates the next step`);
+    }
   }
   return problems;
 }

@@ -1,0 +1,98 @@
+{
+  "kind": "micro",
+  "title": "Título e descrição",
+  "subtitle": "A entrada vira um ticket",
+  "goal": "Classificar um ticket inteiro, não só um texto.",
+  "problem": "Um ticket tem **title** e **description**. O incidente pode estar em qualquer um dos dois:\n\ntítulo \"Checkout\", descrição \"the site is down\".",
+  "example": "classify({ title: \"Checkout\", description: \"the site is down\" })\n→ \"INCIDENT\"",
+  "estimatedMinutes": 2,
+  "introduces": [
+    "ticket-input"
+  ],
+  "prerequisites": [
+    "text-normalization"
+  ],
+  "architecture": {
+    "nodes": [
+      {
+        "id": "ticket",
+        "label": "ticket",
+        "kind": "data",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "classify",
+        "label": "classify()",
+        "kind": "function",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "category",
+        "label": "categoria",
+        "kind": "data",
+        "col": 2,
+        "row": 0
+      }
+    ],
+    "edges": [
+      {
+        "from": "ticket",
+        "to": "classify",
+        "rel": "flows_to"
+      },
+      {
+        "from": "classify",
+        "to": "category",
+        "rel": "creates"
+      }
+    ]
+  },
+  "referenceCode": [
+    "classify.ts"
+  ],
+  "lineNotes": [
+    {
+      "match": "ticket: {",
+      "note": "O parâmetro agora é um objeto com dois campos: title e description."
+    },
+    {
+      "match": "ticket.title + \" \" + ticket.description",
+      "note": "Junta título e descrição (com um espaço no meio) para procurar nos dois de uma vez."
+    }
+  ],
+  "explanation": [
+    {
+      "id": "ticket",
+      "conceptId": "ticket-input",
+      "title": "Um ticket é um objeto",
+      "quick": "`ticket.title` e `ticket.description` são os dois campos. Juntamos os dois e seguimos como antes.",
+      "normal": "`{ title: string; description: string }` descreve o formato do objeto que entra. No projeto real, esse formato ganha um nome: `TicketInput`."
+    }
+  ],
+  "exercise": {
+    "instructions": "Agora `classify` recebe um ticket com `title` e `description`. É `\"INCIDENT\"` se \"down\" (em qualquer caixa) aparecer em qualquer um dos dois; senão, `\"OTHER\"`.",
+    "files": [
+      "classify.ts"
+    ],
+    "expose": [
+      "classify"
+    ]
+  },
+  "toolbox": [
+    {
+      "id": "object-param",
+      "name": "Objeto como parâmetro",
+      "summary": "Um valor com campos nomeados; leia com ponto.",
+      "example": "function greet(user: { name: string }) {\n  return \"oi \" + user.name;\n}"
+    },
+    {
+      "id": "concat",
+      "name": "Juntar textos (+)",
+      "summary": "+ entre strings concatena.",
+      "example": "\"a\" + \" \" + \"b\"; // \"a b\""
+    }
+  ],
+  "limitation": "**\"Login bug\"** virou OTHER: a função só conhece a categoria INCIDENT."
+}

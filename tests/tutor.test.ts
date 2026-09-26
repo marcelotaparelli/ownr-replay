@@ -6,59 +6,83 @@ import { offlineAnswer } from "../src/services/tutor-offline.ts";
 import { golden } from "./helpers.ts";
 
 const journey = golden();
-const stage1: Stage = requireStage(journey.stages[0]);
 
-function requireStage(stage: Stage | undefined): Stage {
-  if (!stage) throw new Error("stage 1 missing");
-  return stage;
+function stage(id: string): Stage {
+  const found = journey.stages.find((s) => s.id === id);
+  if (!found) throw new Error(`missing stage ${id}`);
+  return found;
 }
+
+const first = stage("ops-triage-ai.m1-01");
+const tieBreak = stage("ops-triage-ai.m1-11");
+const checkpoint = stage("ops-triage-ai.m1-99");
 
 /** A copy of the journey with a fake later stage, to prove it never leaks. */
 function withFutureStage(): Journey {
-  const future: Stage = { ...stage1, id: "ops-triage-ai.99", order: 99, title: "FUTURE_STAGE_TITLE", introduces: ["hybrid-policy"], summary: { ...stage1.summary, why: "FUTURE_WHY" } };
+  const future: Stage = { ...first, id: "ops-triage-ai.zz-99", order: 999, title: "FUTURE_STAGE_TITLE", introduces: [], goal: "FUTURE_GOAL" };
   return { ...journey, stages: [...journey.stages, future] };
 }
 
 test("tutor context never includes later stages", () => {
-  const extended = withFutureStage();
-  const context = tutorContext(extended, stage1);
-  const prompt = systemPrompt(context);
+  const prompt = systemPrompt(tutorContext(withFutureStage(), first));
   expect(prompt).not.toContain("FUTURE_STAGE_TITLE");
-  expect(prompt).not.toContain("FUTURE_WHY");
-  expect(context.knownSoFar.map((c) => c.id)).not.toContain("hybrid-policy");
-  expect(prompt).toContain(stage1.title);
-});
-
-test("offline tutor explains the selected concept with its real-project location", () => {
-  const selection = { file: "triage.ts", startLine: 49, endLine: 55, text: "const TIE_BREAK: Category[] = [" };
-  const answer = offlineAnswer(tutorContext(journey, stage1, selection), "por que precisamos disso?");
-  expect(answer).toContain("Desempate explícito");
-  expect(answer).toContain("Sem isso:");
-  // Regression: the incidental "Category" type annotation must not win over the concept.
-  expect(answer).toContain("CATEGORY_TIE_BREAK");
-});
-
-test("offline tutor defers concepts from later stages instead of teaching them early", () => {
-  const answer = offlineAnswer(tutorContext(journey, stage1), "como funciona a HybridPolicy?");
-  expect(answer).toContain("aparece mais adiante");
-  expect(answer).toContain("Stage 05");
+  expect(prompt).not.toContain("FUTURE_GOAL");
+  expect(prompt).toContain(first.title);
 });
 
 test("the real journey never leaks later stage titles into an earlier stage prompt", () => {
-  for (const stage of journey.stages) {
-    const prompt = systemPrompt(tutorContext(journey, stage));
-    for (const later of journey.stages.filter((s) => s.order > stage.order)) {
-      expect(prompt).not.toContain(later.title);
+  for (const s of journey.stages) {
+    const prompt = systemPrompt(tutorContext(journey, s));
+    for (const later of journey.stages.filter((x) => x.order > s.order)) {
+      expect(prompt).not.toContain(`"${later.title}"`);
     }
   }
 });
 
+test("at the first micro stage the tutor answers at that level, not with architecture", () => {
+  const context = tutorContext(journey, first);
+  expect(context.knownSoFar.map((c) => c.id)).toEqual(["function-io"]);
+  const answer = offlineAnswer(context, "Por que essa função existe?");
+  expect(answer).toContain("Função");
+  for (const term of ["interface", "injeção", "Inversão", "porta", "HybridPolicy", "LLM"]) expect(answer).not.toContain(term);
+  expect(systemPrompt(context)).toContain("Nível do aluno");
+});
+
+test("offline tutor defers concepts from later modules instead of teaching them early", () => {
+  const answer = offlineAnswer(tutorContext(journey, first), "como funciona a HybridPolicy?");
+  expect(answer).toContain("aparece mais adiante");
+  expect(answer).toContain("HybridPolicy: um vigia o outro");
+});
+
+test("offline tutor explains the selected line with the stage's own concept", () => {
+  const selection = { file: "classify.ts", startLine: 2, endLine: 2, text: 'const TIE_BREAK = ["INCIDENT", "ACCESS", "BUG"];' };
+  const answer = offlineAnswer(tutorContext(journey, tieBreak, selection), "por que precisamos disso?");
+  expect(answer).toContain("Desempate explícito");
+  expect(answer).toContain("Sem isso:");
+});
+
+test("at the checkpoint the tutor points to the real code for the selected concept", () => {
+  const selection = { file: "classifier.ts", startLine: 18, endLine: 18, text: "const TIE_BREAK = [Category.INCIDENT, Category.ACCESS, Category.BUG];" };
+  const answer = offlineAnswer(tutorContext(journey, checkpoint, selection), "por que precisamos disso?");
+  // Regression: the incidental "Category" in the selection must not win over the concept.
+  expect(answer).toContain("CATEGORY_TIE_BREAK");
+});
+
+test("offline tutor names the next limitation when asked", () => {
+  expect(offlineAnswer(tutorContext(journey, first), "Qual é a limitação desta versão?")).toContain("lunch menu");
+});
+
 test("offline tutor points to the real project when asked where", () => {
-  const answer = offlineAnswer(tutorContext(journey, stage1), "onde isso está no projeto real?");
-  expect(answer).toContain("src/application/classifiers/deterministic-triage-classifier.ts");
+  expect(offlineAnswer(tutorContext(journey, checkpoint), "onde isso está no projeto real?")).toContain("deterministic-triage-classifier.ts");
+  expect(offlineAnswer(tutorContext(journey, first), "onde isso está no projeto real?")).toContain("checkpoint do módulo");
 });
 
 test("offline tutor falls back to the stage focus when nothing matches", () => {
-  const answer = offlineAnswer(tutorContext(journey, stage1), "olá");
-  expect(answer).toContain(stage1.goal);
+  expect(offlineAnswer(tutorContext(journey, first), "olá")).toContain(first.goal);
+});
+
+test("offline tutor walks through the solution lines when asked", () => {
+  const answer = offlineAnswer(tutorContext(journey, first), "O que cada linha faz?");
+  expect(answer).toContain("function classify");
+  expect(answer).toContain("Sempre a mesma resposta");
 });
