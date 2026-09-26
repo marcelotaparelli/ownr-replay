@@ -1,51 +1,98 @@
 import type { CodeFile } from "../domain/stage.ts";
 import { HARNESS_SPECIFIER } from "./runner.ts";
 
-export type PreparedModule = {
-  path: string;
-  /** Transpiled JavaScript (ESM). */
-  code: string;
-  /** Relative specifiers exactly as written, each mapped to a module path. */
-  imports: Record<string, string>;
-};
+/**
+ * The whole exercise — learner files, support files, tests and the harness shim —
+ * bundled into ONE self-contained ES module. The runner does a single import().
+ *
+ * Why one module: linking files as separate blob: modules that import each other
+ * works in Chromium but fails inside Firefox module workers ("error loading
+ * dynamically imported module"). A single module has no imports to resolve.
+ */
+export type ModuleSet = { code: string };
 
-export type ModuleSet = { entry: string; modules: PreparedModule[] };
+/** Where a failure happened, so the learner sees a useful message instead of a loader error. */
+export type ModulePhase = "transpilation" | "preparation";
 
 export class ModuleError extends Error {
   override readonly name = "ModuleError";
+  constructor(
+    readonly phase: ModulePhase,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
 const transpiler = new Bun.Transpiler({ loader: "ts", target: "browser" });
 
+const VIRTUAL_ROOT = "/replay/";
+const HARNESS_FILE = `${VIRTUAL_ROOT}__harness__.ts`;
+const HARNESS_SHIM =
+  "export const test = (name, fn) => globalThis.__replayHarness.test(name, fn);\n" +
+  "export const expect = (actual) => globalThis.__replayHarness.expect(actual);\n";
+
 /**
- * Type-strips learner files + the stage tests into ESM without executing them.
- * Only relative imports between the provided files (and the harness) are
- * allowed: no packages, no network, no dynamic import, no require.
+ * Validates and bundles learner files + the stage tests without executing them.
+ * Only relative imports between the provided files (and the harness) are allowed:
+ * no packages, no network, no dynamic import, no require. The bundler only ever
+ * sees in-memory files; resolution outside them is refused.
  */
-export function prepareModules(files: CodeFile[], testFile: CodeFile): ModuleSet {
+export async function prepareModules(files: CodeFile[], testFile: CodeFile): Promise<ModuleSet> {
   const all = [...files, testFile];
   const known = new Set(all.map((file) => file.path));
-  const modules = all.map((file): PreparedModule => {
-    const imports: Record<string, string> = {};
-    let scanned: ReturnType<typeof transpiler.scanImports>;
-    let code: string;
-    try {
-      scanned = transpiler.scanImports(file.content);
-      code = transpiler.transformSync(file.content);
-    } catch (error) {
-      throw new ModuleError(`${file.path}: ${syntaxMessage(error)}`);
-    }
-    for (const { path, kind } of scanned) {
-      if (path === HARNESS_SPECIFIER && kind === "import-statement") continue;
-      const target = resolveRelative(path);
-      if (kind !== "import-statement" || !target || !known.has(target)) {
-        throw new ModuleError(`${file.path}: import não permitido "${path}" — use apenas arquivos desta etapa`);
-      }
-      imports[path] = target;
-    }
-    return { path: file.path, code, imports };
+  for (const file of all) validateImports(file, known);
+
+  const result = await Bun.build({
+    entrypoints: [VIRTUAL_ROOT + testFile.path],
+    files: { ...Object.fromEntries(all.map((file) => [VIRTUAL_ROOT + file.path, file.content])), [HARNESS_FILE]: HARNESS_SHIM },
+    target: "browser",
+    format: "esm",
+    plugins: [
+      {
+        name: "stage-files-only",
+        setup(build) {
+          build.onResolve({ filter: /.*/ }, (args) => {
+            if (args.path === HARNESS_SPECIFIER) return { path: HARNESS_FILE };
+            const target = resolveRelative(args.path);
+            if (args.kind !== "entry-point-build" && (!target || !known.has(target))) {
+              throw new ModuleError("preparation", `import não permitido "${args.path}"`);
+            }
+            return { path: args.kind === "entry-point-build" ? args.path : VIRTUAL_ROOT + target };
+          });
+        },
+      },
+    ],
+  }).catch((error: unknown) => {
+    if (error instanceof ModuleError) throw error;
+    throw new ModuleError("preparation", `não foi possível montar os módulos — ${buildMessage(error)}`);
   });
-  return { entry: testFile.path, modules: orderByDependencies(modules) };
+  const output = result.outputs[0];
+  if (!result.success || !output) {
+    throw new ModuleError("preparation", `não foi possível montar os módulos — ${result.logs.map(String).join("; ")}`);
+  }
+  return { code: await output.text() };
+}
+
+function validateImports(file: CodeFile, known: Set<string>): void {
+  let scanned: ReturnType<typeof transpiler.scanImports>;
+  try {
+    scanned = transpiler.scanImports(file.content);
+  } catch (error) {
+    throw new ModuleError("transpilation", `${file.path}: ${syntaxMessage(error)}`);
+  }
+  for (const { path, kind } of scanned) {
+    if (path === HARNESS_SPECIFIER && kind === "import-statement") continue;
+    const target = resolveRelative(path);
+    if (kind !== "import-statement" || !target || !known.has(target)) {
+      throw new ModuleError("preparation", `${file.path}: import não permitido "${path}" — use apenas arquivos desta etapa`);
+    }
+  }
+}
+
+function buildMessage(error: unknown): string {
+  if (error instanceof AggregateError) return error.errors.map(String).join("; ");
+  return error instanceof Error ? error.message : String(error);
 }
 
 type ExerciseParts = { starterFiles: CodeFile[]; supportFiles: CodeFile[]; expose: string[]; testFile: CodeFile };
@@ -57,7 +104,7 @@ type ExerciseParts = { starterFiles: CodeFile[]; supportFiles: CodeFile[]; expos
  * - names provided by read-only support files are imported when the learner uses them
  *   without declaring them (only the new idea has to be rewritten).
  */
-export function prepareExercise(exercise: ExerciseParts, learnerFiles: CodeFile[]): ModuleSet {
+export async function prepareExercise(exercise: ExerciseParts, learnerFiles: CodeFile[]): Promise<ModuleSet> {
   return prepareModules(completeExercise(exercise, learnerFiles), exercise.testFile);
 }
 
@@ -86,7 +133,7 @@ function completeLearnerFile(file: CodeFile, supportFiles: CodeFile[], expose: s
   const missing = expose.filter((name) => !exported.has(name));
   const undeclared = missing.filter((name) => !declared(name));
   if (undeclared.length > 0) {
-    throw new ModuleError(`Não encontrei ${undeclared.map((n) => `\`${n}\``).join(", ")} em ${file.path}. Crie com exatamente esse nome.`);
+    throw new ModuleError("preparation", `Não encontrei ${undeclared.map((n) => `\`${n}\``).join(", ")} em ${file.path}. Crie com exatamente esse nome.`);
   }
   const exports = missing.length ? [`export { ${missing.join(", ")} };`] : [];
   // Imports share the first line, so reported line numbers match what the learner sees.
@@ -100,34 +147,13 @@ function scanExports(file: CodeFile): string[] {
   try {
     return transpiler.scan(file.content).exports;
   } catch (error) {
-    throw new ModuleError(`${file.path}: ${syntaxMessage(error)}`);
+    throw new ModuleError("transpilation", `${file.path}: ${syntaxMessage(error)}`);
   }
 }
 
 function resolveRelative(specifier: string): string | undefined {
   const match = /^\.\/([a-z0-9-]+)(\.ts|\.js)?$/.exec(specifier);
   return match ? `${match[1]}.ts` : undefined;
-}
-
-/** Dependencies first, so a linker can create each module after its imports. */
-function orderByDependencies(modules: PreparedModule[]): PreparedModule[] {
-  const byPath = new Map(modules.map((module) => [module.path, module]));
-  const ordered: PreparedModule[] = [];
-  const state = new Map<string, "visiting" | "done">();
-  const visit = (module: PreparedModule): void => {
-    const current = state.get(module.path);
-    if (current === "done") return;
-    if (current === "visiting") throw new ModuleError(`import circular envolvendo ${module.path}`);
-    state.set(module.path, "visiting");
-    for (const target of Object.values(module.imports)) {
-      const dependency = byPath.get(target);
-      if (dependency) visit(dependency);
-    }
-    state.set(module.path, "done");
-    ordered.push(module);
-  };
-  modules.forEach(visit);
-  return ordered;
 }
 
 /** Bun reports parse failures as an AggregateError whose entries carry line/column. */

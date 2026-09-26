@@ -134,10 +134,11 @@ export function createApi(deps: ApiDeps): Router {
       }
       let modules;
       try {
-        modules = prepareExercise(exercise, files);
+        modules = await prepareExercise(exercise, files);
       } catch (error) {
-        if (error instanceof ModuleError) throw new HttpError(422, "MODULE_REJECTED", error.message);
-        throw error;
+        if (!(error instanceof ModuleError)) throw error;
+        // The phase travels as the error code, so the learner sees where it failed.
+        throw new HttpError(422, error.phase === "transpilation" ? "TRANSPILATION_FAILED" : "MODULE_REJECTED", error.message);
       }
       // Types taught in this stage are verified for real, before anything runs.
       if (exercise.typecheck) {

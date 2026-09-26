@@ -537,6 +537,7 @@ function renderResult(result: RunResult, firstPass: boolean): HTMLElement {
     ),
     h("ul", { class: "tests" }, ...result.tests.map((t) => h("li", { class: t.passed ? "ok" : "ko" }, h("span", { class: "mark", "aria-hidden": "true" }, t.passed ? "✓" : "✗"), h("span", {}, t.name, t.error ? h("code", { class: "err" }, t.error) : null)))),
     result.stdout ? h("pre", { class: "stdout" }, result.stdout) : null,
+    result.stderr && !all ? h("details", { class: "diagnostic" }, h("summary", {}, "Diagnóstico"), h("pre", { class: "stdout" }, result.stderr)) : null,
   );
 }
 

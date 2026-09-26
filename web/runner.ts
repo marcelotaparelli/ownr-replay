@@ -16,8 +16,11 @@ export async function runExercise(stageId: string, files: CodeFile[]): Promise<R
   try {
     response = await api.run(stageId, files);
   } catch (error) {
+    if (error instanceof ApiError && error.code === "TRANSPILATION_FAILED") {
+      return { result: failed("transpilação TypeScript", error.message, 0), firstPass: false };
+    }
     if (error instanceof ApiError && error.code === "MODULE_REJECTED") {
-      return { result: failed("compilação", error.message, 0), firstPass: false };
+      return { result: failed("preparação dos módulos", error.message, 0), firstPass: false };
     }
     throw error;
   }
@@ -54,15 +57,16 @@ function runInWorker(modules: ModuleSet): Promise<RunResult> {
       resolve(result);
     };
     const timer = setTimeout(() => {
-      finish({ ...failed("execução", `tempo esgotado (${BROWSER_RUN_TIMEOUT_MS / 1000}s) — há um loop infinito?`, performance.now() - started), timedOut: true });
+      finish({ ...failed("execução dos testes", `tempo esgotado (${BROWSER_RUN_TIMEOUT_MS / 1000}s) — há um loop infinito?`, performance.now() - started), timedOut: true });
     }, BROWSER_RUN_TIMEOUT_MS);
     worker.addEventListener("message", (event: MessageEvent<WorkerReply>) => {
       const reply = event.data;
-      finish(reply.ok ? reply.result : failed("execução", reply.error, performance.now() - started));
+      if (reply.ok && reply.result.stderr) console.error(reply.result.stderr);
+      finish(reply.ok ? reply.result : failed("execução dos testes", reply.error, performance.now() - started));
     });
     worker.addEventListener("error", (event) => {
       event.preventDefault();
-      finish(failed("execução", event.message || "falha ao iniciar o runner", performance.now() - started));
+      finish(failed("carregamento do módulo", event.message || "o navegador não conseguiu iniciar o runner", performance.now() - started));
     });
     worker.postMessage(modules);
   });

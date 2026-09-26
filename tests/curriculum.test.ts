@@ -9,7 +9,7 @@ const journeys = goldenJourneys();
 
 async function run(exercise: Exercise, files: CodeFile[]): Promise<RunResult | ModuleError> {
   try {
-    return await executeModules(prepareExercise(exercise, files));
+    return await executeModules(await prepareExercise(exercise, files));
   } catch (error) {
     if (error instanceof ModuleError) return error;
     throw error;

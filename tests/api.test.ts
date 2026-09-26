@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TutorModel } from "../src/services/tutor.ts";
+import { executeModules } from "../src/sandbox/execute.ts";
 import { golden, testApp } from "./helpers.ts";
 
 const stage = golden().stages[0];
@@ -52,7 +53,9 @@ describe("empty-editor exercises", () => {
     const response = await call("POST", `/api/stages/${stage.id}/run`, { files });
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.modules.find((m: { path: string }) => m.path === learnerFile).code).toContain("export");
+    // One bundled module, and the learner code inside it runs green.
+    const run = await executeModules({ code: body.code });
+    expect(run.tests.every((t) => t.passed)).toBe(true);
   });
 
   test("a missing function is reported by name, not as a crash", async () => {
@@ -62,10 +65,20 @@ describe("empty-editor exercises", () => {
     expect((await response.json()).error.message).toContain("`classify`");
   });
 
-  test("syntax errors point to the line", async () => {
+  test("syntax errors are reported as transpilation and point to the line", async () => {
     const { call } = testApp();
     const response = await call("POST", `/api/stages/${stage.id}/run`, { files: [{ path: learnerFile, content: "function classify(text {\n  return 1\n}" }] });
-    expect((await response.json()).error.message).toMatch(/linha \d+/);
+    const body = await response.json();
+    expect(body.error.code).toBe("TRANSPILATION_FAILED");
+    expect(body.error.message).toMatch(/linha \d+/);
+  });
+
+  test("the /run payload is taken as raw text: HTML-special characters survive", async () => {
+    const { call } = testApp();
+    const content = `const x = 1 < 2 && 3 > 2;\nconst t = "<b>&amp;</b>";\nfunction classify(text: string): string {\n  return x && t.length === 12 ? "INCIDENT" : "OTHER";\n}`;
+    const body = await (await call("POST", `/api/stages/${stage.id}/run`, { files: [{ path: learnerFile, content }] })).json();
+    expect(body.code).toContain('"<b>&amp;</b>"');
+    expect((await executeModules({ code: body.code })).tests.every((t) => t.passed)).toBe(true);
   });
 });
 

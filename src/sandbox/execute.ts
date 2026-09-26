@@ -1,20 +1,22 @@
 import type { RunResult } from "../domain/progress.ts";
 import { createHarness, describeError, type Harness } from "./harness.ts";
 import type { ModuleSet } from "./modules.ts";
-import { HARNESS_SPECIFIER } from "./runner.ts";
 
 declare global {
   var __replayHarness: Harness | undefined;
 }
 
-const HARNESS_MODULE =
-  "export const test = (name, fn) => globalThis.__replayHarness.test(name, fn);\n" +
-  "export const expect = (actual) => globalThis.__replayHarness.expect(actual);\n";
-
 const MAX_OUTPUT = 20_000;
+const MAX_DIAGNOSTIC_LINES = 80;
+
+/** Phase names shown to the learner (server-side phases are transpilation and preparation). */
+export const PHASE = {
+  loading: "carregamento do módulo",
+  execution: "execução dos testes",
+} as const;
 
 /**
- * Links prepared modules through blob: URLs and runs the stage tests.
+ * Loads the bundled exercise module through a single blob: URL and runs the stage tests.
  * Runs wherever ESM + Blob URLs exist: a browser Web Worker, the Docker image,
  * or Bun itself (curriculum validation of trusted, authored code).
  * This function provides NO isolation; the caller's environment must.
@@ -22,60 +24,46 @@ const MAX_OUTPUT = 20_000;
 export async function executeModules(set: ModuleSet, perTestTimeoutMs = 1_000): Promise<RunResult> {
   const started = performance.now();
   const harness = createHarness();
-  const urls: string[] = [];
   const stdout: string[] = [];
   const stderr: string[] = [];
   const original = { log: console.log, info: console.info, warn: console.warn, error: console.error };
   const capture = (sink: string[]) => (...args: unknown[]) => {
     sink.push(args.map(format).join(" "));
   };
+  const url = URL.createObjectURL(new Blob([set.code], { type: "text/javascript" }));
 
   globalThis.__replayHarness = harness;
   console.log = console.info = capture(stdout);
   console.warn = console.error = capture(stderr);
   try {
-    const url = (code: string): string => {
-      const created = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
-      urls.push(created);
-      return created;
-    };
-    const resolved = new Map<string, string>([[HARNESS_SPECIFIER, url(HARNESS_MODULE)]]);
-    for (const module of set.modules) {
-      let code = module.code.replaceAll(`"${HARNESS_SPECIFIER}"`, JSON.stringify(resolved.get(HARNESS_SPECIFIER)));
-      for (const [specifier, path] of Object.entries(module.imports)) {
-        const target = resolved.get(path);
-        if (target) code = code.replaceAll(JSON.stringify(specifier), JSON.stringify(target));
-      }
-      resolved.set(module.path, url(code));
-    }
-    const entry = resolved.get(set.entry);
-    if (!entry) throw new Error(`entry ${set.entry} not found`);
-
     try {
-      await import(entry);
+      await import(url);
     } catch (error) {
-      return result(started, stdout, [...stderr, describeError(error)], [
-        { name: "carregar módulos", passed: false, error: describeError(error) },
-      ]);
+      // Distinguish "the learner's code threw while loading" from "the module could not load at all".
+      const message = describeError(error);
+      return result(started, stdout, [...stderr, loadDiagnostic(message, set.code)], [{ name: PHASE.loading, passed: false, error: message }]);
     }
     const outcomes = await harness.run(perTestTimeoutMs);
     if (outcomes.length === 0) {
-      return result(started, stdout, stderr, [{ name: "testes", passed: false, error: "nenhum teste foi registrado" }]);
+      return result(started, stdout, stderr, [{ name: PHASE.execution, passed: false, error: "nenhum teste foi registrado" }]);
     }
     return result(started, stdout, stderr, outcomes);
   } finally {
     Object.assign(console, original);
     globalThis.__replayHarness = undefined;
-    urls.forEach((created) => URL.revokeObjectURL(created));
+    URL.revokeObjectURL(url);
   }
 }
 
-function result(
-  started: number,
-  stdout: string[],
-  stderr: string[],
-  tests: RunResult["tests"],
-): RunResult {
+/** Enough of the generated JavaScript to locate a loading failure. It is the learner's own code. */
+function loadDiagnostic(message: string, code: string): string {
+  const lines = code.split("\n");
+  const numbered = lines.slice(0, MAX_DIAGNOSTIC_LINES).map((line, i) => `${String(i + 1).padStart(3)} | ${line}`);
+  const more = lines.length > MAX_DIAGNOSTIC_LINES ? [`… (+${lines.length - MAX_DIAGNOSTIC_LINES} linhas)`] : [];
+  return [`Falha no ${PHASE.loading}: ${message}`, "JavaScript gerado:", ...numbered, ...more].join("\n");
+}
+
+function result(started: number, stdout: string[], stderr: string[], tests: RunResult["tests"]): RunResult {
   const err = clip(stderr.join("\n"));
   return {
     stdout: clip(stdout.join("\n")),
