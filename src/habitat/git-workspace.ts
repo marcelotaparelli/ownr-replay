@@ -72,6 +72,13 @@ export class GitWorktreeWorkspace implements CandidateWorkspace {
     return this.git(["diff", "--binary", "--no-renames", from, to]);
   }
 
+  async isAncestor(ancestor: string, revision: string): Promise<boolean> {
+    // Exit 0 = ancestor, 1 = not; anything else is a real failure.
+    const result = await runCommand(["git", "merge-base", "--is-ancestor", ancestor, revision], { cwd: this.repository, timeoutMs: GIT_TIMEOUT_MS, env: minimalEnv() });
+    if (result.exitCode === 0 || result.exitCode === 1) return result.exitCode === 0;
+    throw new Error(`git merge-base falhou: ${result.stderr.trim().slice(0, 300)}`);
+  }
+
   async diff(from: string, to: string): Promise<string> {
     return this.git(["diff", "--stat", "--patch", from, to]);
   }

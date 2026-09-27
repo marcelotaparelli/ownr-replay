@@ -32,6 +32,8 @@ export interface CandidateWorkspace {
   dispose(workspace: Workspace): Promise<void>;
   /** The change between two retained revisions, replayable onto a newer baseline. */
   patchBetween(from: string, to: string): Promise<string>;
+  /** Whether `ancestor` is in the history of `revision` (lineage survives commits made on top of a baseline). */
+  isAncestor(ancestor: string, revision: string): Promise<boolean>;
 }
 
 export type EvaluationContext = {

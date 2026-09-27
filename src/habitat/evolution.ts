@@ -169,7 +169,7 @@ export class Habitat {
     const { store } = this.deps;
     const context = await this.context();
     const { observation, evaluations: baselineEvaluations } = this.currentBaseline(context);
-    const parentGeneration = store.candidates(this.mission.id).find((c) => c.status === "accepted" && c.revision === context.baselineRevision)?.generation ?? 0;
+    const parentGeneration = await this.baselineGeneration(context.baselineRevision);
 
     const candidate = store.addCandidate({
       id: `cand-${crypto.randomUUID().slice(0, 8)}`,
@@ -244,6 +244,15 @@ export class Habitat {
     const final = store.candidate(candidate.id);
     if (!final) throw new Error("candidate vanished");
     return { candidate: final, decision };
+  }
+
+  /** The newest accepted generation in the baseline's history (0 when no candidate was ever accepted into it). */
+  private async baselineGeneration(baseline: string): Promise<number> {
+    let generation = 0;
+    for (const c of this.deps.store.candidates(this.mission.id)) {
+      if (c.status === "accepted" && c.revision && c.generation > generation && (await this.deps.workspace.isAncestor(c.revision, baseline))) generation = c.generation;
+    }
+    return generation;
   }
 
   /** The recorded verdict, unless the evidence no longer describes the present — then STALE. */

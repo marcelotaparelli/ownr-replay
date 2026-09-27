@@ -439,6 +439,15 @@ describe("habitat loop (fixture repository)", () => {
     expect(second.candidate.parentRevision).toBe(to);
     expect(second.decision.verdict).toBe("EXPERIMENT_READY");
     expect(store.events().map((e) => e.kind)).toEqual(expect.arrayContaining(["candidate_accepted", "baseline_advanced", "experiment_assessed"]));
+
+    // A human commit on top of the accepted baseline keeps the lineage: the next candidate is still generation 2.
+    writeFileSync(join(f.repo, "content/coverage.txt"), "4");
+    await git(f.repo, "commit", "--quiet", "-am", "human change on top of the accepted baseline");
+    expect((await habitat.assess(second.candidate.id)).verdict).toBe("STALE");
+    await habitat.observeBaseline();
+    const replayed = await habitat.reevaluate(second.candidate.id);
+    expect(replayed.candidate.generation).toBe(2);
+    expect(replayed.decision.verdict).toBe("EXPERIMENT_READY");
   });
 
   test("one job at a time", async () => {
