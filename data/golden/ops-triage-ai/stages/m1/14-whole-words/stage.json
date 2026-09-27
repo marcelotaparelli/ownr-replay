@@ -103,11 +103,11 @@
   ],
   "lineNotes": [
     {
-      "match": "/\\bdown\\b/",
-      "note": "Uma express\\u00E3o regular. \\b marca onde uma palavra come\\u00E7a ou termina: casa \"down\", n\\u00E3o \"downloads\"."
+      "match": "new RegExp(\"\\\\b\" + rule.word + \"\\\\b\")",
+      "note": "Monta uma express\\u00E3o regular a partir da palavra. \\b marca onde uma palavra come\\u00E7a ou termina: casa \"down\", n\\u00E3o \"downloads\". Dentro de uma string, \\b se escreve \"\\\\b\"."
     },
     {
-      "match": "rule.pattern.test(title)",
+      "match": ".test(title)",
       "note": "`.test` pergunta se o padrão casa no texto — o papel que `includes` fazia."
     }
   ],
@@ -116,7 +116,7 @@
       "id": "regex",
       "conceptId": "regex-word-boundary",
       "title": "Padrões em vez de pedaços",
-      "quick": "Cada regra guarda um padrão (`/\\bbug\\b/`) em vez de uma palavra. `\\b` exige que seja uma palavra inteira."
+      "quick": "A tabela continua igual; só o teste muda: `includes` aceita um pedaço, `new RegExp(\"\\\\b\" + rule.word + \"\\\\b\")` só aceita a palavra inteira."
     }
   ],
   "exercise": {
@@ -144,6 +144,5 @@
       "example": "/\\bcat\\b/.test(\"concatenate\"); // false\n/\\bcat\\b/.test(\"my cat\"); // true"
     }
   ],
-  "limitation": "As categorias são strings soltas. Um **\"INCIDNET\"** digitado errado passaria em silêncio — e aquela categoria nunca mais seria escolhida.",
-  "noveltyException": "6 das 8 linhas são a mesma troca mecânica na tabela (`word: \"bug\"` → `pattern: /\\bbug\\b/`); a ideia é uma só. Tratar só parte das regras exigiria código para dois formatos de regra ao mesmo tempo."
+  "limitation": "As categorias são strings soltas. Um **\"INCIDNET\"** digitado errado passaria em silêncio — e aquela categoria nunca mais seria escolhida."
 }

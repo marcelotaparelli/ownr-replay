@@ -6,21 +6,21 @@ enum Category {
 }
 
 const RULES = [
-  { pattern: /\bdown\b/, category: "INCIDENT", weight: 5 },
-  { pattern: /\boutage\b/, category: "INCIDENT", weight: 4 },
-  { pattern: /\bbug\b/, category: "BUG", weight: 3 },
-  { pattern: /\berror\b/, category: "BUG", weight: 1 },
-  { pattern: /\blogin\b/, category: "ACCESS", weight: 4 },
-  { pattern: /\bpassword\b/, category: "ACCESS", weight: 2 },
+  { word: "down", category: "INCIDENT", weight: 5 },
+  { word: "outage", category: "INCIDENT", weight: 4 },
+  { word: "bug", category: "BUG", weight: 3 },
+  { word: "error", category: "BUG", weight: 1 },
+  { word: "login", category: "ACCESS", weight: 4 },
+  { word: "password", category: "ACCESS", weight: 2 },
 ];
 
 function scoreCategory(category: string, title: string, description: string): number {
   let score = 0;
   for (const rule of RULES) {
-    if (rule.category === category && rule.pattern.test(title)) {
+    if (rule.category === category && new RegExp("\\b" + rule.word + "\\b").test(title)) {
       score += rule.weight * 2;
     }
-    if (rule.category === category && rule.pattern.test(description)) {
+    if (rule.category === category && new RegExp("\\b" + rule.word + "\\b").test(description)) {
       score += rule.weight;
     }
   }
