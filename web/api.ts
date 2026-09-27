@@ -8,7 +8,7 @@ import type { TutorReply, TutorSelection } from "../src/domain/tutor.ts";
 import type { ModuleSet } from "../src/sandbox/modules.ts";
 
 export type ArchitectureCode = { repo: { url: string; sha: string }; nodes: NodeCode[]; files: Record<string, string> };
-export type StageDetail = Stage & { runner: "browser" | "docker"; previousCode: PreviousVersion[] };
+export type StageDetail = Stage & { runner: "browser" | "docker"; previousCode: PreviousVersion[]; codeHighlights: Record<string, number[]> };
 export type TypeDiagnostic = { file: string; line: number; code: string; message: string };
 export type RunResponse =
   | ({ mode: "browser"; typecheck?: "passed" } & ModuleSet)

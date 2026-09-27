@@ -156,21 +156,21 @@ function solution(deps: StageViewDeps): HTMLElement {
 }
 
 /**
- * Code as shown in chapters and checkpoints, with the same green as micro stages: only the lines
- * that are new against this file's version in the nearest earlier stage that showed it. A file no
- * earlier stage showed is entirely this stage's novelty; with no earlier stage at all, nothing is diffed.
+ * Chapters compare an existing file with its last version. A new file highlights only lines
+ * absent from all code shown in earlier stages. The first stage has no comparison.
  */
 function changedCode(stage: StageDetail, file: CodeFile): HTMLElement {
   const previous = stage.previousCode.find((p) => p.path === file.path);
-  const comparable = previous !== undefined || stage.order > 1;
-  const added = comparable ? addedLines(previous?.content ?? "", file.content) : [];
-  const legend = !comparable
-    ? " primeira etapa: não há etapa anterior para comparar"
-    : !previous
-      ? " arquivo novo nesta etapa: todas as linhas são novidade"
+  const added = stage.codeHighlights[file.path] ?? [];
+  const legend = previous
+    ? added.length === 0
+      ? ` sem mudanças em relação a “${previous.stageTitle}”`
+      : ` ${added.length} linha(s) nova(s) ou alterada(s) em relação a “${previous.stageTitle}”`
+    : stage.order === 1
+      ? " não há etapa anterior para comparar"
       : added.length === 0
-        ? ` sem mudanças em relação a “${previous.stageTitle}”`
-        : ` ${added.length} linha(s) nova(s) ou alterada(s) em relação a “${previous.stageTitle}”`;
+        ? " sem linhas novas em relação às etapas anteriores"
+        : ` ${added.length} linha(s) nova(s) em relação às etapas anteriores`;
   return h("div", {}, codeView(file.path, file.content, { newLines: new Set(added) }), h("p", { class: "muted legend" }, added.length ? h("span", { class: "dot-new" }) : null, legend));
 }
 

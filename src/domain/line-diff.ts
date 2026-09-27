@@ -35,6 +35,11 @@ export function addedLines(previous: string, current: string): number[] {
   return added;
 }
 
+/** Without a comparable earlier version, no line can be claimed as a change. */
+export function highlightedLines(previous: string | undefined, current: string): number[] {
+  return previous === undefined ? [] : addedLines(previous, current);
+}
+
 /** New lines that carry something to learn: not braces-only punctuation, not comments. */
 export function noveltyLines(previous: string, current: string): number[] {
   const lines = current.split("\n");
@@ -75,14 +80,15 @@ function lcsMatches(a: string[], b: string[]): { before: Set<number>; after: Set
 }
 
 export type PreviousVersion = { path: string; stageId: string; stageTitle: string; content: string };
+type StageCode = { id: string; title: string; order: number; referenceCode: { path: string; content: string }[] };
 
 /**
  * For each file a stage shows, its version in the nearest earlier stage that shows the same file.
  * Micro stages find the previous micro stage; chapters find the last chapter that touched that file,
- * however far back. A file no earlier stage shows has no previous version: it is not diffed at all.
+ * however far back. A file no earlier stage shows has no previous version of that path.
  */
 export function previousVersions(
-  stages: { id: string; title: string; order: number; referenceCode: { path: string; content: string }[] }[],
+  stages: StageCode[],
   stageId: string,
 ): PreviousVersion[] {
   const stage = stages.find((s) => s.id === stageId);
@@ -95,4 +101,23 @@ export function previousVersions(
     }
     return [];
   });
+}
+
+/** Highlights against the last version of a file, or against all earlier code for a new file. */
+export function stageCodeHighlights(stages: StageCode[], stageId: string): Record<string, number[]> {
+  const stage = stages.find((candidate) => candidate.id === stageId);
+  if (!stage) return {};
+  const earlier = stages.filter((candidate) => candidate.order < stage.order);
+  const versions = new Map(previousVersions(stages, stageId).map((version) => [version.path, version.content]));
+  const known = new Set(earlier.flatMap((candidate) => candidate.referenceCode.flatMap((file) => file.content.split("\n").map(normalize))));
+  return Object.fromEntries(stage.referenceCode.map((file) => {
+    const previous = versions.get(file.path);
+    if (previous !== undefined) return [file.path, highlightedLines(previous, file.content)];
+    if (earlier.length === 0) return [file.path, []];
+    const novel = file.content.split("\n").flatMap((line, index) => {
+      const normalized = normalize(line);
+      return normalized && !known.has(normalized) ? [index + 1] : [];
+    });
+    return [file.path, novel];
+  }));
 }
