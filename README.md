@@ -51,4 +51,4 @@ Visão do produto, princípios pedagógicos e de engenharia: ver `CLAUDE.md`.
 
 ## OWNR Habitat
 
-O Habitat (evolução em circuito fechado) vive no repositório próprio `../ownr-habitat` e trata este repositório como **organismo**: observa a baseline (`master`), avalia candidates em worktrees isolados e só avança a baseline (fast-forward) quando um humano aceita. O instrumento que ele lê é `bun scripts/measure.ts <curriculum|bundle>` (JSON).
+O Habitat (evolução em circuito fechado) vive no repositório próprio `../ownr-habitat` e trata este repositório como **organismo**: observa a baseline (`main`), avalia candidates em worktrees isolados e só avança a baseline (fast-forward) quando um humano aceita. O instrumento que ele lê é `bun scripts/measure.ts <curriculum|bundle>` (JSON).
