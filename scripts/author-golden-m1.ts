@@ -184,7 +184,8 @@ ${split ? TITLE_DESC : LOWER}
 }`;
 };
 
-const CATEGORIES = `const CATEGORIES = ["INCIDENT", "BUG", "ACCESS"];`;
+// The categories are iterated inline until stage 13 names the list, when its order becomes a decision.
+const CATEGORY_LIST = `["INCIDENT", "BUG", "ACCESS"]`;
 const TIE_BREAK = `// Em empate vence quem vem primeiro: ignorar um incidente é o erro mais caro.
 const TIE_BREAK = ["INCIDENT", "ACCESS", "BUG"];`;
 const TIE_BREAK_ENUM = `// Em empate vence quem vem primeiro: ignorar um incidente é o erro mais caro.
@@ -201,9 +202,9 @@ const P6 = join2(RULES_3, FIRST_MATCH);
 const P7 = join2(RULES_6, FIRST_MATCH);
 const P8 = join2(RULES_6, SCORE_COUNT, FIRST_MATCH);
 const P9 = join2(RULES_6, SCORE_COUNT, COMPARE_PAIR);
-const P10 = join2(RULES_6, SCORE_COUNT, CATEGORIES, best("CATEGORIES", "string", `"OTHER"`, false));
-const P11 = join2(RULES_6, SCORE_TITLE, CATEGORIES, best("CATEGORIES"));
-const P12 = join2(RULES_WEIGHTED, SCORE_WEIGHTED, CATEGORIES, best("CATEGORIES"));
+const P10 = join2(RULES_6, SCORE_COUNT, best(CATEGORY_LIST, "string", `"OTHER"`, false));
+const P11 = join2(RULES_6, SCORE_TITLE, best(CATEGORY_LIST));
+const P12 = join2(RULES_WEIGHTED, SCORE_WEIGHTED, best(CATEGORY_LIST));
 const P13 = join2(RULES_WEIGHTED, SCORE_WEIGHTED, TIE_BREAK, best("TIE_BREAK"));
 const P14 = join2(RULES_WEIGHTED, SCORE_WORDS, TIE_BREAK, best("TIE_BREAK"));
 const P15 = join2(ENUM, RULES_WEIGHTED, SCORE_WORDS, TIE_BREAK, best("TIE_BREAK"));
@@ -591,7 +592,7 @@ test("o resto continua igual", () => {
     arch: ARCH_PICK,
     program: P10,
     lineNotes: [
-      { match: "const CATEGORIES", note: "As categorias que disputam. A ordem importa só em empate." },
+      { match: 'for (const category of ["INCIDENT", "BUG", "ACCESS"])', note: "Percorre as categorias que disputam, nesta ordem. A ordem só importa em empate." },
       { match: 'let best = "OTHER"', note: 'Começa em OTHER. OTHER não tem regras, então o placar dele é 0: se ninguém pontuar, é a resposta.' },
       { match: "scoreCategory(category, lower) > scoreCategory(best, lower)", note: "A mesma comparação da etapa anterior, agora entre a categoria da vez e a melhor até agora." },
       { match: "best = category", note: "Achou uma melhor: ela vira a melhor até agora. Só troca se for estritamente maior — em empate, fica quem veio antes." },
@@ -689,7 +690,7 @@ test("soma de pistas e posições", () => expect(scoreCategory("INCIDENT", "down
 test("login e password", () => expect(scoreCategory("ACCESS", "login", "password")).toBe(10));`,
     ),
     toolbox: [tool.counter],
-    limitation: 'Descrição **"login fails with a bug error"**: ACCESS 4 × BUG 4. O empate cai para quem vem primeiro em `CATEGORIES` — uma ordem que ninguém escolheu de propósito.',
+    limitation: 'Descrição **"login fails with a bug error"**: ACCESS 4 × BUG 4. O empate cai para quem vem primeiro na lista do laço — uma ordem que ninguém escolheu de propósito.',
     noveltyException:
       "6 das 8 linhas são a mesma edição mecânica na tabela (acrescentar `weight` a cada regra); a ideia é uma só. Separar dados e uso criaria uma etapa sem mudança de comportamento.",
   },

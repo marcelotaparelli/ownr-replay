@@ -17,12 +17,10 @@ function scoreCategory(category: string, text: string): number {
   return score;
 }
 
-const CATEGORIES = ["INCIDENT", "BUG", "ACCESS"];
-
 function classify(ticket: { title: string; description: string }): string {
   const lower = (ticket.title + " " + ticket.description).toLowerCase();
   let best = "OTHER";
-  for (const category of CATEGORIES) {
+  for (const category of ["INCIDENT", "BUG", "ACCESS"]) {
     if (scoreCategory(category, lower) > scoreCategory(best, lower)) {
       best = category;
     }

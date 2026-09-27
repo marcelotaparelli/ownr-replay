@@ -88,8 +88,8 @@
   ],
   "lineNotes": [
     {
-      "match": "const CATEGORIES",
-      "note": "As categorias que disputam. A ordem importa só em empate."
+      "match": "for (const category of [\"INCIDENT\", \"BUG\", \"ACCESS\"])",
+      "note": "Percorre as categorias que disputam, nesta ordem. A ordem só importa em empate."
     },
     {
       "match": "let best = \"OTHER\"",
