@@ -28,7 +28,7 @@ const codeIndexes = new Map(journeys.map((j) => [j.id, indexRepository(originalD
 const api = createApi({ journeys, repository, tutor, sandbox, typeChecker, logger, metrics, codeIndexes });
 const assets = await buildWebAssets(join(root, "web"));
 
-const server = Bun.serve({ port: config.PORT, fetch: createApp(api, assets, logger, metrics) });
+const server = Bun.serve({ hostname: "0.0.0.0", port: config.PORT, fetch: createApp(api, assets, logger, metrics) });
 logger.info("server_started", {
   url: server.url.toString(),
   journeys: journeys.length,

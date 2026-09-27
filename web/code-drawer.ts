@@ -96,8 +96,26 @@ export function openCodeDrawer(graph: ArchitectureGraph, data: ArchitectureCode,
 
 function codeFor(option: CodeOption, data: ArchitectureCode): HTMLElement {
   const source = data.files[option.path] ?? "";
-  const focus = new Set(Array.from({ length: option.endLine - option.startLine + 1 }, (_, i) => option.startLine + i));
+  const excerpt = source.split("\n").slice(option.startLine - 1, option.endLine).join("\n");
+  const excerptFocus = new Set(Array.from({ length: option.endLine - option.startLine + 1 }, (_, i) => i + 1));
+  const fileFocus = new Set(Array.from(excerptFocus, (line) => option.startLine + line - 1));
   const url = `${data.repo.url}/blob/${data.repo.sha}/${option.path}#L${option.startLine}-L${option.endLine}`;
+  let listing = codeView(option.path, excerpt, { firstLine: option.startLine, focusLines: excerptFocus, preserveTrailingLine: true });
+  const toggle = h("button", { type: "button", class: "link", "aria-expanded": "false" }, "Ver arquivo completo");
+  toggle.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    const next = expanded
+      ? codeView(option.path, excerpt, { firstLine: option.startLine, focusLines: excerptFocus, preserveTrailingLine: true })
+      : codeView(option.path, source, { focusLines: fileFocus });
+    listing.replaceWith(next);
+    listing = next;
+    toggle.setAttribute("aria-expanded", String(!expanded));
+    toggle.textContent = expanded ? "Ver arquivo completo" : "Ver apenas trecho";
+    if (!expanded) {
+      const target = listing.querySelector<HTMLElement>(".ln.focus");
+      if (target) listing.scrollTop = Math.max(0, target.offsetTop - listing.clientHeight / 4);
+    }
+  });
   return h(
     "div",
     { class: "drawer-code" },
@@ -110,6 +128,7 @@ function codeFor(option: CodeOption, data: ArchitectureCode): HTMLElement {
       h("span", { class: "muted" }, ` · ${BASIS[option.basis]} · `),
       h("a", { href: url, target: "_blank", rel: "noopener noreferrer" }, `GitHub @${data.repo.sha.slice(0, 7)} ↗`),
     ),
-    codeView(option.path, source, { focusLines: focus }),
+    h("p", { class: "muted" }, "O arquivo completo pode conter conceitos ainda não apresentados. ", toggle),
+    listing,
   );
 }

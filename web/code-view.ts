@@ -5,6 +5,8 @@ import { highlightLines } from "./highlight.ts";
 export type CodeViewOptions = {
   /** Real line number of the first line (production excerpts). */
   firstLine?: number;
+  /** Keep a mapped excerpt's final empty line when it belongs to the mapped range. */
+  preserveTrailingLine?: boolean;
   /** Lines (1-based, relative) added in this step. */
   newLines?: ReadonlySet<number>;
   /** Lines (1-based, relative) that are the point of this view (e.g. the symbol an architecture node maps to). */
@@ -17,7 +19,7 @@ export type CodeViewOptions = {
 export function codeView(file: string, source: string, options: CodeViewOptions = {}): HTMLElement {
   const first = options.firstLine ?? 1;
   // Files end with a newline; showing it as an empty numbered line is noise.
-  source = source.replace(/\n$/, "");
+  if (!options.preserveTrailingLine) source = source.replace(/\n$/, "");
   const html = highlightLines(source);
   const body = html
     .map((line, index) => {
