@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "size": "bun scripts/bundle-size.ts",
     "author:m1": "bun scripts/author-golden-m1.ts",
-    "habitat": "bun src/habitat/main.ts"
+    "measure": "bun scripts/measure.ts"
   },
   "dependencies": {
     "typescript": "^7.0.2",
