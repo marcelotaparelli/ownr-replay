@@ -25,6 +25,22 @@ export type Measurement = {
 
 export type Evidence = { kind: "command" | "files" | "report" | "note"; summary: string; detail?: string };
 
+/** Which evaluator produced a result, and with which configuration: evidence from a different one is not comparable. */
+export type EvaluatorIdentity = { id: string; version: string };
+export const fingerprint = (e: EvaluatorIdentity): string => `${e.id}@${e.version}`;
+
+/** What a piece of evidence is about. Evidence only counts for exactly this binding. */
+export type EvidenceBinding = {
+  baselineRevision: string;
+  /** The revision that was evaluated (the baseline itself for observations). */
+  subjectRevision: string;
+  missionId: string;
+  missionRevision: number;
+  missionHash: string;
+  envelopeHash: string;
+  evaluator: string;
+};
+
 export type EvaluationResult = {
   evaluatorId: string;
   status: CheckStatus;
@@ -32,6 +48,8 @@ export type EvaluationResult = {
   evidence: Evidence[];
   durationMs: number;
   errors: string[];
+  /** Attached by Habitat when the result is recorded; absent on legacy evidence (which is therefore stale). */
+  binding?: EvidenceBinding;
 };
 
 // ---------------------------------------------------------------- mission, envelope, fitness
@@ -71,10 +89,16 @@ export const Envelope = z.strictObject({
 });
 export type Envelope = z.infer<typeof Envelope>;
 
+/**
+ * proxy: measurable on a candidate before anyone uses it (a hypothesis about the outcome).
+ * outcome: only measurable in real use of a baseline, and only with enough samples.
+ */
 export const Objective = z.strictObject({
   metric: z.string().min(1),
   label: z.string().min(1),
   direction: z.enum(["minimize", "maximize"]),
+  kind: z.enum(["proxy", "outcome"]),
+  minSampleSize: z.number().int().positive().optional(),
 });
 export type Objective = z.infer<typeof Objective>;
 
@@ -113,7 +137,8 @@ export type Organism = {
 
 // ---------------------------------------------------------------- candidates & decisions
 
-export type CandidateStatus = "proposed" | "prepared" | "evaluating" | "ineligible" | "eligible" | "promotable" | "promoted" | "rejected";
+/** Lifecycle only. What the evidence says is the Verdict, which can go STALE after the fact. */
+export type CandidateStatus = "proposed" | "prepared" | "evaluating" | "evaluated" | "failed" | "accepted";
 
 export type CandidateSource = { kind: "manual" | "llm" | "rule" | "search"; author: string };
 
@@ -129,33 +154,65 @@ export type Candidate = {
   /** What the producer said about its own change. Information, never evidence. */
   claims: string | null;
   status: CandidateStatus;
+  /** A re-evaluation of an earlier candidate's change against a newer baseline. */
+  reevaluationOf: string | null;
   createdAt: number;
 };
 
 export type FileChange = { path: string; status: string; oldMode: string; newMode: string };
 
-export type Verdict = "INELIGIBLE" | "WORSE" | "NEUTRAL" | "BETTER" | "PROMOTABLE";
+/**
+ * Ordered by the strength of the evidence. A candidate evaluated offline can reach at most
+ * EXPERIMENT_READY: better proxies are a hypothesis about the mission, not an improvement of it.
+ * OUTCOME_IMPROVED and MISSION_MET need outcome measurements with enough samples.
+ */
+export const VERDICTS = ["INELIGIBLE", "STALE", "REGRESSED", "TRADEOFF", "NEUTRAL", "PROXY_IMPROVED", "EXPERIMENT_READY", "OUTCOME_IMPROVED", "MISSION_MET"] as const;
+export type Verdict = (typeof VERDICTS)[number];
+/** Verdicts a human may accept as the next baseline. */
+export const ACCEPTABLE: ReadonlySet<Verdict> = new Set(["EXPERIMENT_READY", "OUTCOME_IMPROVED", "MISSION_MET"]);
 
 export type ConstraintResult = { constraintId: string; name: string; severity: "hard" | "soft"; status: CheckStatus; detail: string };
 
 export type MetricComparison = {
   metric: string;
   label: string;
+  kind: "proxy" | "outcome";
   direction: "minimize" | "maximize";
   baseline: number | null;
   candidate: number | null;
-  outcome: "improved" | "worse" | "unchanged" | "unknown";
+  /** insufficient_data: an outcome whose sample is below the objective's minimum on either side. */
+  outcome: "improved" | "worse" | "unchanged" | "unknown" | "insufficient_data";
 };
 
 export type GuardResult = Guard & { value: number | null; status: CheckStatus };
 
+/** What a decision was made about; if any of it is no longer current, the decision is STALE. */
+export type DecisionBinding = {
+  baselineRevision: string;
+  candidateRevision: string;
+  baselineObservationId: string;
+  missionId: string;
+  missionRevision: number;
+  missionHash: string;
+  envelopeHash: string;
+  /** Sorted fingerprints of the evaluators whose evidence the decision used. */
+  evaluators: string[];
+};
+
+/** The facts a binding is checked against right now. */
+export type EvidenceContext = Omit<DecisionBinding, "candidateRevision" | "baselineObservationId">;
+
 export type Decision = {
   verdict: Verdict;
+  /** Metrics stay a vector: no single fitness score, trade-offs are explicit in comparisons. */
   constraints: ConstraintResult[];
   comparisons: MetricComparison[];
   guards: GuardResult[];
-  /** Every reason points at evidence (a constraint, a comparison or a guard). */
+  /** SOFT violations: shown, never a reason to consider a candidate better. */
+  warnings: string[];
+  /** Every reason points at evidence (a constraint, a comparison, a guard or the binding). */
   reasons: string[];
+  binding: DecisionBinding | null;
 };
 
 export type DesiredStatus = DesiredMetric & { value: number | null; sampleSize?: number; status: "MET" | "NOT_MET" | "INSUFFICIENT_DATA" };

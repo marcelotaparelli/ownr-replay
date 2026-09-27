@@ -30,7 +30,7 @@ export function loadHabitatConfig(env: Record<string, string | undefined> = proc
 const M1_CONTENT = "data/golden/ops-triage-ai/stages/m1";
 
 /** Wires the Replay organism into a Habitat. `repository` is the organism's git checkout (never evaluated in place). */
-export function createReplayHabitat(repository: string, config: HabitatConfig, logger: Logger) {
+export function createReplayHabitat(repository: string, config: HabitatConfig, logger: Logger, options: { reviseMissionBy?: string } = {}) {
   const root = resolve(repository);
   const git = async (args: string[]): Promise<string> => {
     const result = await runCommand(["git", ...args], { cwd: root, timeoutMs: 30_000, env: minimalEnv() });
@@ -43,6 +43,15 @@ export function createReplayHabitat(repository: string, config: HabitatConfig, l
   const { pathPolicy, evaluators } = replayEvaluators();
   // Telemetry only counts usage of the Module 1 content that is deployed now.
   const since = async () => Number(await git(["log", "-1", "--format=%ct", await baselineRevision(), "--", M1_CONTENT])) * 1000;
+  /**
+   * Acceptance moves the checked-out branch forward to the candidate — fast-forward only, so it can
+   * never rewrite history or merge anything else. Refused if the baseline moved or the branch is detached.
+   */
+  const advanceBaseline = async (from: string, to: string): Promise<void> => {
+    await git(["symbolic-ref", "--quiet", "HEAD"]);
+    if ((await baselineRevision()) !== from) throw new Error(`a baseline não é mais ${from.slice(0, 10)}`);
+    await git(["merge", "--ff-only", "--quiet", to]);
+  };
   const habitat = new Habitat({
     store,
     organism: replayOrganism(root),
@@ -53,11 +62,8 @@ export function createReplayHabitat(repository: string, config: HabitatConfig, l
     mutations: new DirectoryMutationProvider(resolve(root, config.HABITAT_PROPOSALS)),
     telemetry: new ReplayTelemetrySource(resolve(root, config.DB_PATH), since),
     baselineRevision,
+    advanceBaseline,
     logger,
-  });
-  /** Promotion publishes a local branch for a human to review and merge. Never pushes, never deploys. */
-  const publish = async (branch: string, revision: string): Promise<void> => {
-    await git(["branch", branch, revision]);
-  };
-  return { habitat, store, workspace, organism: replayOrganism(root), publish };
+  }, options);
+  return { habitat, store, workspace, organism: replayOrganism(root) };
 }

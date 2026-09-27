@@ -14,6 +14,8 @@
   --warn-soft: #fff6dc;
   --none: #5c5c57;
   --none-soft: #ececea;
+  --info: #2f5bd8;
+  --info-soft: #e8eefc;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light dark;
@@ -35,6 +37,8 @@
     --warn-soft: #3a3016;
     --none: #b5b5ae;
     --none-soft: #2a2a28;
+    --info: #8aa9ff;
+    --info-soft: #232c45;
   }
 }
 * { box-sizing: border-box; }
@@ -54,10 +58,12 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line
 th { font-weight: 500; color: var(--muted); font-size: 12px; }
 td.num { font-family: var(--mono); white-space: nowrap; }
 .badge { display: inline-block; padding: 0 6px; border-radius: 4px; font: 600 11px/18px var(--mono); white-space: nowrap; }
-.s-PASS, .s-MET, .s-PROMOTABLE, .s-improved, .s-promotable, .s-promoted { background: var(--pass-soft); color: var(--pass); }
-.s-FAIL, .s-NOT_MET, .s-INELIGIBLE, .s-WORSE, .s-worse, .s-ineligible, .s-rejected { background: var(--fail-soft); color: var(--fail); }
-.s-INSUFFICIENT_DATA, .s-BETTER, .s-NEUTRAL, .s-eligible, .s-unknown { background: var(--warn-soft); color: var(--warn); }
-.s-NOT_RUN, .s-unchanged, .s-proposed, .s-prepared, .s-evaluating, .s-hard, .s-soft { background: var(--none-soft); color: var(--none); }
+/* Only outcome evidence is green; a proxy improvement is a hypothesis (blue), stale evidence is amber. */
+.s-PASS, .s-MET, .s-OUTCOME_IMPROVED, .s-MISSION_MET, .s-improved, .s-accepted { background: var(--pass-soft); color: var(--pass); }
+.s-EXPERIMENT_READY, .s-PROXY_IMPROVED { background: var(--info-soft); color: var(--info); }
+.s-FAIL, .s-NOT_MET, .s-INELIGIBLE, .s-REGRESSED, .s-worse, .s-failed { background: var(--fail-soft); color: var(--fail); }
+.s-INSUFFICIENT_DATA, .s-insufficient_data, .s-STALE, .s-TRADEOFF, .s-unknown { background: var(--warn-soft); color: var(--warn); }
+.s-NOT_RUN, .s-NEUTRAL, .s-unchanged, .s-proposed, .s-prepared, .s-evaluating, .s-evaluated, .s-hard, .s-soft { background: var(--none-soft); color: var(--none); }
 .s-hard { font-weight: 700; }
 button { white-space: nowrap; font: inherit; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--sunken); color: var(--text); cursor: pointer; }
 button:hover:not(:disabled) { border-color: var(--accent); }

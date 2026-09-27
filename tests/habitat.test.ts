@@ -4,40 +4,45 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { minimalEnv, runCommand } from "../src/habitat/command.ts";
-import type { EvaluationResult, Mission } from "../src/habitat/domain.ts";
+import type { DecisionBinding, EvaluationResult, EvidenceContext, Measurement, Mission } from "../src/habitat/domain.ts";
 import { CommandEvaluator, PathPolicyEvaluator, notRun } from "../src/habitat/evaluators.ts";
-import { Habitat, HabitatBusyError } from "../src/habitat/evolution.ts";
+import { Habitat, HabitatBusyError, HabitatRefusal } from "../src/habitat/evolution.ts";
 import { GitWorktreeWorkspace } from "../src/habitat/git-workspace.ts";
-import type { EvaluationContext, Evaluator, MutationProposal } from "../src/habitat/ports.ts";
+import type { EvaluationContext, Evaluator, MutationProposal, TelemetrySource } from "../src/habitat/ports.ts";
 import { ReplayCurriculumEvaluator } from "../src/habitat/replay/evaluators.ts";
 import { REPLAY_TTVO_MISSION, replayOrganism } from "../src/habitat/replay/organism.ts";
 import { ReplayTelemetrySource } from "../src/habitat/replay/telemetry.ts";
-import { decide, missionProgress, missionReached } from "../src/habitat/selection.ts";
-import { HabitatStore } from "../src/habitat/store.ts";
+import { decide, missionProgress, missionReached, staleReasons } from "../src/habitat/selection.ts";
+import { HabitatStore, MissionDriftError } from "../src/habitat/store.ts";
 import { silentLogger } from "../src/obs/logger.ts";
 
 // ------------------------------------------------------------------ pure selection
 
-const evaluation = (evaluatorId: string, status: EvaluationResult["status"], metrics: Record<string, number> = {}): EvaluationResult => ({
+const evaluation = (evaluatorId: string, status: EvaluationResult["status"], metrics: Record<string, number> = {}, extra: Measurement[] = []): EvaluationResult => ({
   evaluatorId,
   status,
-  measurements: Object.entries(metrics).map(([metric, value]) => ({ metric, value, status: "MEASURED" as const })),
+  measurements: [...Object.entries(metrics).map(([metric, value]) => ({ metric, value, status: "MEASURED" as const })), ...extra],
   evidence: [],
   durationMs: 0,
   errors: status === "PASS" ? [] : [`${evaluatorId} ${status}`],
 });
+const usage = (value: number, sampleSize: number): Measurement => ({ metric: "usage.success", value, status: "MEASURED", sampleSize });
 
 const MISSION: Mission = {
   id: "fixture-mission",
   organismId: "fixture",
-  objective: "Baixar o score sem perder cobertura.",
+  objective: "Baixar o score sem perder cobertura, e o sucesso real subir.",
   status: "active",
   desiredState: [
     { metric: "score", label: "Score", operator: "<=", target: 3 },
     { metric: "usage.success", label: "Sucesso real", operator: ">=", target: 0.9, minSampleSize: 10 },
   ],
   fitness: {
-    objectives: [{ metric: "score", label: "Score", direction: "minimize" }],
+    objectives: [
+      { metric: "score", label: "Score", direction: "minimize", kind: "proxy" },
+      { metric: "length", label: "Comprimento", direction: "minimize", kind: "proxy" },
+      { metric: "usage.success", label: "Sucesso real", direction: "maximize", kind: "outcome", minSampleSize: 10 },
+    ],
     guards: [{ metric: "coverage", label: "Cobertura", operator: ">=", threshold: 3, reason: "menos score não pode vir de cobrir menos" }],
   },
   envelope: {
@@ -51,46 +56,83 @@ const MISSION: Mission = {
   },
 };
 
-const baseline = [evaluation("path-policy", "PASS"), evaluation("check", "PASS"), evaluation("score", "PASS", { score: 10, coverage: 3, size: 10 })];
+const run = (metrics: Record<string, number>, check: EvaluationResult["status"] = "PASS", extra: Measurement[] = []) => [
+  evaluation("path-policy", "PASS"),
+  evaluation("check", check),
+  evaluation("score", "PASS", { size: 10, coverage: 3, length: 5, ...metrics }, extra),
+];
+const baseline = run({ score: 10 });
 
 describe("selection", () => {
-  test("a hard failure blocks promotion even with much better fitness", () => {
-    const candidate = [evaluation("path-policy", "PASS"), evaluation("check", "FAIL"), evaluation("score", "PASS", { score: 0, coverage: 9, size: 1 })];
-    const decision = decide(MISSION, baseline, candidate);
+  test("HARD FAIL is INELIGIBLE even with much better fitness", () => {
+    const decision = decide(MISSION, baseline, run({ score: 0, coverage: 9 }, "FAIL"));
     expect(decision.verdict).toBe("INELIGIBLE");
     expect(decision.reasons[0]).toContain("HARD Checagem: FAIL");
   });
 
-  test("a hard check that did not run is not a pass", () => {
-    const candidate = [evaluation("path-policy", "PASS"), notRun("check", "sem runner"), evaluation("score", "PASS", { score: 1, coverage: 3, size: 1 })];
+  test("HARD NOT_RUN is INELIGIBLE: a check that did not run is not a pass", () => {
+    const candidate = [evaluation("path-policy", "PASS"), notRun("check", "sem runner"), evaluation("score", "PASS", { score: 1, coverage: 3, size: 1, length: 5 })];
     expect(decide(MISSION, baseline, candidate).verdict).toBe("INELIGIBLE");
   });
 
-  test("a broken counter-metric makes an 'improvement' WORSE (anti-Goodhart)", () => {
-    const candidate = [evaluation("path-policy", "PASS"), evaluation("check", "PASS"), evaluation("score", "PASS", { score: 1, coverage: 2, size: 1 })];
-    const decision = decide(MISSION, baseline, candidate);
-    expect(decision.verdict).toBe("WORSE");
+  test("a broken protected metric is REGRESSED, whatever the objectives say", () => {
+    const decision = decide(MISSION, baseline, run({ score: 1, coverage: 2 }));
+    expect(decision.verdict).toBe("REGRESSED");
     expect(decision.guards[0]?.status).toBe("FAIL");
   });
 
-  test("better inside the envelope is PROMOTABLE; a soft miss only makes it BETTER", () => {
-    const good = [evaluation("path-policy", "PASS"), evaluation("check", "PASS"), evaluation("score", "PASS", { score: 5, coverage: 3, size: 10 })];
-    expect(decide(MISSION, baseline, good).verdict).toBe("PROMOTABLE");
-    const heavy = [evaluation("path-policy", "PASS"), evaluation("check", "PASS"), evaluation("score", "PASS", { score: 5, coverage: 3, size: 500 })];
-    expect(decide(MISSION, baseline, heavy).verdict).toBe("BETTER");
-    const same = [evaluation("path-policy", "PASS"), evaluation("check", "PASS"), evaluation("score", "PASS", { score: 10, coverage: 3, size: 10 })];
-    expect(decide(MISSION, baseline, same).verdict).toBe("NEUTRAL");
+  test("objectives stay a vector: better and worse at once is TRADEOFF, only worse is REGRESSED, nothing is NEUTRAL", () => {
+    const tradeoff = decide(MISSION, baseline, run({ score: 5, length: 9 }));
+    expect(tradeoff.verdict).toBe("TRADEOFF");
+    expect(tradeoff.comparisons.map((c) => [c.metric, c.outcome])).toEqual([
+      ["score", "improved"],
+      ["length", "worse"],
+      ["usage.success", "insufficient_data"],
+    ]);
+    expect(decide(MISSION, baseline, run({ score: 12 })).verdict).toBe("REGRESSED");
+    expect(decide(MISSION, baseline, run({ score: 10 })).verdict).toBe("NEUTRAL");
+  });
+
+  test("better proxies inside a green envelope are EXPERIMENT_READY — never an outcome improvement", () => {
+    const decision = decide(MISSION, baseline, run({ score: 5 }));
+    expect(decision.verdict).toBe("EXPERIMENT_READY");
+    expect(decision.reasons.join(" ")).toContain("só um experimento em uso real pode confirmar");
+  });
+
+  test("a SOFT violation is a warning and never makes a candidate better", () => {
+    const heavy = decide(MISSION, baseline, run({ score: 5, size: 500 }));
+    expect(heavy.verdict).toBe("PROXY_IMPROVED");
+    expect(heavy.warnings[0]).toContain("SOFT Tamanho");
+    // Without improvement, the warning changes nothing either way.
+    expect(decide(MISSION, baseline, run({ score: 10, size: 500 })).verdict).toBe("NEUTRAL");
+  });
+
+  test("outcomes count only with enough samples", () => {
+    const before = run({ score: 10 }, "PASS", [usage(0.5, 20)]);
+    expect(decide(MISSION, before, run({ score: 5 }, "PASS", [usage(0.95, 4)])).verdict).toBe("EXPERIMENT_READY");
+    expect(decide(MISSION, before, run({ score: 5 }, "PASS", [usage(0.8, 20)])).verdict).toBe("OUTCOME_IMPROVED");
+    expect(decide(MISSION, before, run({ score: 2 }, "PASS", [usage(0.95, 20)])).verdict).toBe("MISSION_MET");
+    expect(decide(MISSION, before, run({ score: 5 }, "PASS", [usage(0.3, 20)])).verdict).toBe("TRADEOFF");
   });
 
   test("insufficient telemetry never claims the desired state", () => {
-    const measured = new Map([
-      ["score", { metric: "score", value: 1, status: "MEASURED" as const }],
-      // The value meets the target, but on 4 samples out of the 10 required.
-      ["usage.success", { metric: "usage.success", value: 1, status: "MEASURED" as const, sampleSize: 4 }],
-    ]);
-    const progress = missionProgress(MISSION, measured);
+    const progress = missionProgress(MISSION, new Map([["score", { metric: "score", value: 1, status: "MEASURED" as const }], ["usage.success", usage(1, 4)]]));
     expect(progress.map((p) => p.status)).toEqual(["MET", "INSUFFICIENT_DATA"]);
     expect(missionReached(progress)).toBe(false);
+  });
+
+  test("evidence is STALE when the baseline, mission, envelope or evaluators change, or when it is unbound", () => {
+    const binding: DecisionBinding = { baselineRevision: "b1", candidateRevision: "c1", baselineObservationId: "o1", missionId: "m", missionRevision: 1, missionHash: "mh", envelopeHash: "eh", evaluators: ["check@1", "score@1"] };
+    const now: EvidenceContext = { baselineRevision: "b1", missionId: "m", missionRevision: 1, missionHash: "mh", envelopeHash: "eh", evaluators: ["check@1", "score@1"] };
+    const bound = (e: EvaluationResult): EvaluationResult => ({ ...e, binding: { baselineRevision: "b1", subjectRevision: "c1", missionId: "m", missionRevision: 1, missionHash: "mh", envelopeHash: "eh", evaluator: `${e.evaluatorId}@1` } });
+    const evidence = [bound(evaluation("check", "PASS")), bound(evaluation("score", "PASS"))];
+    expect(staleReasons(binding, evidence, now)).toEqual([]);
+    expect(staleReasons(binding, evidence, { ...now, baselineRevision: "b2" })[0]).toContain("a baseline mudou");
+    expect(staleReasons(binding, evidence, { ...now, missionRevision: 2, missionHash: "mh2" })[0]).toContain("a missão mudou");
+    expect(staleReasons(binding, evidence, { ...now, envelopeHash: "eh2" })[0]).toContain("o envelope mudou");
+    expect(staleReasons(binding, evidence, { ...now, evaluators: ["check@2", "score@1"] })[0]).toContain("avaliadores mudaram: check@1");
+    expect(staleReasons(binding, [evaluation("check", "PASS")], now)[0]).toContain("evidência não vinculada");
+    expect(staleReasons(null, evidence, now)[0]).toContain("sem vínculo");
   });
 });
 
@@ -123,14 +165,16 @@ describe("runCommand", () => {
     delete process.env.HABITAT_TEST_SECRET;
   });
 
-  test("a failing CommandEvaluator is FAIL with the command as evidence", async () => {
-    const result = await new CommandEvaluator("check", ["false"], 5000).evaluate({ dir: tmpdir(), baselineRevision: "a", revision: "b", changes: [] });
+  test("a failing CommandEvaluator is FAIL with the command as evidence; its version names its configuration", async () => {
+    const evaluator = new CommandEvaluator("check", ["false"], 5000);
+    const result = await evaluator.evaluate({ dir: tmpdir(), baselineRevision: "a", revision: "b", changes: [] });
     expect(result.status).toBe("FAIL");
     expect(result.evidence[0]?.summary).toContain("false");
+    expect(evaluator.version).toBe("1;argv=false;timeout=5000");
   });
 });
 
-// ------------------------------------------------------------------ closed loop on a fixture repository
+// ------------------------------------------------------------------ closed loop on fixture repositories
 
 const git = async (cwd: string, ...args: string[]): Promise<string> => {
   const result = await runCommand(["git", "-c", "user.name=fixture", "-c", "user.email=fixture@local", ...args], { cwd, timeoutMs: 20_000, env: minimalEnv() });
@@ -141,27 +185,46 @@ const git = async (cwd: string, ...args: string[]): Promise<string> => {
 /** The fixture's "curriculum": score and coverage live in content/, the rules in evaluators/ (protected). */
 class ScoreEvaluator implements Evaluator {
   readonly id = "score";
+  readonly version = "1";
   async evaluate(context: EvaluationContext): Promise<EvaluationResult> {
-    const score = Number(readFileSync(join(context.dir, "content/score.txt"), "utf8"));
-    const coverage = Number(readFileSync(join(context.dir, "content/coverage.txt"), "utf8"));
-    return evaluation(this.id, "PASS", { score, coverage, size: 10 });
+    const read = (name: string) => Number(readFileSync(join(context.dir, "content", name), "utf8"));
+    return evaluation(this.id, "PASS", { score: read("score.txt"), coverage: read("coverage.txt"), size: 10, length: 5 });
   }
 }
 
 class CrashingEvaluator implements Evaluator {
   readonly id = "check";
+  readonly version = "crash";
   async evaluate(): Promise<EvaluationResult> {
     throw new Error("evaluator exploded");
   }
 }
 
-let root = "";
-let repo = "";
-let worktrees = "";
+/** Real use, scripted: what learners did with whatever baseline is deployed. */
+class ScriptedTelemetry implements TelemetrySource {
+  readonly id = "telemetry";
+  readonly version = "1";
+  next: Measurement[] = [];
+  async measure(): Promise<Measurement[]> {
+    return this.next;
+  }
+}
 
-async function patchFor(files: Record<string, string>, links: Record<string, string> = {}): Promise<string> {
+let root = "";
+let fixture = "";
+
+type Fixture = { repo: string; worktrees: string; head: string };
+
+/** A fresh clone per test: acceptance moves branches, and tests must not see each other's baselines. */
+async function freshRepo(): Promise<Fixture> {
+  const dir = join(root, `repo-${crypto.randomUUID().slice(0, 6)}`);
+  await git(root, "clone", "--quiet", fixture, dir);
+  return { repo: dir, worktrees: `${dir}-worktrees`, head: await git(dir, "rev-parse", "HEAD") };
+}
+
+async function patchFor(repo: string, files: Record<string, string>, links: Record<string, string> = {}, base = "HEAD"): Promise<string> {
   const dir = join(root, `author-${crypto.randomUUID().slice(0, 6)}`);
-  await git(repo, "worktree", "add", "--detach", dir, "HEAD");
+  await git(repo, "worktree", "add", "--detach", dir, base);
   for (const [path, content] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), content);
@@ -173,167 +236,249 @@ async function patchFor(files: Record<string, string>, links: Record<string, str
   return patch;
 }
 
-function habitatFor(proposals: MutationProposal[], options: { crash?: boolean } = {}) {
-  const store = new HabitatStore(":memory:");
-  const workspace = new GitWorktreeWorkspace(repo, worktrees, []);
-  const checkEvaluator: Evaluator = options.crash ? new CrashingEvaluator() : new CommandEvaluator("check", ["test", "-f", "content/score.txt"], 5000);
-  const habitat = new Habitat({
-    store,
-    organism: { id: "fixture", name: "Fixture", repositoryPath: repo, allowedPaths: ["content/**"] },
-    mission: MISSION,
-    workspace,
-    pathPolicy: new PathPolicyEvaluator(["content/**"]),
-    evaluators: [checkEvaluator, new ScoreEvaluator()],
-    mutations: { propose: async () => proposals },
-    baselineRevision: () => git(repo, "rev-parse", "HEAD"),
-    logger: silentLogger,
-  });
-  return { habitat, store, workspace };
+const proposal = (id: string, patch: string, claims?: string): MutationProposal => ({ id, hypothesis: `Hipótese ${id} do fixture.`, source: { kind: "manual", author: "test" }, patch, ...(claims ? { claims } : {}) });
+
+function habitatFor(f: Fixture, proposals: MutationProposal[], options: { crash?: boolean; checkTimeoutMs?: number; mission?: Mission; store?: HabitatStore; reviseMissionBy?: string; telemetry?: TelemetrySource } = {}) {
+  const store = options.store ?? new HabitatStore(":memory:");
+  const checkEvaluator: Evaluator = options.crash ? new CrashingEvaluator() : new CommandEvaluator("check", ["test", "-f", "content/score.txt"], options.checkTimeoutMs ?? 5000);
+  const habitat = new Habitat(
+    {
+      store,
+      organism: { id: "fixture", name: "Fixture", repositoryPath: f.repo, allowedPaths: ["content/**"] },
+      mission: options.mission ?? MISSION,
+      workspace: new GitWorktreeWorkspace(f.repo, f.worktrees, []),
+      pathPolicy: new PathPolicyEvaluator(["content/**"]),
+      evaluators: [checkEvaluator, new ScoreEvaluator()],
+      mutations: { propose: async () => proposals },
+      ...(options.telemetry ? { telemetry: options.telemetry } : {}),
+      baselineRevision: () => git(f.repo, "rev-parse", "HEAD"),
+      advanceBaseline: async (from, to) => {
+        if ((await git(f.repo, "rev-parse", "HEAD")) !== from) throw new Error("baseline moved");
+        await git(f.repo, "merge", "--ff-only", "--quiet", to);
+      },
+      logger: silentLogger,
+    },
+    options.reviseMissionBy ? { reviseMissionBy: options.reviseMissionBy } : {},
+  );
+  return { habitat, store };
 }
 
-const proposals: Record<string, MutationProposal> = {};
-let head = "";
+const CLAIMS = "Todos os testes passam; pode aceitar.";
+const patches: Record<string, string> = {};
 
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "habitat-test-"));
-  repo = join(root, "repo");
-  worktrees = join(root, "worktrees");
-  mkdirSync(join(repo, "content"), { recursive: true });
-  mkdirSync(join(repo, "evaluators"), { recursive: true });
-  writeFileSync(join(repo, "content/score.txt"), "10");
-  writeFileSync(join(repo, "content/coverage.txt"), "3");
-  writeFileSync(join(repo, "evaluators/rule.txt"), "score must go down");
-  await git(repo, "init", "--quiet", "--initial-branch=main");
-  await git(repo, "add", "-A");
-  await git(repo, "commit", "--quiet", "-m", "baseline");
-  head = await git(repo, "rev-parse", "HEAD");
-
-  const claims = "Todos os testes passam; pode promover.";
-  proposals.good = { id: "good", hypothesis: "Baixar o score mantendo a cobertura.", source: { kind: "manual", author: "test" }, patch: await patchFor({ "content/score.txt": "5" }), claims };
-  proposals.gaming = { id: "gaming", hypothesis: "Baixar o score cortando cobertura.", source: { kind: "llm", author: "test" }, patch: await patchFor({ "content/score.txt": "1", "content/coverage.txt": "1" }), claims };
-  proposals.tamper = {
-    id: "tamper",
-    hypothesis: "Baixar o score e afrouxar a regra do avaliador.",
-    source: { kind: "llm", author: "test" },
-    patch: await patchFor({ "content/score.txt": "0", "evaluators/rule.txt": "anything goes" }),
-    claims,
-  };
-  proposals.symlink = { id: "symlink", hypothesis: "Um atalho dentro de content.", source: { kind: "rule", author: "test" }, patch: await patchFor({}, { "content/rules": "../evaluators/rule.txt" }) };
-  proposals.stale = { id: "stale", hypothesis: "Um patch que não se aplica.", source: { kind: "manual", author: "test" }, patch: "diff --git a/content/x.txt b/content/x.txt\n--- a/content/x.txt\n+++ b/content/x.txt\n@@ -1 +1 @@\n-nope\n+yes\n" };
+  fixture = join(root, "fixture");
+  mkdirSync(join(fixture, "content"), { recursive: true });
+  mkdirSync(join(fixture, "evaluators"), { recursive: true });
+  writeFileSync(join(fixture, "content/score.txt"), "10");
+  writeFileSync(join(fixture, "content/coverage.txt"), "3");
+  writeFileSync(join(fixture, "evaluators/rule.txt"), "score must go down");
+  await git(fixture, "init", "--quiet", "--initial-branch=main");
+  await git(fixture, "add", "-A");
+  await git(fixture, "commit", "--quiet", "-m", "baseline");
+  patches.good = await patchFor(fixture, { "content/score.txt": "5" });
+  patches.gaming = await patchFor(fixture, { "content/score.txt": "1", "content/coverage.txt": "1" });
+  patches.tamper = await patchFor(fixture, { "content/score.txt": "0", "evaluators/rule.txt": "anything goes" });
+  patches.symlink = await patchFor(fixture, {}, { "content/rules": "../evaluators/rule.txt" });
 });
 
 afterAll(() => {
   if (root) rmSync(root, { recursive: true, force: true });
 });
 
-async function baselineUntouched(): Promise<void> {
-  expect(await git(repo, "rev-parse", "HEAD")).toBe(head);
-  expect(await git(repo, "status", "--porcelain")).toBe("");
-  expect(readFileSync(join(repo, "content/score.txt"), "utf8")).toBe("10");
-  expect(readFileSync(join(repo, "evaluators/rule.txt"), "utf8")).toBe("score must go down");
+async function baselineUntouched(f: Fixture): Promise<void> {
+  expect(await git(f.repo, "rev-parse", "HEAD")).toBe(f.head);
+  expect(await git(f.repo, "status", "--porcelain")).toBe("");
+  expect(readFileSync(join(f.repo, "content/score.txt"), "utf8")).toBe("10");
+  expect(readFileSync(join(f.repo, "evaluators/rule.txt"), "utf8")).toBe("score must go down");
 }
 
 describe("habitat loop (fixture repository)", () => {
-  test("a better candidate inside the envelope is PROMOTABLE, not promoted; the baseline is untouched", async () => {
-    const { habitat, store } = habitatFor(Object.values(proposals));
+  test("better proxies inside the envelope are EXPERIMENT_READY, bound to baseline, candidate, mission and evaluators", async () => {
+    const f = await freshRepo();
+    const { habitat, store } = habitatFor(f, [proposal("good", patches.good ?? "", CLAIMS)]);
     await habitat.observeBaseline();
     const { candidate, decision } = await habitat.evolve("good");
-    expect(decision.verdict).toBe("PROMOTABLE");
-    expect(candidate.status).toBe("promotable");
-    // The author's claim is kept as information; the decision cites only evaluator evidence.
+    expect(decision.verdict).toBe("EXPERIMENT_READY");
+    expect(candidate.status).toBe("evaluated");
     expect(candidate.claims).toContain("Todos os testes passam");
     expect(decision.reasons.join(" ")).not.toContain("Todos os testes passam");
-    // Evidence matches the decision: every constraint result comes from a stored evaluation.
-    const stored = new Map(store.evaluations("candidate", candidate.id).map((e) => [e.evaluatorId, e.status]));
-    for (const c of decision.constraints.filter((x) => !x.constraintId.startsWith("size"))) expect(stored.get(MISSION.envelope.constraints.find((k) => k.id === c.constraintId)?.evaluatorId ?? "")).toBe(c.status);
-    expect(existsSync(join(worktrees, candidate.id))).toBe(false);
-    expect(await git(repo, "rev-parse", `refs/habitat/candidates/${candidate.id}`)).toBe(candidate.revision ?? "");
-    await baselineUntouched();
-    expect(store.events().map((e) => e.kind)).toContain("candidate_promotable");
-    expect(store.events().map((e) => e.kind)).not.toContain("candidate_promoted");
+    expect(decision.binding).toMatchObject({ baselineRevision: f.head, candidateRevision: candidate.revision, missionId: MISSION.id, missionRevision: 1, evaluators: ["check@1;argv=test -f content/score.txt;timeout=5000", "path-policy@1;allowed=content/**", "score@1"] });
+    for (const e of store.evaluations("candidate", candidate.id)) expect(e.binding).toMatchObject({ baselineRevision: f.head, subjectRevision: candidate.revision, missionHash: decision.binding?.missionHash });
+    expect((await habitat.assess(candidate.id)).verdict).toBe("EXPERIMENT_READY");
+    expect(existsSync(join(f.worktrees, candidate.id))).toBe(false);
+    expect(await git(f.repo, "rev-parse", `refs/habitat/candidates/${candidate.id}`)).toBe(candidate.revision ?? "");
+    await baselineUntouched(f);
   });
 
   test("a candidate that touches evaluators is INELIGIBLE, runs nothing, and stays inspectable", async () => {
-    const { habitat, store } = habitatFor(Object.values(proposals));
+    const f = await freshRepo();
+    const { habitat, store } = habitatFor(f, [proposal("tamper", patches.tamper ?? "", CLAIMS)]);
     await habitat.observeBaseline();
     const { candidate, decision } = await habitat.evolve("tamper");
     expect(decision.verdict).toBe("INELIGIBLE");
     const evaluations = store.evaluations("candidate", candidate.id);
     expect(evaluations.find((e) => e.evaluatorId === "path-policy")?.errors).toContain("fora dos caminhos permitidos: evaluators/rule.txt");
     expect(evaluations.filter((e) => e.evaluatorId !== "path-policy").map((e) => e.status)).toEqual(["NOT_RUN", "NOT_RUN"]);
-    // Much "better" score (0) does not matter: the hard failure decides.
-    expect(decision.comparisons[0]?.candidate).toBeNull();
-    expect(await git(repo, "cat-file", "-t", `refs/habitat/candidates/${candidate.id}`)).toBe("commit");
-    expect(store.events().some((e) => e.kind === "constraint_failed" && e.candidateId === candidate.id)).toBe(true);
-    await baselineUntouched();
+    expect(await git(f.repo, "cat-file", "-t", `refs/habitat/candidates/${candidate.id}`)).toBe("commit");
+    await baselineUntouched(f);
   });
 
-  test("symlinks are refused even inside allowed paths", async () => {
-    const { habitat } = habitatFor(Object.values(proposals));
+  test("symlinks are refused even inside allowed paths; cutting a protected metric is REGRESSED; a crash is a FAIL", async () => {
+    const f = await freshRepo();
+    const { habitat } = habitatFor(f, [proposal("symlink", patches.symlink ?? ""), proposal("gaming", patches.gaming ?? "")]);
     await habitat.observeBaseline();
-    const { decision } = await habitat.evolve("symlink");
-    expect(decision.verdict).toBe("INELIGIBLE");
-    expect(decision.reasons.join(" ")).toContain("symlink");
-  });
-
-  test("gaming the objective by cutting a counter-metric is WORSE", async () => {
-    const { habitat } = habitatFor(Object.values(proposals));
-    await habitat.observeBaseline();
-    const { decision, candidate } = await habitat.evolve("gaming");
-    expect(decision.verdict).toBe("WORSE");
-    expect(candidate.status).toBe("rejected");
-  });
-
-  test("a crashing evaluator is a FAIL, never a silent pass", async () => {
-    const { habitat } = habitatFor(Object.values(proposals), { crash: true });
-    await habitat.observeBaseline();
-    const { decision } = await habitat.evolve("good");
+    expect((await habitat.evolve("symlink")).decision.verdict).toBe("INELIGIBLE");
+    expect((await habitat.evolve("gaming")).decision.verdict).toBe("REGRESSED");
+    const crashing = habitatFor(f, [proposal("good", patches.good ?? "")], { crash: true }).habitat;
+    await crashing.observeBaseline();
+    const { decision } = await crashing.evolve("good");
     expect(decision.verdict).toBe("INELIGIBLE");
     expect(decision.constraints.find((c) => c.constraintId === "check")?.detail).toContain("evaluator exploded");
   });
 
-  test("a patch that does not apply is rejected and leaves no workspace behind", async () => {
-    const { habitat, store } = habitatFor(Object.values(proposals));
+  test("a patch that does not apply fails and leaves no workspace behind", async () => {
+    const f = await freshRepo();
+    const stale = "diff --git a/content/x.txt b/content/x.txt\n--- a/content/x.txt\n+++ b/content/x.txt\n@@ -1 +1 @@\n-nope\n+yes\n";
+    const { habitat, store } = habitatFor(f, [proposal("stale", stale)]);
     await habitat.observeBaseline();
     await expect(habitat.evolve("stale")).rejects.toThrow();
     const [candidate] = store.candidates(MISSION.id);
-    expect(candidate?.status).toBe("rejected");
-    expect(existsSync(join(worktrees, candidate?.id ?? "x"))).toBe(false);
-    await baselineUntouched();
+    expect(candidate?.status).toBe("failed");
+    expect(existsSync(join(f.worktrees, candidate?.id ?? "x"))).toBe(false);
+    await baselineUntouched(f);
   });
 
-  test("only a human promotes, only PROMOTABLE candidates, and only to a branch", async () => {
-    const { habitat } = habitatFor(Object.values(proposals));
+  test("when the baseline moves, evidence goes STALE, acceptance is refused, and re-evaluation replays the change", async () => {
+    const f = await freshRepo();
+    const { habitat, store } = habitatFor(f, [proposal("good", patches.good ?? "")]);
     await habitat.observeBaseline();
-    const rejected = await habitat.evolve("gaming");
+    const first = await habitat.evolve("good");
+    writeFileSync(join(f.repo, "content/coverage.txt"), "4");
+    await git(f.repo, "commit", "--quiet", "-am", "someone else changed the baseline");
+
+    const assessment = await habitat.assess(first.candidate.id);
+    expect(assessment.verdict).toBe("STALE");
+    expect(assessment.recordedVerdict).toBe("EXPERIMENT_READY");
+    expect(assessment.stale[0]).toContain("a baseline mudou");
+    await expect(habitat.accept(first.candidate.id, "reviewer")).rejects.toMatchObject({ code: "STALE_EVIDENCE" });
+    await expect(habitat.reevaluate(first.candidate.id)).rejects.toMatchObject({ code: "BASELINE_NOT_OBSERVED" });
+
+    await habitat.observeBaseline();
+    const again = await habitat.reevaluate(first.candidate.id);
+    expect(again.candidate.reevaluationOf).toBe(first.candidate.id);
+    expect(again.candidate.parentRevision).toBe(await git(f.repo, "rev-parse", "HEAD"));
+    expect(again.decision.verdict).toBe("EXPERIMENT_READY");
+    expect(store.events().some((e) => e.kind === "candidate_reevaluation_started")).toBe(true);
+  });
+
+  test("changing an evaluator's configuration makes old evidence stale and the old observation unusable", async () => {
+    const f = await freshRepo();
+    const store = new HabitatStore(":memory:");
+    const before = habitatFor(f, [proposal("good", patches.good ?? "")], { store }).habitat;
+    await before.observeBaseline();
+    const { candidate } = await before.evolve("good");
+    const after = habitatFor(f, [proposal("good", patches.good ?? "")], { store, checkTimeoutMs: 9000 }).habitat;
+    const assessment = await after.assess(candidate.id);
+    expect(assessment.verdict).toBe("STALE");
+    expect(assessment.stale.join(" ")).toContain("avaliadores mudaram");
+    await expect(after.evolve("good")).rejects.toMatchObject({ code: "BASELINE_NOT_OBSERVED" });
+  });
+
+  test("a changed mission is refused until a human revises it; then earlier evidence is STALE", async () => {
+    const f = await freshRepo();
+    const store = new HabitatStore(":memory:");
+    const { habitat } = habitatFor(f, [proposal("good", patches.good ?? "")], { store });
+    await habitat.observeBaseline();
+    const { candidate } = await habitat.evolve("good");
+    const loosened: Mission = { ...MISSION, envelope: { ...MISSION.envelope, constraints: MISSION.envelope.constraints.map((c) => ({ ...c, severity: "soft" as const })) } };
+    expect(() => habitatFor(f, [], { store, mission: loosened })).toThrow(MissionDriftError);
+    const revised = habitatFor(f, [], { store, mission: loosened, reviseMissionBy: "product owner" }).habitat;
+    const assessment = await revised.assess(candidate.id);
+    expect(assessment.verdict).toBe("STALE");
+    expect(assessment.stale.join(" ")).toContain("a missão mudou (revisão 1 → 2)");
+    expect(store.events().find((e) => e.kind === "mission_revised")?.data).toMatchObject({ by: "product owner" });
+  });
+
+  test("closed loop: observe → candidate → evaluate → accept → new baseline → observe again → second generation", async () => {
+    const f = await freshRepo();
+    const telemetry = new ScriptedTelemetry();
+    const proposals = [proposal("good", patches.good ?? ""), proposal("gaming", patches.gaming ?? "")];
+    const { habitat, store } = habitatFor(f, proposals, { telemetry });
+
+    telemetry.next = [usage(0.5, 20)];
+    await habitat.observeBaseline();
+    const gaming = await habitat.evolve("gaming");
     const good = await habitat.evolve("good");
-    const published: string[] = [];
-    const publish = async (branch: string, revision: string) => {
-      published.push(branch);
-      await git(repo, "branch", branch, revision);
-    };
-    await expect(habitat.promote(rejected.candidate.id, "reviewer", publish)).rejects.toThrow("not promotable");
-    const branch = await habitat.promote(good.candidate.id, "reviewer", publish);
-    expect(branch).toBe(`habitat/${good.candidate.id}`);
-    expect(await git(repo, "rev-parse", branch)).toBe(good.candidate.revision ?? "");
-    expect(published).toEqual([branch]);
-    await baselineUntouched();
+    expect(good.candidate.generation).toBe(1);
+    await expect(habitat.accept(gaming.candidate.id, "reviewer")).rejects.toMatchObject({ code: "NOT_ACCEPTABLE" });
+
+    // Human acceptance: fast-forward only, the candidate's own commit becomes the baseline.
+    const { from, to } = await habitat.accept(good.candidate.id, "reviewer");
+    expect(from).toBe(f.head);
+    expect(to).toBe(good.candidate.revision ?? "");
+    expect(await git(f.repo, "rev-parse", "HEAD")).toBe(to);
+    expect(readFileSync(join(f.repo, "content/score.txt"), "utf8")).toBe("5");
+    await expect(habitat.accept(good.candidate.id, "reviewer")).rejects.toBeInstanceOf(HabitatRefusal);
+    // The competitor was judged against the old baseline: its evidence no longer describes the present.
+    expect((await habitat.assess(gaming.candidate.id)).verdict).toBe("STALE");
+
+    // Observe the new baseline; real use now shows the outcome with enough samples.
+    telemetry.next = [usage(0.8, 20)];
+    const { observationId } = await habitat.observeBaseline();
+    const experiment = store.assessment(observationId);
+    expect(experiment?.candidateId).toBe(good.candidate.id);
+    expect(experiment?.decision.verdict).toBe("OUTCOME_IMPROVED");
+
+    // Second generation, proposed against the new baseline.
+    const next = proposal("better", await patchFor(f.repo, { "content/score.txt": "2" }));
+    proposals.push(next);
+    const second = await habitat.evolve("better");
+    expect(second.candidate.generation).toBe(2);
+    expect(second.candidate.parentRevision).toBe(to);
+    expect(second.decision.verdict).toBe("EXPERIMENT_READY");
+    expect(store.events().map((e) => e.kind)).toEqual(expect.arrayContaining(["candidate_accepted", "baseline_advanced", "experiment_assessed"]));
   });
 
   test("one job at a time", async () => {
-    const { habitat } = habitatFor(Object.values(proposals));
+    const f = await freshRepo();
+    const { habitat } = habitatFor(f, [proposal("good", patches.good ?? ""), proposal("gaming", patches.gaming ?? "")]);
     await habitat.observeBaseline();
     const first = habitat.evolve("good");
     await expect(habitat.evolve("gaming")).rejects.toBeInstanceOf(HabitatBusyError);
     await first;
   });
+});
 
-  test("the envelope is fixed when the mission starts: a later definition cannot loosen it", () => {
-    const store = new HabitatStore(":memory:");
-    store.ensureMission(MISSION);
-    const loosened: Mission = { ...MISSION, envelope: { ...MISSION.envelope, constraints: MISSION.envelope.constraints.map((c) => ({ ...c, severity: "soft" as const })) } };
-    const stored = store.ensureMission(loosened);
-    expect(stored.envelope.constraints.filter((c) => c.severity === "hard").length).toBe(2);
+describe("habitat store", () => {
+  test("a v1 database migrates; its decisions become STALE instead of keeping the old verdicts", () => {
+    const dir = mkdtempSync(join(tmpdir(), "habitat-v1-"));
+    const path = join(dir, "habitat.sqlite");
+    const db = new Database(path);
+    db.exec(`
+      CREATE TABLE missions (id TEXT PRIMARY KEY, organism_id TEXT NOT NULL, definition TEXT NOT NULL, created_at INTEGER NOT NULL);
+      CREATE TABLE observations (id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, revision TEXT NOT NULL, created_at INTEGER NOT NULL);
+      CREATE TABLE candidates (id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, proposal_id TEXT NOT NULL, generation INTEGER NOT NULL, parent_revision TEXT NOT NULL, revision TEXT, hypothesis TEXT NOT NULL, source TEXT NOT NULL, claims TEXT, status TEXT NOT NULL, created_at INTEGER NOT NULL);
+      CREATE TABLE candidate_changes (candidate_id TEXT NOT NULL, path TEXT NOT NULL, status TEXT NOT NULL, old_mode TEXT NOT NULL, new_mode TEXT NOT NULL);
+      CREATE TABLE evaluations (id INTEGER PRIMARY KEY AUTOINCREMENT, subject_kind TEXT NOT NULL, subject_id TEXT NOT NULL, evaluator_id TEXT NOT NULL, status TEXT NOT NULL, result TEXT NOT NULL, created_at INTEGER NOT NULL);
+      CREATE TABLE decisions (candidate_id TEXT PRIMARY KEY, verdict TEXT NOT NULL, detail TEXT NOT NULL, created_at INTEGER NOT NULL);
+      CREATE TABLE habitat_events (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, mission_id TEXT, candidate_id TEXT, data TEXT, created_at INTEGER NOT NULL);
+      INSERT INTO missions VALUES ('m', 'o', '{"id":"m"}', 1);
+      INSERT INTO candidates VALUES ('cand-1', 'm', 'p', 1, 'aaa', 'bbb', 'h', '{"kind":"manual","author":"x"}', NULL, 'promotable', 2);
+      INSERT INTO decisions VALUES ('cand-1', 'PROMOTABLE', '{"verdict":"PROMOTABLE","constraints":[],"comparisons":[],"guards":[],"reasons":["x"]}', 3);
+    `);
+    db.close();
+    try {
+      const store = new HabitatStore(path);
+      expect(store.candidate("cand-1")?.status).toBe("evaluated");
+      const decision = store.decision("cand-1");
+      expect(decision?.verdict).toBe("STALE");
+      expect(decision?.reasons[0]).toContain("semântica antiga (PROMOTABLE)");
+      store.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -352,9 +497,12 @@ describe("Replay organism", () => {
     }
   });
 
-  test("the mission's envelope protects correctness as HARD constraints", () => {
+  test("the mission protects correctness as HARD constraints and separates proxies from outcomes", () => {
     const hard = REPLAY_TTVO_MISSION.envelope.constraints.filter((c) => c.severity === "hard").map((c) => c.evaluatorId);
     expect(hard).toEqual(expect.arrayContaining(["path-policy", "typecheck", "tests", "replay-curriculum"]));
+    const outcomes = REPLAY_TTVO_MISSION.fitness.objectives.filter((o) => o.kind === "outcome");
+    expect(outcomes.map((o) => o.metric)).toEqual(["replay.median_microstage_seconds", "replay.checkpoint_success_rate", "replay.novel_change_success_rate"]);
+    expect(outcomes.every((o) => o.minSampleSize !== undefined)).toBe(true);
   });
 
   test("the curriculum evaluator measures the real Module 1", async () => {
@@ -380,8 +528,7 @@ describe("Replay organism", () => {
       const empty = await new ReplayTelemetrySource(join(dir, "missing.sqlite"), async () => 0).measure();
       expect(empty.every((m) => m.status === "INSUFFICIENT_DATA")).toBe(true);
       const measured = await new ReplayTelemetrySource(path, async () => 1000).measure();
-      const median = measured.find((m) => m.metric === "replay.median_microstage_seconds");
-      expect(median).toMatchObject({ value: 60, sampleSize: 2, status: "MEASURED" });
+      expect(measured.find((m) => m.metric === "replay.median_microstage_seconds")).toMatchObject({ value: 60, sampleSize: 2, status: "MEASURED" });
       expect(measured.find((m) => m.metric === "replay.novel_change_success_rate")?.status).toBe("INSUFFICIENT_DATA");
       // Two samples measured, but the mission needs 30: still not claimable.
       const progress = missionProgress(REPLAY_TTVO_MISSION, new Map(measured.map((m) => [m.metric, m])));

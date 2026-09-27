@@ -29,10 +29,14 @@ export const REPLAY_TTVO_MISSION: Mission = {
     { metric: "replay.novel_change_success_rate", label: "Sucesso em mudança inédita (prova de ownership)", operator: ">=", target: 0.8, minSampleSize: 10 },
   ],
   fitness: {
+    // Proxies are measured on each candidate; they are hypotheses about the outcomes, which only real use can show.
     objectives: [
-      { metric: "m1.stages_above_5", label: "Micro etapas acima de 5 linhas novas", direction: "minimize" },
-      { metric: "m1.max_new_lines", label: "Maior novidade por micro etapa", direction: "minimize" },
-      { metric: "m1.mean_new_lines", label: "Novidade média por micro etapa", direction: "minimize" },
+      { metric: "m1.stages_above_5", label: "Micro etapas acima de 5 linhas novas", direction: "minimize", kind: "proxy" },
+      { metric: "m1.max_new_lines", label: "Maior novidade por micro etapa", direction: "minimize", kind: "proxy" },
+      { metric: "m1.mean_new_lines", label: "Novidade média por micro etapa", direction: "minimize", kind: "proxy" },
+      { metric: "replay.median_microstage_seconds", label: "Tempo mediano por micro etapa (TTVO)", direction: "minimize", kind: "outcome", minSampleSize: 30 },
+      { metric: "replay.checkpoint_success_rate", label: "Sucesso no checkpoint do módulo", direction: "maximize", kind: "outcome", minSampleSize: 10 },
+      { metric: "replay.novel_change_success_rate", label: "Sucesso em mudança inédita", direction: "maximize", kind: "outcome", minSampleSize: 10 },
     ],
     guards: [
       { metric: "m1.concepts_introduced", label: "Conceitos ensinados no Module 1", operator: ">=", threshold: 15, reason: "menos novidade não pode vir de ensinar menos" },

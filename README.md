@@ -57,12 +57,16 @@ Ambiente de evolução em circuito fechado. **Agentes geram mudança; o OWNR dec
 bun run habitat            # Cockpit em http://127.0.0.1:3100 (só loopback)
 bun run habitat observe    # mede a baseline (HEAD) num worktree isolado
 bun run habitat evolve <proposta>   # candidate isolado → avaliadores → decisão
+bun run habitat reevaluate <candidate>          # repete a mudança sobre a baseline atual
+bun run habitat accept <candidate> --by <nome>  # ato humano: vira a nova baseline (fast-forward)
+bun run habitat revise-mission --by <nome>      # ato humano: adota uma definição de missão alterada
 bun run habitat status
 ```
 
 - **Missão** `replay-ttvo-m1`, **envelope**, **fitness** e contra-métricas: `src/habitat/replay/organism.ts`. A missão é gravada (snapshot) em `habitat.sqlite` quando começa; mudar o arquivo depois não afrouxa uma missão em andamento.
 - **Propostas** (entrada, de qualquer origem): `habitat/proposals/<id>/{proposal.json,change.patch}`, patch contra a baseline. As `claims` do autor são guardadas como informação, nunca como evidência.
 - **Candidates** rodam em `git worktree` fora do repositório (`HABITAT_WORKTREES`, padrão `~/.cache/ownr-habitat/worktrees`); a revisão fica em `refs/habitat/candidates/<id>` para inspeção, mesmo rejeitada. A baseline nunca é alterada.
-- **Decisão**: HARD falhou ou não rodou ⇒ INELIGIBLE; contra-métrica quebrada ou objetivo pior ⇒ WORSE; nada melhorou ⇒ NEUTRAL; SOFT com problema ⇒ BETTER; senão PROMOTABLE.
-- **Promover** é um ato humano no Cockpit: cria a branch local `habitat/<candidate>`. Sem merge, push ou deploy.
+- **Evidência vinculada** a baseline SHA, candidate SHA, revisão/hash da missão, hash do envelope e versão/configuração de cada avaliador. Se algo disso muda, o veredito vira **STALE** e o candidate precisa ser reavaliado.
+- **Vereditos** (vetor de métricas, sem score único): INELIGIBLE · STALE · REGRESSED · TRADEOFF · NEUTRAL · PROXY_IMPROVED · EXPERIMENT_READY · OUTCOME_IMPROVED · MISSION_MET. Proxies (novidade por etapa) melhores levam no máximo a EXPERIMENT_READY; só outcomes de uso real com amostra suficiente (tempo por etapa, checkpoint, mudança inédita) chegam a OUTCOME_IMPROVED. SOFT é aviso.
+- **Aceitar** é um ato humano (Cockpit ou CLI): faz fast-forward da branch atual até o commit do candidate, que vira a nova baseline. Sem merge commit, push ou deploy; a próxima observação julga o experimento e a geração seguinte parte dela.
 - Os comandos rodam no host com os direitos do usuário: **worktree não é fronteira de segurança**.

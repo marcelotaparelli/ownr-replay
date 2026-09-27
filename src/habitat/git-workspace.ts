@@ -68,6 +68,10 @@ export class GitWorktreeWorkspace implements CandidateWorkspace {
     return changes;
   }
 
+  async patchBetween(from: string, to: string): Promise<string> {
+    return this.git(["diff", "--binary", "--no-renames", from, to]);
+  }
+
   async diff(from: string, to: string): Promise<string> {
     return this.git(["diff", "--stat", "--patch", from, to]);
   }

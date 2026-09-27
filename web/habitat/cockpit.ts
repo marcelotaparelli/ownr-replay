@@ -1,15 +1,17 @@
 import type { Candidate, Decision, EvaluationResult, FileChange, Measurement } from "../../src/habitat/domain.ts";
+import type { CandidateAssessment } from "../../src/habitat/evolution.ts";
 import type { HabitatEvent } from "../../src/habitat/store.ts";
 import { $, h } from "../dom.ts";
 
 /**
  * The Cockpit: where the organism is, where it should be, what the envelope allows,
- * which candidates exist, why each one was decided — and a human hand on promotion.
+ * which candidates exist, why each one was decided — and a human hand on acceptance.
  */
 
 type State = Awaited<ReturnType<typeof import("../../src/habitat/http.ts").snapshot>>;
 type CandidateDetail = {
   candidate: Candidate;
+  assessment: CandidateAssessment;
   changes: FileChange[];
   evaluations: EvaluationResult[];
   baselineEvaluations: EvaluationResult[];
@@ -17,6 +19,19 @@ type CandidateDetail = {
   diff: string | null;
   events: HabitatEvent[];
 };
+
+const VERDICT_HELP: Record<string, string> = {
+  INELIGIBLE: "saiu do envelope (HARD falhou ou não rodou)",
+  STALE: "a evidência não descreve mais o presente — reavalie",
+  REGRESSED: "piorou uma métrica protegida ou um objetivo",
+  TRADEOFF: "melhora e piora ao mesmo tempo — decisão humana explícita",
+  NEUTRAL: "nada melhorou",
+  PROXY_IMPROVED: "proxies melhoraram, mas com avisos ou lacunas",
+  EXPERIMENT_READY: "proxies melhoraram dentro do envelope; só uso real pode confirmar a missão",
+  OUTCOME_IMPROVED: "outcomes melhoraram com amostra suficiente",
+  MISSION_MET: "todo o estado desejado atingido com dados suficientes",
+};
+const ACCEPTABLE = new Set(["EXPERIMENT_READY", "OUTCOME_IMPROVED", "MISSION_MET"]);
 
 let state: State | null = null;
 let selected: string | null = null;
@@ -29,9 +44,10 @@ async function api<T>(path: string, init?: { method: "POST"; body: unknown }): P
   return body;
 }
 
-const badge = (status: string, label = status) => h("span", { class: `badge s-${status}` }, label);
+const badge = (status: string, label = status) => h("span", { class: `badge s-${status}`, title: VERDICT_HELP[status] }, label);
 const fmt = (m: Pick<Measurement, "value" | "unit"> | undefined) => (m?.value === null || m?.value === undefined ? "—" : `${m.value}${m.unit ? ` ${m.unit}` : ""}`);
 const time = (ms: number) => new Date(ms).toLocaleTimeString("pt-BR");
+const short = (sha: string) => sha.slice(0, 10);
 
 async function refresh(): Promise<void> {
   try {
@@ -59,12 +75,13 @@ async function act(run: () => Promise<unknown>): Promise<void> {
 function render(): void {
   if (!state) return;
   const s = state;
-  $("#organism").textContent = `${s.organism.name} · missão ${s.mission.id}`;
+  $("#organism").textContent = `${s.organism.name} · missão ${s.mission.id} (revisão ${s.context.missionRevision}) · baseline atual ${short(s.context.baselineRevision)}`;
   const running = $("#running");
   running.hidden = !s.running;
   running.textContent = s.running ? `executando ${s.running}…` : "";
 
   const baselineMeasurements = new Map((s.baseline?.evaluations ?? []).flatMap((e) => e.measurements).map((m) => [m.metric, m]));
+  const objectives = (kind: "proxy" | "outcome") => s.mission.fitness.objectives.filter((o) => o.kind === kind);
 
   $("#mission").replaceChildren(
     h(
@@ -88,10 +105,12 @@ function render(): void {
           ),
         ),
       ),
-      h("h3", {}, "Fitness"),
-      h("p", { class: "muted" }, "Objetivos (comparados com a baseline):"),
-      h("ul", {}, s.mission.fitness.objectives.map((o) => h("li", {}, `${o.direction === "minimize" ? "↓" : "↑"} ${o.label} — baseline ${fmt(baselineMeasurements.get(o.metric))}`))),
-      h("p", { class: "muted" }, "Contra-métricas (anti-Goodhart):"),
+      h("h3", {}, "Fitness (vetor, sem score único)"),
+      h("p", { class: "muted" }, "Proxies — medidos em cada candidate, hipóteses sobre a missão:"),
+      h("ul", {}, objectives("proxy").map((o) => h("li", {}, `${o.direction === "minimize" ? "↓" : "↑"} ${o.label} — baseline ${fmt(baselineMeasurements.get(o.metric))}`))),
+      h("p", { class: "muted" }, "Outcomes — só em uso real, com amostra mínima:"),
+      h("ul", {}, objectives("outcome").map((o) => h("li", {}, `${o.direction === "minimize" ? "↓" : "↑"} ${o.label} — baseline ${fmt(baselineMeasurements.get(o.metric))} (n ≥ ${o.minSampleSize ?? "—"})`))),
+      h("p", { class: "muted" }, "Métricas protegidas (anti-Goodhart):"),
       h("ul", {}, s.mission.fitness.guards.map((g) => h("li", {}, `${g.label} ${g.operator} ${g.threshold} — ${g.reason}`))),
     ),
     h(
@@ -99,10 +118,10 @@ function render(): void {
       { class: "panel" },
       h("h2", {}, "Baseline"),
       s.baseline
-        ? h("p", {}, h("span", { class: "mono" }, s.baseline.revision.slice(0, 10)), ` observada às ${time(s.baseline.createdAt)}`)
+        ? h("p", {}, h("span", { class: "mono" }, short(s.baseline.revision)), ` observada às ${time(s.baseline.createdAt)} `, s.baseline.current ? badge("PASS", "atual") : badge("STALE", "desatualizada"))
         : h("p", { class: "muted" }, "Ainda não observada."),
       s.baseline ? h("div", { class: "row" }, s.baseline.evaluations.map((e) => badge(e.status, `${e.evaluatorId} ${e.status}`))) : null,
-      h("p", {}, h("button", { disabled: Boolean(s.running), onclick: () => act(() => api("/api/baseline/observe", { method: "POST", body: {} })) }, "Observar baseline")),
+      h("p", {}, h("button", { disabled: Boolean(s.running), onclick: () => act(() => api("/api/baseline/observe", { method: "POST", body: {} })) }, "Observar baseline atual")),
     ),
   );
 
@@ -121,10 +140,12 @@ function render(): void {
         ),
         s.mission.envelope.uncovered.map((u) => h("tr", {}, h("td", {}, badge("NOT_RUN")), h("td", {}, u.name, h("div", { class: "muted" }, u.reason)), h("td", {}, badge("NOT_RUN")))),
       ),
-      h("p", { class: "muted" }, "Candidates só podem alterar: ", h("span", { class: "mono" }, s.organism.allowedPaths.join(", "))),
+      h("p", { class: "muted" }, "SOFT é aviso: nunca torna um candidate melhor. Candidates só podem alterar: ", h("span", { class: "mono" }, s.organism.allowedPaths.join(", "))),
     ),
   );
 
+  // Lineage: each observed baseline, the candidates evaluated against it, and the one accepted as the next.
+  const parents = [...new Set([...s.baselines.map((b) => b.revision), ...s.candidates.map((c) => c.parentRevision)])];
   $("#evolution").replaceChildren(
     h(
       "div",
@@ -133,29 +154,44 @@ function render(): void {
       h(
         "ul",
         { class: "tree" },
-        h(
-          "li",
-          {},
-          h("span", { class: "mono" }, s.baseline ? `baseline ${s.baseline.revision.slice(0, 10)}` : "baseline não observada"),
-          h(
-            "ul",
+        parents.map((revision) => {
+          const baseline = s.baselines.find((b) => b.revision === revision);
+          return h(
+            "li",
             {},
-            s.candidates.map((c) =>
-              h(
-                "li",
-                {},
-                h(
-                  "button",
-                  { class: "node", "aria-current": String(c.id === selected), onclick: () => select(c.id) },
-                  h("span", { class: "mono" }, c.id),
-                  h("span", {}, c.proposalId),
-                  badge(c.verdict ?? c.status, c.verdict ?? c.status),
-                  c.status === "promoted" ? badge("promoted", "promovido") : null,
-                ),
-              ),
+            h(
+              "span",
+              { class: "mono" },
+              `baseline ${short(revision)}`,
+              revision === s.context.baselineRevision ? " (atual)" : "",
+              baseline?.acceptedCandidate ? ` ← ${baseline.acceptedCandidate}` : "",
+              baseline?.assessment ? " · experimento: " : "",
             ),
-          ),
-        ),
+            baseline?.assessment ? badge(baseline.assessment) : null,
+            baseline ? null : h("span", { class: "muted" }, " não observada"),
+            h(
+              "ul",
+              {},
+              s.candidates
+                .filter((c) => c.parentRevision === revision)
+                .map((c) =>
+                  h(
+                    "li",
+                    {},
+                    h(
+                      "button",
+                      { class: "node", "aria-current": String(c.id === selected), onclick: () => select(c.id) },
+                      h("span", { class: "mono" }, `g${c.generation} ${c.id}`),
+                      h("span", {}, c.proposalId),
+                      c.verdict ? badge(c.verdict) : badge(c.status, c.status),
+                      c.status === "accepted" ? badge("accepted", "aceito → baseline") : null,
+                      c.reevaluationOf ? h("span", { class: "muted" }, `reavalia ${c.reevaluationOf}`) : null,
+                    ),
+                  ),
+                ),
+            ),
+          );
+        }),
       ),
       h("h3", {}, "Propostas"),
       h(
@@ -169,7 +205,7 @@ function render(): void {
             h(
               "td",
               {},
-              h("button", { disabled: Boolean(s.running) || !s.baseline, onclick: () => act(() => api(`/api/proposals/${encodeURIComponent(p.id)}/candidate`, { method: "POST", body: {} })) }, "Avaliar"),
+              h("button", { disabled: Boolean(s.running) || !s.baseline?.current, onclick: () => act(() => api(`/api/proposals/${encodeURIComponent(p.id)}/candidate`, { method: "POST", body: {} })) }, "Avaliar"),
             ),
           ),
         ),
@@ -188,39 +224,65 @@ async function select(id: string): Promise<void> {
 async function renderCandidate(id: string): Promise<void> {
   const d = await api<CandidateDetail>(`/api/candidates/${encodeURIComponent(id)}`);
   const c = d.candidate;
-  const who = h("input", { "aria-label": "Quem promove", placeholder: "seu nome", size: 14 });
+  const { verdict, recordedVerdict, stale } = d.assessment;
+  const who = h("input", { "aria-label": "Quem aceita", placeholder: "seu nome", size: 14 });
   const decision = d.decision;
+  const current = Boolean(state?.baseline?.current);
   $("#candidate").replaceChildren(
     h(
       "div",
       { class: "panel" },
-      h("h2", {}, `Candidate ${c.id}`),
+      h("h2", {}, `Candidate ${c.id} · geração ${c.generation}`),
       h("p", {}, c.hypothesis),
-      h("p", { class: "muted" }, `geração ${c.generation} · pai ${c.parentRevision.slice(0, 10)} · revisão ${c.revision?.slice(0, 10) ?? "—"} · origem ${c.source.kind} (${c.source.author})`),
+      h("p", { class: "muted" }, `baseline ${short(c.parentRevision)} → candidate ${c.revision ? short(c.revision) : "—"} · origem ${c.source.kind} (${c.source.author})`, c.reevaluationOf ? ` · reavaliação de ${c.reevaluationOf}` : ""),
       c.claims ? h("p", { class: "claims" }, h("strong", {}, "Alegação do autor (não é evidência): "), c.claims) : null,
+      verdict
+        ? h("div", { class: "verdict" }, badge(verdict), " ", h("span", { class: "muted" }, VERDICT_HELP[verdict] ?? ""), verdict === "STALE" && recordedVerdict ? h("span", { class: "muted" }, ` (registrado: ${recordedVerdict})`) : null)
+        : h("p", { class: "muted" }, `Sem decisão (${c.status}).`),
+      stale.length ? h("ul", { class: "error" }, stale.map((r) => h("li", {}, r))) : null,
+      stale.length && c.revision ? h("p", {}, h("button", { disabled: Boolean(state?.running) || !current, onclick: () => act(() => api(`/api/candidates/${encodeURIComponent(c.id)}/reevaluate`, { method: "POST", body: {} })) }, "Reavaliar contra a baseline atual")) : null,
+      verdict && ACCEPTABLE.has(verdict) && c.status === "evaluated"
+        ? h(
+            "div",
+            { class: "row" },
+            h("span", {}, "Aceitar faz fast-forward da branch atual até ", h("span", { class: "mono" }, c.revision ? short(c.revision) : ""), ": ele vira a nova baseline. Sem push nem deploy; a próxima observação julga o experimento."),
+            who,
+            h("button", { class: "primary", onclick: () => act(() => api(`/api/candidates/${encodeURIComponent(c.id)}/accept`, { method: "POST", body: { by: who.value } })) }, "Aceitar como nova baseline"),
+          )
+        : null,
       decision
         ? [
-            h("div", { class: "verdict" }, badge(decision.verdict, decision.verdict), " ", h("span", { class: "muted" }, `status ${c.status}`)),
             h("ul", {}, decision.reasons.map((r) => h("li", {}, r))),
+            decision.warnings.length ? h("ul", { class: "claims" }, decision.warnings.map((w) => h("li", {}, `aviso: ${w}`))) : null,
             h("h3", {}, "Envelope"),
             h("table", {}, decision.constraints.map((k) => h("tr", {}, h("td", {}, badge(k.severity, k.severity.toUpperCase())), h("td", {}, k.name), h("td", {}, badge(k.status)), h("td", { class: "muted" }, k.detail)))),
             h("h3", {}, "Fitness (baseline → candidate)"),
             h(
               "table",
               {},
-              decision.comparisons.map((m) => h("tr", {}, h("td", {}, m.label), h("td", { class: "num" }, `${m.baseline ?? "—"} → ${m.candidate ?? "—"}`), h("td", {}, badge(m.outcome)))),
-              decision.guards.map((g) => h("tr", {}, h("td", {}, `contra-métrica: ${g.label}`), h("td", { class: "num" }, `${g.value ?? "—"} (${g.operator} ${g.threshold})`), h("td", {}, badge(g.status)))),
+              decision.comparisons.map((m) => h("tr", {}, h("td", {}, h("span", { class: "muted" }, `${m.kind} `), m.label), h("td", { class: "num" }, `${m.baseline ?? "—"} → ${m.candidate ?? "—"}`), h("td", {}, badge(m.outcome)))),
+              decision.guards.map((g) => h("tr", {}, h("td", {}, h("span", { class: "muted" }, "protegida "), g.label), h("td", { class: "num" }, `${g.value ?? "—"} (${g.operator} ${g.threshold})`), h("td", {}, badge(g.status)))),
             ),
+            decision.binding
+              ? h(
+                  "details",
+                  {},
+                  h("summary", {}, "Vínculo da evidência"),
+                  h(
+                    "pre",
+                    {},
+                    [
+                      `baseline   ${decision.binding.baselineRevision}`,
+                      `candidate  ${decision.binding.candidateRevision}`,
+                      `observação ${decision.binding.baselineObservationId}`,
+                      `missão     ${decision.binding.missionId} rev ${decision.binding.missionRevision} ${decision.binding.missionHash.slice(0, 16)}`,
+                      `envelope   ${decision.binding.envelopeHash.slice(0, 16)}`,
+                      ...decision.binding.evaluators.map((e) => `avaliador  ${e}`),
+                    ].join("\n"),
+                  ),
+                )
+              : null,
           ]
-        : h("p", { class: "muted" }, "Sem decisão ainda."),
-      c.status === "promotable"
-        ? h(
-            "div",
-            { class: "row" },
-            h("span", {}, "Promover publica a branch local ", h("span", { class: "mono" }, `habitat/${c.id}`), " para revisão. Não faz merge, push nem deploy."),
-            who,
-            h("button", { class: "primary", onclick: () => act(() => api(`/api/candidates/${encodeURIComponent(c.id)}/promote`, { method: "POST", body: { by: who.value } })) }, "Promover"),
-          )
         : null,
       h("h3", {}, "Avaliações independentes"),
       d.evaluations.map((e) =>
@@ -230,6 +292,7 @@ async function renderCandidate(id: string): Promise<void> {
           h("summary", {}, badge(e.status), ` ${e.evaluatorId} · ${e.durationMs} ms`, e.errors[0] ? h("span", { class: "muted" }, ` — ${e.errors[0]}`) : null),
           e.measurements.length ? h("table", {}, e.measurements.map((m) => h("tr", {}, h("td", { class: "mono" }, m.metric), h("td", { class: "num" }, fmt(m)), h("td", {}, m.status === "MEASURED" ? "" : badge(m.status))))) : null,
           e.evidence.map((ev) => [h("p", {}, ev.summary), ev.detail ? h("pre", {}, ev.detail) : null]),
+          e.binding ? h("p", { class: "muted mono" }, `${e.binding.evaluator} · ${short(e.binding.baselineRevision)} → ${short(e.binding.subjectRevision)}`) : h("p", { class: "error" }, "sem vínculo de evidência"),
         ),
       ),
       h("h3", {}, `Arquivos alterados (${d.changes.length})`),
@@ -271,7 +334,7 @@ function summarize(data: Record<string, unknown>): string {
 }
 
 await refresh();
-// Jobs take minutes; poll gently, faster while one runs.
+// Jobs take seconds to minutes; poll gently, faster while one runs.
 const tick = async (): Promise<void> => {
   await refresh();
   setTimeout(() => void tick(), state?.running ? 2000 : 10_000);

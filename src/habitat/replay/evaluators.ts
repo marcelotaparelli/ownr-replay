@@ -17,6 +17,7 @@ const JUSTIFY_FROM = 8;
  */
 export class ReplayCurriculumEvaluator implements Evaluator {
   readonly id = "replay-curriculum";
+  readonly version = `1;module=${MODULE};alert>${ALERT_ABOVE};justify>=${JUSTIFY_FROM};max-line-length`;
 
   async evaluate(context: EvaluationContext): Promise<EvaluationResult> {
     const started = performance.now();
@@ -64,6 +65,7 @@ export class ReplayCurriculumEvaluator implements Evaluator {
 /** Frontend weight as the learner downloads it (minified + gzip), built by the control plane. */
 export class ReplayBundleEvaluator implements Evaluator {
   readonly id = "replay-bundle";
+  readonly version = "1;entries=app,run-worker;gzip";
 
   async evaluate(context: EvaluationContext): Promise<EvaluationResult> {
     const started = performance.now();

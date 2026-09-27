@@ -11,8 +11,11 @@ const SYMLINK_MODE = "120000";
  */
 export class PathPolicyEvaluator implements Evaluator {
   readonly id = "path-policy";
+  readonly version: string;
 
-  constructor(private readonly allowed: string[]) {}
+  constructor(private readonly allowed: string[]) {
+    this.version = `1;allowed=${allowed.join(",")}`;
+  }
 
   async evaluate(context: EvaluationContext): Promise<EvaluationResult> {
     const started = performance.now();
@@ -41,12 +44,16 @@ function matches(pattern: string, path: string): boolean {
 
 /** Runs a command in the candidate's workspace and judges it only by its exit code. */
 export class CommandEvaluator implements Evaluator {
+  readonly version: string;
+
   constructor(
     readonly id: string,
     private readonly argv: string[],
     private readonly timeoutMs: number,
     private readonly parse: (output: string) => Measurement[] = () => [],
-  ) {}
+  ) {
+    this.version = `1;argv=${argv.join(" ")};timeout=${timeoutMs}`;
+  }
 
   async evaluate(context: EvaluationContext): Promise<EvaluationResult> {
     const result = await runCommand(this.argv, { cwd: context.dir, timeoutMs: this.timeoutMs, env: minimalEnv() });

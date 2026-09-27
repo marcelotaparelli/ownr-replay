@@ -14,6 +14,9 @@ const CHECKPOINT = "ops-triage-ai.m1-99";
  * No value is invented: without data a metric is INSUFFICIENT_DATA, with its sample size.
  */
 export class ReplayTelemetrySource implements TelemetrySource {
+  readonly id = "telemetry";
+  readonly version = "1;source=replay-events;window=since-m1-content-change";
+
   constructor(
     private readonly dbPath: string,
     /** Epoch ms of the last content change of Module 1 in the deployed revision. */

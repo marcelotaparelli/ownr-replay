@@ -1,4 +1,4 @@
-import type { CandidateSource, EvaluationResult, FileChange, Measurement } from "./domain.ts";
+import type { CandidateSource, EvaluationResult, EvaluatorIdentity, FileChange, Measurement } from "./domain.ts";
 
 /**
  * The only real boundaries of Habitat. Everything behind them is replaceable:
@@ -30,6 +30,8 @@ export interface CandidateWorkspace {
   /** Keeps the revision reachable so a candidate stays inspectable after its workspace is gone. */
   retain(id: string, revision: string): Promise<void>;
   dispose(workspace: Workspace): Promise<void>;
+  /** The change between two retained revisions, replayable onto a newer baseline. */
+  patchBetween(from: string, to: string): Promise<string>;
 }
 
 export type EvaluationContext = {
@@ -39,12 +41,12 @@ export type EvaluationContext = {
   changes: FileChange[];
 };
 
-export interface Evaluator {
-  readonly id: string;
+/** `version` encodes the evaluator's rules and configuration: change either and old evidence goes stale. */
+export interface Evaluator extends EvaluatorIdentity {
   evaluate(context: EvaluationContext): Promise<EvaluationResult>;
 }
 
 /** Measurements of the organism in real use (only ever of what is deployed: the baseline). */
-export interface TelemetrySource {
+export interface TelemetrySource extends EvaluatorIdentity {
   measure(): Promise<Measurement[]>;
 }
