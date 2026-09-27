@@ -3,12 +3,14 @@ import { api, type JourneyCard, type StageDetail } from "./api.ts";
 import { selectionFromCodeView } from "./code-view.ts";
 import { $, h } from "./dom.ts";
 import { renderHome, renderKnowledgeMap, renderNav, renderOverview, stageHref } from "./journey-view.ts";
+import { mountLayoutResize } from "./layout-resize.ts";
 import { renderStage, type MountedStage } from "./stage-view.ts";
 import { ProgressStore, flushOutbox, reportSyncFailure } from "./store.ts";
 import { renderToolbox } from "./toolbox.ts";
 import { mountTutor } from "./tutor.ts";
 
 const nav = $("#journey");
+mountLayoutResize(document.querySelector<HTMLElement>(".layout")!);
 const main = $("#main");
 const crumb = $("#crumb");
 const toolboxRoot = $("#toolbox");

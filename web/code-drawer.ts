@@ -3,6 +3,7 @@ import type { CodeOption, NodeCode } from "../src/services/code-map.ts";
 import type { ArchitectureCode } from "./api.ts";
 import { codeView } from "./code-view.ts";
 import { h } from "./dom.ts";
+import { clampWidth, clearWidth, resizeHandle, saveWidth, storedWidth } from "./panel-resize.ts";
 
 const BASIS: Record<CodeOption["basis"], string> = {
   "journey-map": "mapeamento declarado da jornada",
@@ -26,10 +27,51 @@ const RELATION: Record<Relation, [outgoing: string, incoming: string]> = {
 
 let drawer: HTMLElement | null = null;
 let restoreFocus: HTMLElement | null = null;
+const DRAWER_WIDTH = { key: "ownr.width.code-drawer", default: 760, min: 360, max: 960 };
+
+function drawerBounds(): { min: number; max: number } {
+  const min = Math.min(DRAWER_WIDTH.min, window.innerWidth);
+  // On small stacked screens the drawer may fill the viewport, as it did before.
+  const max = window.innerWidth <= 720 ? window.innerWidth : Math.min(DRAWER_WIDTH.max, window.innerWidth - 420);
+  return { min, max: Math.max(min, max) };
+}
+
+function addDrawerResize(panel: HTMLElement): HTMLElement {
+  const store = window.localStorage;
+  let wanted = storedWidth(store, DRAWER_WIDTH.key, DRAWER_WIDTH.default);
+  let width = DRAWER_WIDTH.default;
+  let handle: HTMLElement;
+  const apply = () => {
+    width = clampWidth(wanted, drawerBounds().min, drawerBounds().max);
+    panel.style.width = `${width}px`;
+    panel.style.setProperty("--drawer-width", `${width}px`);
+    if (handle) {
+      const bounds = drawerBounds();
+      handle.setAttribute("aria-valuemin", String(bounds.min));
+      handle.setAttribute("aria-valuemax", String(bounds.max));
+      handle.setAttribute("aria-valuenow", String(Math.round(width)));
+    }
+  };
+  handle = resizeHandle({
+    label: "Largura do painel de código da arquitetura",
+    direction: -1,
+    bounds: drawerBounds,
+    current: () => width,
+    set: (next) => { wanted = next; saveWidth(store, DRAWER_WIDTH.key, next); apply(); },
+    reset: () => { clearWidth(store, DRAWER_WIDTH.key); wanted = DRAWER_WIDTH.default; apply(); },
+  });
+  window.addEventListener("resize", apply, { signal: drawerResizeEvents.signal });
+  apply();
+  return handle;
+}
+
+let drawerResizeEvents = new AbortController();
 
 export function closeCodeDrawer(): void {
   drawer?.remove();
   drawer = null;
+  drawerResizeEvents.abort();
+  drawerResizeEvents = new AbortController();
   document.removeEventListener("keydown", onKey);
   restoreFocus?.focus();
   restoreFocus = null;
@@ -51,6 +93,7 @@ export function openCodeDrawer(graph: ArchitectureGraph, data: ArchitectureCode,
     restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     drawer = h("aside", { class: "code-drawer", role: "dialog", "aria-modal": "false", "aria-labelledby": "code-drawer-title" });
     document.body.append(drawer);
+    drawer.append(addDrawerResize(drawer));
     document.addEventListener("keydown", onKey);
   }
   const label = (id: string) => graph.nodes.find((n) => n.id === id)?.label ?? id;
@@ -59,7 +102,9 @@ export function openCodeDrawer(graph: ArchitectureGraph, data: ArchitectureCode,
   const incoming = graph.edges.filter((e) => e.to === nodeId).map((e) => h("li", {}, `${RELATION[e.rel][1]} `, h("button", { type: "button", class: "link", onclick: go(e.from) }, label(e.from))));
   const option = code.status === "mapped" ? (code.options[choice] ?? code.options[0]) : undefined;
 
+  const resize = drawer.querySelector<HTMLElement>(".resize-handle")!;
   drawer.replaceChildren(
+    resize,
     h(
       "div",
       { class: "drawer-inner" },
