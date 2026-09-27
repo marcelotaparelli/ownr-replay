@@ -101,6 +101,6 @@ function printStatus(state: Awaited<ReturnType<typeof snapshot>>): void {
   console.log(`baseline atual: ${state.context.baselineRevision.slice(0, 10)} · observada: ${state.baseline ? `${state.baseline.revision.slice(0, 10)} (${state.baseline.id})${state.baseline.current ? "" : " — DESATUALIZADA"}` : "não"}`);
   for (const b of state.baselines) console.log(`  baseline ${b.revision.slice(0, 10)} ${b.acceptedCandidate ? `← ${b.acceptedCandidate} (${b.assessment})` : ""}`);
   for (const c of state.candidates) {
-    console.log(`  g${c.generation} ${c.id} ${c.proposalId.padEnd(22)} ${c.status.padEnd(10)} ${(c.verdict ?? "").padEnd(17)}${c.verdict === "STALE" ? ` (era ${c.recordedVerdict}: ${c.stale[0]})` : ""}${c.reevaluationOf ? ` reavalia ${c.reevaluationOf}` : ""}`);
+    console.log(`  g${c.generation} ${c.id} ${c.proposalId.padEnd(22)} ${c.status.padEnd(10)} ${(c.verdict ?? "").padEnd(17)}${c.verdict === "STALE" ? ` (${c.recordedVerdict === "STALE" ? "" : `era ${c.recordedVerdict}: `}${c.stale[0]})` : ""}${c.reevaluationOf ? ` reavalia ${c.reevaluationOf}` : ""}`);
   }
 }
