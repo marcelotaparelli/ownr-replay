@@ -1,11 +1,12 @@
 import type { JourneyOutline } from "../src/domain/journey.ts";
+import type { PreviousVersion } from "../src/domain/line-diff.ts";
 import type { LearningGoal } from "../src/domain/learning-goal.ts";
 import type { KnowledgeLevel, ProgressUpdate, RunResult, StageProgress } from "../src/domain/progress.ts";
 import type { CodeFile, Stage } from "../src/domain/stage.ts";
 import type { TutorReply, TutorSelection } from "../src/domain/tutor.ts";
 import type { ModuleSet } from "../src/sandbox/modules.ts";
 
-export type StageDetail = Stage & { runner: "browser" | "docker" };
+export type StageDetail = Stage & { runner: "browser" | "docker"; previousCode: PreviousVersion[] };
 export type TypeDiagnostic = { file: string; line: number; code: string; message: string };
 export type RunResponse =
   | ({ mode: "browser"; typecheck?: "passed" } & ModuleSet)

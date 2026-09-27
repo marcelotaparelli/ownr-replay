@@ -153,6 +153,25 @@ function solution(deps: StageViewDeps): HTMLElement {
   return h("div", {}, fileTabs(tabs), note, h("p", { class: "muted legend" }, h("span", { class: "dot-new" }), before ? " só o que mudou em relação à etapa anterior" : " o programa inteiro é novo nesta primeira etapa"));
 }
 
+/**
+ * Code as shown in chapters and checkpoints, with the same green as micro stages: only the lines
+ * that are new against this file's version in the nearest earlier stage that showed it. A file no
+ * earlier stage showed is entirely this stage's novelty; with no earlier stage at all, nothing is diffed.
+ */
+function changedCode(stage: StageDetail, file: CodeFile): HTMLElement {
+  const previous = stage.previousCode.find((p) => p.path === file.path);
+  const comparable = previous !== undefined || stage.order > 1;
+  const added = comparable ? addedLines(previous?.content ?? "", file.content) : [];
+  const legend = !comparable
+    ? " primeira etapa: não há etapa anterior para comparar"
+    : !previous
+      ? " arquivo novo nesta etapa: todas as linhas são novidade"
+      : added.length === 0
+        ? ` sem mudanças em relação a “${previous.stageTitle}”`
+        : ` ${added.length} linha(s) nova(s) ou alterada(s) em relação a “${previous.stageTitle}”`;
+  return h("div", {}, codeView(file.path, file.content, { newLines: new Set(added) }), h("p", { class: "muted legend" }, added.length ? h("span", { class: "dot-new" }) : null, legend));
+}
+
 function architectureIfChanged({ stage, previous }: StageViewDeps): HTMLElement | null {
   if (!stage.architecture) return null;
   const before = previous?.architecture;
@@ -236,7 +255,7 @@ function renderCheckpoint(deps: StageViewDeps): MountedStage {
 function comparison(stage: StageDetail, yours: () => CodeFile[]): HTMLElement {
   const tabs: Tab[] = [
     ...yours().map((file) => ({ label: `Sua versão · ${file.path}`, render: () => codeView(file.path, file.content || "// (vazio)") })),
-    ...stage.referenceCode.map((file) => ({ label: `Replay consolidado · ${file.path}`, render: () => codeView(file.path, file.content) })),
+    ...stage.referenceCode.map((file) => ({ label: `Replay consolidado · ${file.path}`, render: () => changedCode(stage, file) })),
   ];
   return h(
     "div",
@@ -270,7 +289,7 @@ function renderChapter(deps: StageViewDeps): MountedStage {
       h("p", { class: "problem" }, stage.problem),
       h("p", { class: "goal" }, h("strong", {}, "Objetivo: "), stage.goal),
     ),
-    section("codigo", "Código pronto", fileTabs(stage.referenceCode.map((f) => ({ label: f.path, render: () => codeView(f.path, f.content) })))),
+    section("codigo", "Código pronto", fileTabs(stage.referenceCode.map((f) => ({ label: f.path, render: () => changedCode(stage, f) })))),
     stage.architecture ? section("arquitetura", "Arquitetura", architectureView(stage.architecture, deps.previous?.architecture)) : null,
     section("conceitos", "Conceitos", ...stage.explanation.map((block) => explanationBlock(block, deps, block.conceptId ? concepts.get(block.conceptId) : undefined))),
     stage.originalCodeRefs.length ? section("projeto-real", "No projeto real", originalRefs(stage)) : null,

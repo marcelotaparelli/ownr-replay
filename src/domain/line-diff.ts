@@ -73,3 +73,26 @@ function lcsMatches(a: string[], b: string[]): { before: Set<number>; after: Set
   }
   return { before, after };
 }
+
+export type PreviousVersion = { path: string; stageId: string; stageTitle: string; content: string };
+
+/**
+ * For each file a stage shows, its version in the nearest earlier stage that shows the same file.
+ * Micro stages find the previous micro stage; chapters find the last chapter that touched that file,
+ * however far back. A file no earlier stage shows has no previous version: it is not diffed at all.
+ */
+export function previousVersions(
+  stages: { id: string; title: string; order: number; referenceCode: { path: string; content: string }[] }[],
+  stageId: string,
+): PreviousVersion[] {
+  const stage = stages.find((s) => s.id === stageId);
+  if (!stage) return [];
+  const earlier = stages.filter((s) => s.order < stage.order).sort((a, b) => b.order - a.order);
+  return stage.referenceCode.flatMap((file) => {
+    for (const candidate of earlier) {
+      const match = candidate.referenceCode.find((f) => f.path === file.path);
+      if (match) return [{ path: file.path, stageId: candidate.id, stageTitle: candidate.title, content: match.content }];
+    }
+    return [];
+  });
+}

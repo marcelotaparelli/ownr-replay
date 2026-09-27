@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { previousVersions } from "../domain/line-diff.ts";
 import type { Repository } from "../db/repository.ts";
 import { outline, type Journey } from "../domain/journey.ts";
 import { FROM_SCRATCH, LearningGoal } from "../domain/learning-goal.ts";
@@ -127,8 +128,9 @@ export function createApi(deps: ApiDeps): Router {
     })
 
     .on("GET", "/api/stages/:id", (_req, params) => {
-      const { stage } = findStage(params.id);
-      return json({ ...stage, runner: deps.sandbox ? "docker" : "browser" });
+      const { stage, journey } = findStage(params.id);
+      // What each shown file looked like before, so every stage can highlight only what changed.
+      return json({ ...stage, runner: deps.sandbox ? "docker" : "browser", previousCode: previousVersions(journey.stages, stage.id) });
     })
     .on("GET", "/api/stages/:id/toolbox", (_req, params) => json(findStage(params.id).stage.toolbox))
     .on("POST", "/api/stages/:id/run", async (req, params) => {
