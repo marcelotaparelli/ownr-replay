@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { indexRepository, originalDir } from "./services/code-map.ts";
 import { loadConfig } from "./config.ts";
 import { Repository } from "./db/repository.ts";
 import { createApi } from "./http/api.ts";
@@ -23,7 +24,8 @@ const sandbox = config.RUNNER === "docker" ? new DockerSandboxRunner() : null;
 // Fail at boot, not on the learner's first run, if the checker a stage needs is missing.
 const needsTypecheck = journeys.some((j) => j.stages.some((s) => s.exercise?.typecheck));
 const typeChecker = needsTypecheck ? new TypeChecker(await locateTsc()) : null;
-const api = createApi({ journeys, repository, tutor, sandbox, typeChecker, logger, metrics });
+const codeIndexes = new Map(journeys.map((j) => [j.id, indexRepository(originalDir(join(root, config.DATA_DIR, j.id)))]));
+const api = createApi({ journeys, repository, tutor, sandbox, typeChecker, logger, metrics, codeIndexes });
 const assets = await buildWebAssets(join(root, "web"));
 
 const server = Bun.serve({ port: config.PORT, fetch: createApp(api, assets, logger, metrics) });

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { indexRepository, originalDir } from "../src/services/code-map.ts";
 import { Repository } from "../src/db/repository.ts";
 import type { Journey } from "../src/domain/journey.ts";
 import { createApi } from "../src/http/api.ts";
@@ -21,7 +22,8 @@ export function testApp(options: { model?: TutorModel; typeChecker?: TypeChecker
   const repository = new Repository(":memory:");
   const metrics = new Metrics();
   const tutor = new TutorService(repository, options.model ?? null, silentLogger, metrics);
-  const api = createApi({ journeys: goldenJourneys(), repository, tutor, sandbox: null, typeChecker: options.typeChecker ?? null, logger: silentLogger, metrics });
+  const codeIndexes = new Map([["ops-triage-ai", indexRepository(originalDir(join(import.meta.dir, "../data/golden/ops-triage-ai")))]]);
+  const api = createApi({ journeys: goldenJourneys(), repository, tutor, sandbox: null, typeChecker: options.typeChecker ?? null, logger: silentLogger, metrics, codeIndexes });
   const fetch = createApp(api, new Map(), silentLogger, metrics);
   const call = (method: string, path: string, body?: unknown, headers: Record<string, string> = { "x-learner-id": "learner-test-0001" }) =>
     fetch(

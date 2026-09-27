@@ -1,4 +1,6 @@
 import type { JourneyOutline, StageOutline } from "../src/domain/journey.ts";
+import type { ArchitectureGraph } from "../src/domain/architecture.ts";
+import { openCodeDrawer } from "./code-drawer.ts";
 import type { RunResult } from "../src/domain/progress.ts";
 import type { CodeFile, Concept, ExplanationBlock, IoExample, Module, OriginalCodeReference } from "../src/domain/stage.ts";
 import type { TutorSelection } from "../src/domain/tutor.ts";
@@ -179,7 +181,26 @@ function architectureIfChanged({ stage, previous }: StageViewDeps): HTMLElement 
     before &&
     JSON.stringify(before.nodes.map((n) => [n.id, n.label])) === JSON.stringify(stage.architecture.nodes.map((n) => [n.id, n.label])) &&
     before.edges.length === stage.architecture.edges.length;
-  return unchanged ? null : architectureView(stage.architecture, before);
+  return unchanged ? null : navigableArchitecture(stage, before);
+}
+
+/**
+ * The diagram as a map into the real repository: each block opens the code it corresponds to, in a
+ * drawer beside the stage. The mapping is fetched once per stage; unmapped blocks are marked as such.
+ */
+function navigableArchitecture(stage: StageDetail, before: ArchitectureGraph | undefined): HTMLElement | null {
+  const graph = stage.architecture;
+  if (!graph) return null;
+  const mapping = api.architecture(stage.id);
+  const view = architectureView(graph, before, (nodeId) => {
+    mapping.then((data) => openCodeDrawer(graph, data, nodeId)).catch(reportSyncFailure);
+  });
+  mapping
+    .then((data) => {
+      for (const node of data.nodes) if (node.status === "unmapped") view.querySelector(`[data-node="${CSS.escape(node.nodeId)}"]`)?.classList.add("unmapped");
+    })
+    .catch(reportSyncFailure);
+  return view;
 }
 
 /** Examples are executed against the solution by the curriculum validator: they are true by construction. */
@@ -290,7 +311,7 @@ function renderChapter(deps: StageViewDeps): MountedStage {
       h("p", { class: "goal" }, h("strong", {}, "Objetivo: "), stage.goal),
     ),
     section("codigo", "Código pronto", fileTabs(stage.referenceCode.map((f) => ({ label: f.path, render: () => changedCode(stage, f) })))),
-    stage.architecture ? section("arquitetura", "Arquitetura", architectureView(stage.architecture, deps.previous?.architecture)) : null,
+    stage.architecture ? section("arquitetura", "Arquitetura", navigableArchitecture(stage, deps.previous?.architecture)) : null,
     section("conceitos", "Conceitos", ...stage.explanation.map((block) => explanationBlock(block, deps, block.conceptId ? concepts.get(block.conceptId) : undefined))),
     stage.originalCodeRefs.length ? section("projeto-real", "No projeto real", originalRefs(stage)) : null,
     exercise ? section("reconstrua", "Reconstrua", exercise.element) : null,

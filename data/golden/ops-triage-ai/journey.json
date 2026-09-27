@@ -8,6 +8,56 @@
     "url": "https://github.com/marcelotaparelli/ops-triage-ai",
     "sha": "840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67"
   },
+  "codeMap": {
+    "ticket": [
+      {
+        "path": "src/domain/triage.ts",
+        "symbol": "TicketInput"
+      }
+    ],
+    "category": [
+      {
+        "path": "src/domain/triage.ts",
+        "symbol": "Category"
+      }
+    ],
+    "tie": [
+      {
+        "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+        "symbol": "CATEGORY_TIE_BREAK"
+      }
+    ],
+    "team": [
+      {
+        "path": "src/domain/suggested-team.ts",
+        "symbol": "suggestedTeamForCategory"
+      }
+    ],
+    "llm": [
+      {
+        "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+        "symbol": "OllamaTriageClassifier"
+      }
+    ],
+    "validator": [
+      {
+        "path": "src/infrastructure/ollama/ollama-result-schema.ts",
+        "symbol": "OllamaClassifierResultSchema"
+      }
+    ],
+    "service": [
+      {
+        "path": "src/application/persisted-triage-service.ts",
+        "symbol": "PersistedTriageService"
+      }
+    ],
+    "logger": [
+      {
+        "path": "src/observability.ts",
+        "symbol": "stdoutLogger"
+      }
+    ]
+  },
   "concepts": [
     {
       "id": "function-io",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveNode, type RepositoryIndex } from "../services/code-map.ts";
 import { previousVersions } from "../domain/line-diff.ts";
 import type { Repository } from "../db/repository.ts";
 import { outline, type Journey } from "../domain/journey.ts";
@@ -25,6 +26,8 @@ export type ApiDeps = {
   typeChecker: TypeChecker | null;
   logger: Logger;
   metrics: Metrics;
+  /** The real repository of each journey at its pinned SHA, indexed (architecture node → code). */
+  codeIndexes: Map<string, RepositoryIndex>;
 };
 
 const RunRequest = z.strictObject({ files: z.array(CodeFile).min(1).max(10) });
@@ -131,6 +134,14 @@ export function createApi(deps: ApiDeps): Router {
       const { stage, journey } = findStage(params.id);
       // What each shown file looked like before, so every stage can highlight only what changed.
       return json({ ...stage, runner: deps.sandbox ? "docker" : "browser", previousCode: previousVersions(journey.stages, stage.id) });
+    })
+    .on("GET", "/api/stages/:id/architecture", (_req, params) => {
+      const { stage, journey } = findStage(params.id);
+      const index = deps.codeIndexes.get(journey.id) ?? { files: new Map(), declarations: [] };
+      // Only the components this stage has already presented: the diagram grows with the journey.
+      const nodes = (stage.architecture?.nodes ?? []).map((node) => resolveNode(node, journey, index));
+      const paths = new Set(nodes.flatMap((n) => (n.status === "mapped" ? n.options.map((o) => o.path) : [])));
+      return json({ repo: journey.repo, nodes, files: Object.fromEntries([...paths].map((p) => [p, index.files.get(p) ?? ""])) });
     })
     .on("GET", "/api/stages/:id/toolbox", (_req, params) => json(findStage(params.id).stage.toolbox))
     .on("POST", "/api/stages/:id/run", async (req, params) => {

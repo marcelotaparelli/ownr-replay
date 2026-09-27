@@ -7,6 +7,8 @@ export type CodeViewOptions = {
   firstLine?: number;
   /** Lines (1-based, relative) added in this step. */
   newLines?: ReadonlySet<number>;
+  /** Lines (1-based, relative) that are the point of this view (e.g. the symbol an architecture node maps to). */
+  focusLines?: ReadonlySet<number>;
   /** Called when a line is clicked, with its relative number and source text. */
   onLine?: (line: number, text: string) => void;
 };
@@ -19,7 +21,7 @@ export function codeView(file: string, source: string, options: CodeViewOptions 
   const html = highlightLines(source);
   const body = html
     .map((line, index) => {
-      const added = options.newLines?.has(index + 1) ? " new" : "";
+      const added = (options.newLines?.has(index + 1) ? " new" : "") + (options.focusLines?.has(index + 1) ? " focus" : "");
       return `<div class="ln${added}" data-line="${first + index}"><span class="no">${first + index}</span><span class="src">${line || " "}</span></div>`;
     })
     .join("");

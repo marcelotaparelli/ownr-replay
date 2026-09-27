@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { codeMapProblems, indexRepository, originalDir } from "./code-map.ts";
 import { basename, join } from "node:path";
 import { z } from "zod";
 import { graphProblems } from "../domain/architecture-diff.ts";
@@ -46,6 +47,11 @@ const JourneySource = z.strictObject({
     sha: z.string().regex(/^[0-9a-f]{40}$/),
   }),
   goal: LearningGoal.default(FROM_SCRATCH),
+  /**
+   * Architecture node id → real declarations, only where the node's name differs from the real symbol.
+   * Validated against the repository copy at the pinned SHA; nodes with the same name need no entry.
+   */
+  codeMap: z.record(z.string(), z.array(z.strictObject({ path: z.string().min(1), symbol: z.string().min(1) })).min(1)).default({}),
   modules: z
     .array(
       z.strictObject({
@@ -118,12 +124,13 @@ export function loadJourney(dir: string): Journey {
     description: source.description,
     repo: source.repo,
     goal: source.goal,
+    codeMap: source.codeMap,
     status: "ready",
     concepts: source.concepts,
     modules,
     stages,
   };
-  const problems = validateJourney(journey);
+  const problems = [...validateJourney(journey), ...codeMapProblems(journey, indexRepository(originalDir(dir)))];
   if (problems.length > 0) throw new CurriculumError(problems);
   return journey;
 }

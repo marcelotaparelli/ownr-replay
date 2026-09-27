@@ -1,4 +1,5 @@
 import type { JourneyOutline } from "../src/domain/journey.ts";
+import type { NodeCode } from "../src/services/code-map.ts";
 import type { PreviousVersion } from "../src/domain/line-diff.ts";
 import type { LearningGoal } from "../src/domain/learning-goal.ts";
 import type { KnowledgeLevel, ProgressUpdate, RunResult, StageProgress } from "../src/domain/progress.ts";
@@ -6,6 +7,7 @@ import type { CodeFile, Stage } from "../src/domain/stage.ts";
 import type { TutorReply, TutorSelection } from "../src/domain/tutor.ts";
 import type { ModuleSet } from "../src/sandbox/modules.ts";
 
+export type ArchitectureCode = { repo: { url: string; sha: string }; nodes: NodeCode[]; files: Record<string, string> };
 export type StageDetail = Stage & { runner: "browser" | "docker"; previousCode: PreviousVersion[] };
 export type TypeDiagnostic = { file: string; line: number; code: string; message: string };
 export type RunResponse =
@@ -76,6 +78,7 @@ export const api = {
   setKnowledge: (journeyId: string, conceptIds: string[], state: KnowledgeLevel) =>
     request<{ ok: true }>("POST", `/api/journeys/${encodeURIComponent(journeyId)}/knowledge`, { conceptIds, state }),
   stage: (id: string) => request<StageDetail>("GET", `/api/stages/${encodeURIComponent(id)}`),
+  architecture: (id: string) => request<ArchitectureCode>("GET", `/api/stages/${encodeURIComponent(id)}/architecture`),
   run: (stageId: string, files: CodeFile[]) => request<RunResponse>("POST", `/api/stages/${encodeURIComponent(stageId)}/run`, { files }),
   attempt: (stageId: string, result: RunResult) =>
     request<{ ok: true; firstPass: boolean }>("POST", `/api/stages/${encodeURIComponent(stageId)}/attempts`, { runner: "browser", result }),

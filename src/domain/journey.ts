@@ -27,6 +27,8 @@ export type Journey = {
   repo: RepositorySnapshot;
   /** What this journey helps the developer understand. */
   goal: LearningGoal;
+  /** Architecture node id → real declarations, where names differ (see services/code-map.ts). */
+  codeMap: Record<string, { path: string; symbol: string }[]>;
   status: GenerationStatus;
   concepts: Concept[];
   modules: Module[];

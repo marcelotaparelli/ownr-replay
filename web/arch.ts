@@ -23,7 +23,8 @@ const RELATION_LABEL: Record<Relation, string> = {
 };
 
 /** Small hand-positioned diagram; what this stage adds is highlighted. */
-export function architectureView(graph: ArchitectureGraph, previous: ArchitectureGraph | undefined): HTMLElement {
+/** onNode: nodes become buttons (click, Enter or Space) that open the node's real code. */
+export function architectureView(graph: ArchitectureGraph, previous: ArchitectureGraph | undefined, onNode?: (nodeId: string) => void): HTMLElement {
   const diff = architectureDiff(previous, graph);
   const newNodes = new Set(diff.newNodes);
   const newEdges = new Set(diff.newEdges);
@@ -53,7 +54,8 @@ export function architectureView(graph: ArchitectureGraph, previous: Architectur
       const p = at.get(node.id);
       if (!p) return "";
       const cls = `node ${node.kind}${newNodes.has(node.id) ? " new" : ""}`;
-      return `<g class="${cls}"><rect x="${p.x}" y="${p.y}" width="${NODE_W}" height="${NODE_H}" rx="6"/><text x="${p.x + NODE_W / 2}" y="${p.y + NODE_H / 2 + 4}" text-anchor="middle">${escapeHtml(node.label)}</text></g>`;
+      const button = onNode ? ` data-node="${escapeHtml(node.id)}" tabindex="0" role="button" aria-label="Ver o código real de ${escapeHtml(node.label)}"` : "";
+      return `<g class="${cls}"${button}><rect x="${p.x}" y="${p.y}" width="${NODE_W}" height="${NODE_H}" rx="6"/><text x="${p.x + NODE_W / 2}" y="${p.y + NODE_H / 2 + 4}" text-anchor="middle">${escapeHtml(node.label)}</text></g>`;
     })
     .join("");
 
@@ -61,10 +63,26 @@ export function architectureView(graph: ArchitectureGraph, previous: Architectur
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>${edges}${nodes}</svg>`;
 
   const added = graph.nodes.filter((n) => newNodes.has(n.id)).map((n) => n.label);
+  const canvas = h("div", { class: "arch-canvas" + (onNode ? " navigable" : ""), html: svg });
+  if (onNode) {
+    const nodeOf = (event: Event) => (event.target instanceof Element ? event.target.closest<SVGGElement>("[data-node]")?.dataset.node : undefined);
+    canvas.addEventListener("click", (event) => {
+      const id = nodeOf(event);
+      if (id) onNode(id);
+    });
+    canvas.addEventListener("keydown", (event) => {
+      const id = nodeOf(event);
+      if (id && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault();
+        onNode(id);
+      }
+    });
+  }
   return h(
     "figure",
     { class: "arch" },
-    h("div", { class: "arch-canvas", html: svg }),
+    canvas,
     added.length && previous ? h("figcaption", {}, h("span", { class: "dot-new" }), " novo nesta etapa: ", added.join(", ")) : null,
+    onNode ? h("figcaption", { class: "muted" }, "Clique em um bloco para ver o código real correspondente.") : null,
   );
 }
