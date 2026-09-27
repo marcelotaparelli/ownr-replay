@@ -1,4 +1,5 @@
 import type { JourneyOutline, StageOutline } from "../src/domain/journey.ts";
+import { planJourney, type Confidence, type JourneyPlan } from "../src/domain/pace.ts";
 import type { KnowledgeLevel, StageStatus } from "../src/domain/progress.ts";
 import type { Concept, Module } from "../src/domain/stage.ts";
 import { ApiError, api, type JourneyCard } from "./api.ts";
@@ -78,10 +79,61 @@ function moduleItem(journey: JourneyOutline, module: Module, index: number, stor
 }
 
 /** Width is set through CSSOM: the CSP forbids inline style attributes. */
-function meter(done: number, total: number): HTMLElement {
+function meter(done: number, total: number, label = "Progresso da jornada"): HTMLElement {
   const fill = h("span");
   fill.style.width = `${total === 0 ? 0 : (done / total) * 100}%`;
-  return h("div", { class: "meter", role: "progressbar", "aria-label": "Progresso da jornada", "aria-valuemin": 0, "aria-valuemax": total, "aria-valuenow": done }, fill);
+  return h("div", { class: "meter", role: "progressbar", "aria-label": label, "aria-valuemin": 0, "aria-valuemax": total, "aria-valuenow": done }, fill);
+}
+
+const CONFIDENCE: Record<Confidence, { dots: string; label: string }> = {
+  none: { dots: "○○○", label: "sem dados do seu ritmo — usando a estimativa do autor" },
+  low: { dots: "●○○", label: "baixa" },
+  medium: { dots: "●●○", label: "média" },
+  high: { dots: "●●●", label: "alta" },
+};
+
+const duration = (minutes: number): string => (minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`);
+
+/** Where am I, how much is left, how long at my pace — for the mapped route only. */
+function renderPlan(plan: JourneyPlan): HTMLElement {
+  const { pace, eta } = plan;
+  const confidence = CONFIDENCE[eta.confidence];
+  const paceText =
+    pace.samples === 0
+      ? "Seu ritmo: ainda sem etapas resolvidas com tempo medível."
+      : `Seu ritmo: ~${pace.medianMinutes} min por micro etapa (mediana de ${pace.samples}) · ${pace.factor}× a estimativa do autor.`;
+  const excluded = [
+    pace.skippedKnown ? `${pace.skippedKnown} marcada(s) como já dominadas` : null,
+    pace.tooFast ? `${pace.tooFast} concluída(s) em menos de 15 s` : null,
+  ].filter(Boolean);
+  return h(
+    "section",
+    { class: "plan", "aria-label": "Plano de aprendizado" },
+    h(
+      "p",
+      { class: "plan-head" },
+      h("strong", {}, `${plan.percent}%`),
+      " do percurso mapeado",
+      h("span", { class: "muted" }, ` · micro etapas ${plan.micro.done}/${plan.micro.total} · checkpoint${plan.checkpoints.total === 1 ? "" : "s"} ${plan.checkpoints.done}/${plan.checkpoints.total}`),
+    ),
+    meter(plan.percent, 100, "Progresso do percurso mapeado"),
+    h(
+      "p",
+      {},
+      eta.remainingStages === 0 ? "Percurso mapeado concluído." : [`Falta ~${duration(eta.minutes)}`, h("span", { class: "muted" }, ` (entre ${duration(eta.low)} e ${duration(eta.high)}) no seu ritmo`)],
+      " · confiança ",
+      h("span", { class: `confidence c-${eta.confidence}`, title: confidence.label }, confidence.dots),
+      ` ${confidence.label}`,
+    ),
+    h("p", { class: "muted" }, paceText, excluded.length ? ` Fora do ritmo (contam no progresso): ${excluded.join(", ")}.` : ""),
+    plan.partial
+      ? h(
+          "p",
+          { class: "muted" },
+          `Estimativa parcial: cobre só o percurso já decomposto em micro etapas. ${plan.unmapped.modules} módulo(s) ainda são capítulos (${plan.unmapped.done}/${plan.unmapped.total} vistos) e ficam fora do % e do tempo; o total será refinado conforme a jornada for decomposta.`,
+        )
+      : null,
+  );
 }
 
 /** Journey landing: what this is, and where you left off. */
@@ -90,6 +142,7 @@ export function renderOverview(journey: JourneyOutline, store: ProgressStore): H
   const next = journey.stages.find((s) => !["completed", "skipped_known"].includes(store.status(s.id)));
   const anchor = last ? store.snapshot.stages[last.id]?.anchor : undefined;
   const target = last && !["completed", "skipped_known"].includes(store.status(last.id)) ? last : next;
+  const plan = planJourney(journey.stages, (id) => store.progress(id));
 
   return h(
     "article",
@@ -99,8 +152,9 @@ export function renderOverview(journey: JourneyOutline, store: ProgressStore): H
     h("p", { class: "subtitle" }, journey.description),
     h("p", { class: "muted" },
       h("a", { href: `${journey.repo.url}/tree/${journey.repo.sha}`, target: "_blank", rel: "noopener noreferrer" }, `${journey.repo.owner}/${journey.repo.name}@${journey.repo.sha.slice(0, 7)} ↗`),
-      ` · ${journey.stages.length} etapas · ~${journey.stages.reduce((n, s) => n + s.estimatedMinutes, 0)} min`,
+      ` · ${journey.stages.length} etapas`,
     ),
+    plan ? renderPlan(plan) : null,
     target
       ? h(
           "aside",

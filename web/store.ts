@@ -7,7 +7,8 @@ import { api } from "./api.ts";
  * Failed pushes wait in an outbox and are retried on the next load/online event.
  */
 
-export type LocalStage = { status: StageStatus; anchor?: string; updatedAt: number };
+/** timeSpentMs: total time on the stage, across sessions; the server's sum wins when it knows more. */
+export type LocalStage = { status: StageStatus; anchor?: string; updatedAt: number; timeSpentMs?: number };
 export type LocalJourney = {
   stages: Record<string, LocalStage>;
   known: Record<string, KnowledgeLevel>;
@@ -58,6 +59,11 @@ export class ProgressStore {
     return this.data.stages[stageId]?.status ?? "not_started";
   }
 
+  progress(stageId: string): { status: StageStatus; timeSpentMs: number } {
+    const stage = this.data.stages[stageId];
+    return { status: stage?.status ?? "not_started", timeSpentMs: stage?.timeSpentMs ?? 0 };
+  }
+
   isKnown(conceptId: string): boolean {
     const level = this.data.known[conceptId];
     return level === "known" || level === "mastered";
@@ -65,7 +71,7 @@ export class ProgressStore {
 
   setStatus(stageId: string, status: StageStatus, extra: { timeSpentMs?: number; knownConcepts?: string[] } = {}): void {
     const current = this.data.stages[stageId];
-    this.data.stages[stageId] = { ...current, status, updatedAt: Date.now() };
+    this.data.stages[stageId] = { ...current, status, updatedAt: Date.now(), timeSpentMs: (current?.timeSpentMs ?? 0) + (extra.timeSpentMs ?? 0) };
     for (const conceptId of extra.knownConcepts ?? []) this.data.known[conceptId] = "known";
     if (status === "completed") this.data.justCompleted = stageId;
     this.save();
@@ -83,6 +89,8 @@ export class ProgressStore {
   leave(stageId: string, timeSpentMs: number): void {
     const current = this.data.stages[stageId];
     if (!current || timeSpentMs < 1_000) return;
+    this.data.stages[stageId] = { ...current, timeSpentMs: (current.timeSpentMs ?? 0) + Math.round(timeSpentMs) };
+    this.save();
     push({ stageId, update: { status: current.status, timeSpentMs: Math.round(timeSpentMs), ...(current.anchor ? { anchor: current.anchor } : {}) } });
   }
 
@@ -116,8 +124,11 @@ export class ProgressStore {
         this.data.stages[remote.stageId] = {
           status: remote.status,
           updatedAt: remote.updatedAt,
+          timeSpentMs: Math.max(local?.timeSpentMs ?? 0, remote.timeSpentMs),
           ...(remote.anchor ? { anchor: remote.anchor } : {}),
         };
+      } else if (remote.timeSpentMs > (local.timeSpentMs ?? 0)) {
+        this.data.stages[remote.stageId] = { ...local, timeSpentMs: remote.timeSpentMs };
       }
     }
     for (const { conceptId, state } of server.knowledge) this.data.known[conceptId] ??= state;

@@ -350,3 +350,11 @@ pre.snippet { font: 12.5px/1.6 var(--mono); background: var(--code-bg); border: 
 .requirements li { margin: 2px 0; }
 .diagnostic summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .tagline { margin-top: 2px; font-size: 13px; letter-spacing: 0.02em; }
+
+/* Journey plan: where am I, how much is left, how long at my pace. */
+.plan { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; margin: 12px 0 16px; background: var(--panel); }
+.plan p { margin: 6px 0; }
+.plan-head strong { font-size: 20px; }
+.plan .meter { margin: 6px 0; }
+.confidence { font-family: var(--mono); letter-spacing: 1px; }
+.confidence.c-none, .confidence.c-low { color: var(--muted); }
