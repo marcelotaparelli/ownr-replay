@@ -4,6 +4,20 @@ OWNR (formerly "Repo Replay") helps developers acquire **verified technical owne
 
 Philosophy (Arch-inspired): simple, minimal, explicit, performant, secure, observable, reliable, understandable. Minimal = the least code, dependencies, abstractions and infrastructure needed for a *robust* solution — not improvised code.
 
+## Products
+- **OWNR** — the brand/platform.
+- **OWNR Replay** — verified technical ownership of unfamiliar code (the learning product in `src/` + `web/`). Keep it working and moving; it is both a product and the first organism.
+- **OWNR Habitat** — closed-loop software evolution environment (`src/habitat/`, `web/habitat/`). *Humans define the mission and constraints. Mutation engines propose candidate changes. OWNR independently executes, observes, evaluates and selects them until the software approaches its desired measurable state without leaving its engineering envelope.* **Agents generate change. OWNR decides what survives.**
+
+## Habitat rules (non-negotiable)
+- The software is the evolving object: Mission, Desired State, Fitness, Envelope, Candidate lineage and independent evaluation are first-class. Agents are only one source of candidates (human, LLM, rule, search…); Habitat is not an agent orchestrator.
+- Loop: observe → analyze → propose → mutate (isolated candidate) → execute → evaluate → select → promote/reject → observe. Never observe → change production.
+- **The agent that writes a change never decides whether it passed**: its claims are stored as information, never as evidence; evaluators re-execute independently.
+- **Control plane vs managed plane**: the organism cannot modify mission, envelope, evaluators, promotion rules, recorder or proposals; candidates may only touch the organism's allowed paths, enforced as a HARD constraint before anything runs. Evaluator code always runs from the control-plane checkout; envelope and fitness are snapshotted when the mission starts.
+- HARD constraint failure (or a HARD check that did not run) ⇒ INELIGIBLE, whatever the fitness. Fitness always comes with counter-metrics (anti-Goodhart). Telemetry declares sample size and window; below minimum ⇒ INSUFFICIENT_DATA, and a mission is never "reached" without sufficient evidence. UI distinguishes PASS / FAIL / NOT_RUN / INSUFFICIENT_DATA — nothing is shown as passing without a check that ran.
+- Promotion is a human act (promotable ≠ promoted); it never deploys or touches the baseline branch. No self-modification of Habitat; LocalRunner/worktrees are NOT a security boundary (future: Docker/gVisor).
+- Not now: auto deploy, swarms, RL/GA frameworks, ML, distributed workers, RBAC, billing, GitHub App, SAST platform, canaries, self-modifying Habitat.
+
 ## Product vision (reference for decisions — NOT a build list)
 Internal statement: *OWNR is the engineering cockpit for the agentic software era. It helps developers acquire verified technical ownership of unfamiliar code today, and evolves toward an environment where humans direct software agents inside measurable constraints for architecture, security, reliability, performance, testing and observability.* Taglines: "Own the code. Direct the agents." · "From generated code to owned software." Thesis: AI made producing code cheaper; OWNR makes owning software cheaper.
 

@@ -48,3 +48,21 @@ Tudo que aparece como código correto é validado por `bun test`: soluções pas
 - `RUNNER=docker`: `DockerSandboxRunner` executa em container efêmero sem rede, com CPU/RAM/PIDs limitados, FS read-only e tmpfs. Imagem: `docker build -f sandbox-images/typescript/Dockerfile -t repo-replay-sandbox-ts:latest .` — **ainda não verificado** (sem Docker no ambiente de desenvolvimento).
 
 Visão do produto, princípios pedagógicos e de engenharia: ver `CLAUDE.md`.
+
+## OWNR Habitat
+
+Ambiente de evolução em circuito fechado. **Agentes geram mudança; o OWNR decide o que sobrevive.** O OWNR Replay é o primeiro Organism.
+
+```bash
+bun run habitat            # Cockpit em http://127.0.0.1:3100 (só loopback)
+bun run habitat observe    # mede a baseline (HEAD) num worktree isolado
+bun run habitat evolve <proposta>   # candidate isolado → avaliadores → decisão
+bun run habitat status
+```
+
+- **Missão** `replay-ttvo-m1`, **envelope**, **fitness** e contra-métricas: `src/habitat/replay/organism.ts`. A missão é gravada (snapshot) em `habitat.sqlite` quando começa; mudar o arquivo depois não afrouxa uma missão em andamento.
+- **Propostas** (entrada, de qualquer origem): `habitat/proposals/<id>/{proposal.json,change.patch}`, patch contra a baseline. As `claims` do autor são guardadas como informação, nunca como evidência.
+- **Candidates** rodam em `git worktree` fora do repositório (`HABITAT_WORKTREES`, padrão `~/.cache/ownr-habitat/worktrees`); a revisão fica em `refs/habitat/candidates/<id>` para inspeção, mesmo rejeitada. A baseline nunca é alterada.
+- **Decisão**: HARD falhou ou não rodou ⇒ INELIGIBLE; contra-métrica quebrada ou objetivo pior ⇒ WORSE; nada melhorou ⇒ NEUTRAL; SOFT com problema ⇒ BETTER; senão PROMOTABLE.
+- **Promover** é um ato humano no Cockpit: cria a branch local `habitat/<candidate>`. Sem merge, push ou deploy.
+- Os comandos rodam no host com os direitos do usuário: **worktree não é fronteira de segurança**.
