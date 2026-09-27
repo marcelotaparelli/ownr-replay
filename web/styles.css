@@ -170,7 +170,9 @@ pre.snippet { font: 12.5px/1.6 var(--mono); background: var(--code-bg); border: 
 .arch .node.infra rect, .arch .node.external rect { fill: var(--warn-soft); }
 .arch .node.new rect { stroke: var(--accent); stroke-width: 2; fill: var(--accent-soft); }
 .arch .edge line { stroke: var(--muted); stroke-width: 1.4; }
-.arch .edge text { fill: var(--muted); font-size: 10.5px; }
+.arch .edge-labels { pointer-events: none; }
+.arch .edge-label rect { fill: var(--bg); }
+.arch .edge-label text { fill: var(--text); font-size: 10.5px; }
 .arch .edge.new line { stroke: var(--accent); }
 .arch marker path { fill: var(--muted); }
 .arch figcaption { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
