@@ -9,6 +9,7 @@ import { Metrics } from "./obs/metrics.ts";
 import { DockerSandboxRunner } from "./sandbox/docker-runner.ts";
 import { TypeChecker, locateTsc } from "./sandbox/typecheck.ts";
 import { loadAllJourneys } from "./services/curriculum.ts";
+import { ModuleGenerationService, StageGenerator, StagePlanner, StageValidator } from "./services/stage-generation.ts";
 import { AnthropicTutorModel } from "./services/tutor-anthropic.ts";
 import { TutorService } from "./services/tutor.ts";
 import { buildWebAssets } from "./web-assets.ts";
@@ -17,15 +18,16 @@ const root = join(import.meta.dir, "..");
 const config = loadConfig();
 const metrics = new Metrics();
 const repository = new Repository(config.DB_PATH);
-const journeys = loadAllJourneys(join(root, config.DATA_DIR));
+const authored = loadAllJourneys(join(root, config.DATA_DIR));
 const model = config.ANTHROPIC_API_KEY ? new AnthropicTutorModel(config.ANTHROPIC_API_KEY, config.TUTOR_MODEL) : null;
 const tutor = new TutorService(repository, model, logger, metrics);
 const sandbox = config.RUNNER === "docker" ? new DockerSandboxRunner() : null;
 // Fail at boot, not on the learner's first run, if the checker a stage needs is missing.
-const needsTypecheck = journeys.some((j) => j.stages.some((s) => s.exercise?.typecheck));
-const typeChecker = needsTypecheck ? new TypeChecker(await locateTsc()) : null;
+const typeChecker = new TypeChecker(await locateTsc());
+const generation = new ModuleGenerationService(join(root, "data/generated"), new StagePlanner(), new StageGenerator(), new StageValidator(typeChecker));
+const journeys = authored.map((journey) => generation.restore(journey));
 const codeIndexes = new Map(journeys.map((j) => [j.id, indexRepository(originalDir(join(root, config.DATA_DIR, j.id)))]));
-const api = createApi({ journeys, repository, tutor, sandbox, typeChecker, logger, metrics, codeIndexes });
+const api = createApi({ journeys, repository, tutor, sandbox, typeChecker, logger, metrics, codeIndexes, generation });
 const assets = await buildWebAssets(join(root, "web"));
 
 const server = Bun.serve({ hostname: "0.0.0.0", port: config.PORT, fetch: createApp(api, assets, logger, metrics) });

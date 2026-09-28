@@ -1,0 +1,1536 @@
+{
+  "sha": "840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67",
+  "goal": "Aprender Module 2 e entender TriageClassifier",
+  "plan": {
+    "moduleId": "m2",
+    "goal": "Aprender Module 2 e entender TriageClassifier",
+    "evidence": [
+      {
+        "path": "src/application/ports/triage-classifier.ts",
+        "symbol": "TriageClassifier"
+      },
+      {
+        "path": "src/application/triage-ticket.ts",
+        "symbol": "TriageTicket"
+      },
+      {
+        "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+        "symbol": "DeterministicTriageClassifier"
+      },
+      {
+        "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+        "symbol": "classify"
+      }
+    ],
+    "binding": {
+      "contract": "TriageClassifier",
+      "method": "classify",
+      "input": "TicketInput",
+      "output": "Category",
+      "useCase": "TriageTicket",
+      "execute": "execute",
+      "adapter": "DeterministicTriageClassifier",
+      "rule": "classify"
+    },
+    "steps": [
+      {
+        "idea": "direct-call",
+        "title": "Chamar a regra",
+        "limitation": "Quem tria ainda escolhe as regras por conta própria; precisamos poder trocar essa decisão."
+      },
+      {
+        "idea": "inject-function",
+        "title": "Trocar a função",
+        "limitation": "Uma função solta não nomeia o compromisso que outras implementações devem cumprir."
+      },
+      {
+        "idea": "interface",
+        "title": "Nomear o contrato",
+        "limitation": "O contrato síncrono exclui classificadores que esperam rede ou disco."
+      },
+      {
+        "idea": "async",
+        "title": "Aceitar espera",
+        "limitation": "O chamador ainda precisa montar a chamada; falta um caso de uso com a dependência guardada."
+      },
+      {
+        "idea": "use-case",
+        "title": "Criar o caso de uso",
+        "limitation": "O caso de uso aceita o contrato, mas a regra determinística ainda não foi conectada a ele."
+      },
+      {
+        "idea": "adapter",
+        "title": "Conectar a implementação",
+        "limitation": "A implementação real funciona; falta provar que o caso de uso aceita uma substituta em teste."
+      },
+      {
+        "idea": "test-double",
+        "title": "Testar com uma substituta",
+        "limitation": "Agora reúna as peças do módulo sem o ponto de partida."
+      },
+      {
+        "idea": "checkpoint",
+        "title": "Checkpoint: reconstruir o contrato",
+        "limitation": "Compare sua reconstrução com o código real."
+      }
+    ]
+  },
+  "stages": [
+    {
+      "id": "ops-triage-ai.m2-01",
+      "order": 19,
+      "moduleId": "m2",
+      "kind": "micro",
+      "title": "Chamar a regra",
+      "goal": "Aprender chamar a regra a partir do limite anterior.",
+      "problem": "O classificador do módulo anterior decide a categoria, mas o caso de uso ainda precisa chamá-lo.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "ticket",
+            "label": "TicketInput",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          }
+        ],
+        "edges": [
+          {
+            "from": "ticket",
+            "to": "category",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "port.ts",
+          "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport function triage(input: TicketInput): Category {\n  return classify(input);\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return classify(input);",
+          "note": "Esta linha realiza a ideia central desta etapa."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "direct-call",
+          "title": "Chamar a regra",
+          "quick": "A função triage recebe um ticket e devolve a categoria calculada pela regra anterior.",
+          "normal": "No código real, classify aparece em src/application/classifiers/deterministic-triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+          "startLine": 79,
+          "endLine": 113,
+          "symbol": "classify",
+          "replayFile": "port.ts",
+          "replaySymbol": "triage",
+          "note": "O Replay reduz o resultado à categoria; o projeto real também carrega decisão, prioridade e política.",
+          "snippet": "  async classify(input: TicketInput): Promise<ClassifierResult> {\n    const title = normalize(input.title);\n    const description = normalize(input.description);\n    const scores = CATEGORY_TIE_BREAK.map((category) =>\n      scoreCategory(category, title, description),\n    );\n    const highestScore = Math.max(...scores.map(({ score }) => score));\n    const leaders = scores.filter(({ score }) => score === highestScore);\n    const winner =\n      highestScore === 0 ? scoreCategory(Category.OTHER, title, description) : leaders[0]!;\n    const runnerUpScore = Math.max(\n      0,\n      ...scores\n        .filter(({ category }) => category !== winner.category)\n        .map(({ score }) => score),\n    );\n    const confidence = confidenceFor(winner, leaders.length, runnerUpScore);\n    const combined = title + \" \" + description;\n    const priority = classifyPriority(winner.category, combined);\n    const risk = classifyRisk(winner.category, combined);\n\n    return {\n      category: winner.category,\n      priority: priority.value,\n      risk: risk.value,\n      suggestedTeam: suggestedTeamForCategory(winner.category),\n      confidence,\n      summary: summarize(input.title),\n      rationale: [\n        categoryRationale(winner, confidence, leaders.length),\n        priority.code,\n        risk.code,\n      ].join(\" | \"),\n    };\n  }",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/classifiers/deterministic-triage-classifier.ts#L79-L113"
+        }
+      ],
+      "exercise": {
+        "instructions": "Crie triage(input) para chamar classify do código pronto e devolver sua categoria.",
+        "starterFiles": [
+          {
+            "path": "port.ts",
+            "content": ""
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport function triage(input: TicketInput): Category {\n  return classify(input);\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\ninterface Signal {\n  pattern: RegExp;\n  weight: number;\n}\n\n// Cada categoria tem sinais com peso. Mais peso = evidência mais forte.\nconst SIGNALS: Record<Category, Signal[]> = {\n  [Category.INCIDENT]: [\n    { pattern: /\\bproduction (is )?down\\b/, weight: 6 },\n    { pattern: /\\b(service|system|site) (is )?down\\b/, weight: 5 },\n    { pattern: /\\boutage\\b/, weight: 4 },\n    { pattern: /\\bunavailable\\b/, weight: 2 },\n  ],\n  [Category.BUG]: [\n    { pattern: /\\bregression\\b/, weight: 4 },\n    { pattern: /\\bbug\\b/, weight: 3 },\n    { pattern: /\\b(exception|broken|fails?)\\b/, weight: 2 },\n    { pattern: /\\berror\\b/, weight: 1 },\n  ],\n  [Category.ACCESS]: [\n    { pattern: /\\b(cannot|can't|unable to) log ?in\\b/, weight: 5 },\n    { pattern: /\\baccess denied\\b/, weight: 5 },\n    { pattern: /\\b(permission|unauthorized|forbidden)\\b/, weight: 4 },\n    { pattern: /\\b(password|log ?in)\\b/, weight: 2 },\n  ],\n  [Category.SUPPORT]: [\n    { pattern: /\\bhow (do|can|to)\\b/, weight: 4 },\n    { pattern: /\\bneed help\\b/, weight: 4 },\n    { pattern: /\\bhelp\\b/, weight: 2 },\n  ],\n  [Category.OTHER]: [],\n};\n\n// Em empate vence quem aparece primeiro: incidentes antes de tudo.\nconst TIE_BREAK: Category[] = [\n  Category.INCIDENT,\n  Category.ACCESS,\n  Category.BUG,\n  Category.SUPPORT,\n  Category.OTHER,\n];\n\nexport function classify(input: TicketInput): Category {\n  const title = normalize(input.title);\n  const description = normalize(input.description);\n\n  let best = Category.OTHER;\n  let bestScore = 0;\n  for (const category of TIE_BREAK) {\n    const score = scoreCategory(category, title, description);\n    if (score > bestScore) {\n      best = category;\n      bestScore = score;\n    }\n  }\n  return best;\n}\n\nexport function scoreCategory(category: Category, title: string, description: string): number {\n  let score = 0;\n  for (const signal of SIGNALS[category]) {\n    if (signal.pattern.test(title)) score += signal.weight * 2;\n    if (signal.pattern.test(description)) score += signal.weight;\n  }\n  return score;\n}\n\nexport function normalize(value: string): string {\n  return value\n    .toLowerCase()\n    .replace(/[^a-z0-9' ]+/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { triage } from \"./port.ts\";\ntest(\"usa a regra\", () => expect(triage({ title: \"site down\", description: \"\" })).toBe(\"INCIDENT\"));"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "port.ts",
+          "src/application/classifiers/deterministic-triage-classifier.ts"
+        ],
+        "concepts": [],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Quem tria ainda escolhe as regras por conta própria; precisamos poder trocar essa decisão.",
+      "summary": {
+        "added": [
+          "Chamar a regra"
+        ],
+        "why": "Quem tria ainda escolhe as regras por conta própria; precisamos poder trocar essa decisão.",
+        "flow": [
+          "TicketInput",
+          "Category"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m2-02",
+      "order": 20,
+      "moduleId": "m2",
+      "kind": "micro",
+      "title": "Trocar a função",
+      "goal": "Aprender trocar a função a partir do limite anterior.",
+      "problem": "Quem tria ainda escolhe as regras por conta própria; precisamos poder trocar essa decisão.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "dependency-inversion"
+      ],
+      "prerequisites": [],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "ticket",
+            "label": "TicketInput",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          }
+        ],
+        "edges": [
+          {
+            "from": "ticket",
+            "to": "category",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "port.ts",
+          "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport function triage(input: TicketInput, classifier: (input: TicketInput) => Category): Category {\n  return classifier(input);\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return classifier(input);",
+          "note": "Esta linha realiza a ideia central desta etapa."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "inject-function",
+          "conceptId": "dependency-inversion",
+          "title": "Trocar a função",
+          "quick": "O classificador chega como parâmetro. Assim o chamador decide qual regra usar.",
+          "normal": "No código real, classify aparece em src/application/classifiers/deterministic-triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+          "startLine": 79,
+          "endLine": 113,
+          "symbol": "classify",
+          "replayFile": "port.ts",
+          "replaySymbol": "triage",
+          "note": "O Replay reduz o resultado à categoria; o projeto real também carrega decisão, prioridade e política.",
+          "snippet": "  async classify(input: TicketInput): Promise<ClassifierResult> {\n    const title = normalize(input.title);\n    const description = normalize(input.description);\n    const scores = CATEGORY_TIE_BREAK.map((category) =>\n      scoreCategory(category, title, description),\n    );\n    const highestScore = Math.max(...scores.map(({ score }) => score));\n    const leaders = scores.filter(({ score }) => score === highestScore);\n    const winner =\n      highestScore === 0 ? scoreCategory(Category.OTHER, title, description) : leaders[0]!;\n    const runnerUpScore = Math.max(\n      0,\n      ...scores\n        .filter(({ category }) => category !== winner.category)\n        .map(({ score }) => score),\n    );\n    const confidence = confidenceFor(winner, leaders.length, runnerUpScore);\n    const combined = title + \" \" + description;\n    const priority = classifyPriority(winner.category, combined);\n    const risk = classifyRisk(winner.category, combined);\n\n    return {\n      category: winner.category,\n      priority: priority.value,\n      risk: risk.value,\n      suggestedTeam: suggestedTeamForCategory(winner.category),\n      confidence,\n      summary: summarize(input.title),\n      rationale: [\n        categoryRationale(winner, confidence, leaders.length),\n        priority.code,\n        risk.code,\n      ].join(\" | \"),\n    };\n  }",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/classifiers/deterministic-triage-classifier.ts#L79-L113"
+        }
+      ],
+      "exercise": {
+        "instructions": "Faça triage receber a função classifier e usá-la no lugar da regra fixa.",
+        "starterFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport function triage(input: TicketInput): Category {\n  return classify(input);\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport function triage(input: TicketInput, classifier: (input: TicketInput) => Category): Category {\n  return classifier(input);\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\ninterface Signal {\n  pattern: RegExp;\n  weight: number;\n}\n\n// Cada categoria tem sinais com peso. Mais peso = evidência mais forte.\nconst SIGNALS: Record<Category, Signal[]> = {\n  [Category.INCIDENT]: [\n    { pattern: /\\bproduction (is )?down\\b/, weight: 6 },\n    { pattern: /\\b(service|system|site) (is )?down\\b/, weight: 5 },\n    { pattern: /\\boutage\\b/, weight: 4 },\n    { pattern: /\\bunavailable\\b/, weight: 2 },\n  ],\n  [Category.BUG]: [\n    { pattern: /\\bregression\\b/, weight: 4 },\n    { pattern: /\\bbug\\b/, weight: 3 },\n    { pattern: /\\b(exception|broken|fails?)\\b/, weight: 2 },\n    { pattern: /\\berror\\b/, weight: 1 },\n  ],\n  [Category.ACCESS]: [\n    { pattern: /\\b(cannot|can't|unable to) log ?in\\b/, weight: 5 },\n    { pattern: /\\baccess denied\\b/, weight: 5 },\n    { pattern: /\\b(permission|unauthorized|forbidden)\\b/, weight: 4 },\n    { pattern: /\\b(password|log ?in)\\b/, weight: 2 },\n  ],\n  [Category.SUPPORT]: [\n    { pattern: /\\bhow (do|can|to)\\b/, weight: 4 },\n    { pattern: /\\bneed help\\b/, weight: 4 },\n    { pattern: /\\bhelp\\b/, weight: 2 },\n  ],\n  [Category.OTHER]: [],\n};\n\n// Em empate vence quem aparece primeiro: incidentes antes de tudo.\nconst TIE_BREAK: Category[] = [\n  Category.INCIDENT,\n  Category.ACCESS,\n  Category.BUG,\n  Category.SUPPORT,\n  Category.OTHER,\n];\n\nexport function classify(input: TicketInput): Category {\n  const title = normalize(input.title);\n  const description = normalize(input.description);\n\n  let best = Category.OTHER;\n  let bestScore = 0;\n  for (const category of TIE_BREAK) {\n    const score = scoreCategory(category, title, description);\n    if (score > bestScore) {\n      best = category;\n      bestScore = score;\n    }\n  }\n  return best;\n}\n\nexport function scoreCategory(category: Category, title: string, description: string): number {\n  let score = 0;\n  for (const signal of SIGNALS[category]) {\n    if (signal.pattern.test(title)) score += signal.weight * 2;\n    if (signal.pattern.test(description)) score += signal.weight;\n  }\n  return score;\n}\n\nexport function normalize(value: string): string {\n  return value\n    .toLowerCase()\n    .replace(/[^a-z0-9' ]+/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { triage } from \"./port.ts\";\ntest(\"aceita outra função\", () => expect(triage({ title: \"\", description: \"\" }, () => \"ACCESS\")).toBe(\"ACCESS\"));"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "function-param",
+          "name": "Função como parâmetro",
+          "summary": "O chamador escolhe a função usada.",
+          "example": "function apply(n: number, f: (n: number) => number) { return f(n); }"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "port.ts",
+          "src/application/classifiers/deterministic-triage-classifier.ts"
+        ],
+        "concepts": [
+          "dependency-inversion"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.m2-01"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Uma função solta não nomeia o compromisso que outras implementações devem cumprir.",
+      "summary": {
+        "added": [
+          "Trocar a função"
+        ],
+        "why": "Uma função solta não nomeia o compromisso que outras implementações devem cumprir.",
+        "flow": [
+          "TicketInput",
+          "Category"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m2-03",
+      "order": 21,
+      "moduleId": "m2",
+      "kind": "micro",
+      "title": "Nomear o contrato",
+      "goal": "Aprender nomear o contrato a partir do limite anterior.",
+      "problem": "Uma função solta não nomeia o compromisso que outras implementações devem cumprir.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "interface-contract"
+      ],
+      "prerequisites": [
+        "dependency-inversion"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "ticket",
+            "label": "TicketInput",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "port",
+            "label": "TriageClassifier",
+            "kind": "interface",
+            "col": 1,
+            "row": 0
+          }
+        ],
+        "edges": [
+          {
+            "from": "ticket",
+            "to": "category",
+            "rel": "flows_to"
+          },
+          {
+            "from": "port",
+            "to": "category",
+            "rel": "creates"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "port.ts",
+          "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Category; }\nexport function triage(input: TicketInput, classifier: TriageClassifier): Category {\n  return classifier.classify(input);\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return classifier.classify(input);",
+          "note": "Esta linha realiza a ideia central desta etapa."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "interface",
+          "conceptId": "interface-contract",
+          "title": "Nomear o contrato",
+          "quick": "TriageClassifier nomeia a operação classify que qualquer classificador deve oferecer.",
+          "normal": "No código real, TriageClassifier aparece em src/application/ports/triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/ports/triage-classifier.ts",
+          "startLine": 3,
+          "endLine": 5,
+          "symbol": "TriageClassifier",
+          "replayFile": "port.ts",
+          "note": "O Replay reduz o resultado à categoria; o projeto real também carrega decisão, prioridade e política.",
+          "snippet": "export interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/ports/triage-classifier.ts#L3-L5"
+        }
+      ],
+      "exercise": {
+        "instructions": "Declare TriageClassifier com classify(input) e use esse contrato em triage.",
+        "starterFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport function triage(input: TicketInput, classifier: (input: TicketInput) => Category): Category {\n  return classifier(input);\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Category; }\nexport function triage(input: TicketInput, classifier: TriageClassifier): Category {\n  return classifier.classify(input);\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\ninterface Signal {\n  pattern: RegExp;\n  weight: number;\n}\n\n// Cada categoria tem sinais com peso. Mais peso = evidência mais forte.\nconst SIGNALS: Record<Category, Signal[]> = {\n  [Category.INCIDENT]: [\n    { pattern: /\\bproduction (is )?down\\b/, weight: 6 },\n    { pattern: /\\b(service|system|site) (is )?down\\b/, weight: 5 },\n    { pattern: /\\boutage\\b/, weight: 4 },\n    { pattern: /\\bunavailable\\b/, weight: 2 },\n  ],\n  [Category.BUG]: [\n    { pattern: /\\bregression\\b/, weight: 4 },\n    { pattern: /\\bbug\\b/, weight: 3 },\n    { pattern: /\\b(exception|broken|fails?)\\b/, weight: 2 },\n    { pattern: /\\berror\\b/, weight: 1 },\n  ],\n  [Category.ACCESS]: [\n    { pattern: /\\b(cannot|can't|unable to) log ?in\\b/, weight: 5 },\n    { pattern: /\\baccess denied\\b/, weight: 5 },\n    { pattern: /\\b(permission|unauthorized|forbidden)\\b/, weight: 4 },\n    { pattern: /\\b(password|log ?in)\\b/, weight: 2 },\n  ],\n  [Category.SUPPORT]: [\n    { pattern: /\\bhow (do|can|to)\\b/, weight: 4 },\n    { pattern: /\\bneed help\\b/, weight: 4 },\n    { pattern: /\\bhelp\\b/, weight: 2 },\n  ],\n  [Category.OTHER]: [],\n};\n\n// Em empate vence quem aparece primeiro: incidentes antes de tudo.\nconst TIE_BREAK: Category[] = [\n  Category.INCIDENT,\n  Category.ACCESS,\n  Category.BUG,\n  Category.SUPPORT,\n  Category.OTHER,\n];\n\nexport function classify(input: TicketInput): Category {\n  const title = normalize(input.title);\n  const description = normalize(input.description);\n\n  let best = Category.OTHER;\n  let bestScore = 0;\n  for (const category of TIE_BREAK) {\n    const score = scoreCategory(category, title, description);\n    if (score > bestScore) {\n      best = category;\n      bestScore = score;\n    }\n  }\n  return best;\n}\n\nexport function scoreCategory(category: Category, title: string, description: string): number {\n  let score = 0;\n  for (const signal of SIGNALS[category]) {\n    if (signal.pattern.test(title)) score += signal.weight * 2;\n    if (signal.pattern.test(description)) score += signal.weight;\n  }\n  return score;\n}\n\nexport function normalize(value: string): string {\n  return value\n    .toLowerCase()\n    .replace(/[^a-z0-9' ]+/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { triage } from \"./port.ts\";\ntest(\"aceita objeto pelo contrato\", () => expect(triage({ title: \"\", description: \"\" }, { classify: () => \"BUG\" })).toBe(\"BUG\"));"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "interface",
+          "name": "interface",
+          "summary": "Nomeia um contrato entre objetos.",
+          "example": "interface Greeter { greet(): string }\nconst g: Greeter = { greet: () => \"oi\" };"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "port.ts",
+          "src/application/ports/triage-classifier.ts"
+        ],
+        "concepts": [
+          "dependency-inversion",
+          "interface-contract"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.m2-01",
+          "ops-triage-ai.m2-02"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "O contrato síncrono exclui classificadores que esperam rede ou disco.",
+      "summary": {
+        "added": [
+          "Nomear o contrato"
+        ],
+        "why": "O contrato síncrono exclui classificadores que esperam rede ou disco.",
+        "flow": [
+          "TicketInput",
+          "Category",
+          "TriageClassifier"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m2-04",
+      "order": 22,
+      "moduleId": "m2",
+      "kind": "micro",
+      "title": "Aceitar espera",
+      "goal": "Aprender aceitar espera a partir do limite anterior.",
+      "problem": "O contrato síncrono exclui classificadores que esperam rede ou disco.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "async-contract"
+      ],
+      "prerequisites": [
+        "dependency-inversion",
+        "interface-contract"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "ticket",
+            "label": "TicketInput",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "port",
+            "label": "TriageClassifier",
+            "kind": "interface",
+            "col": 1,
+            "row": 0
+          }
+        ],
+        "edges": [
+          {
+            "from": "ticket",
+            "to": "category",
+            "rel": "flows_to"
+          },
+          {
+            "from": "port",
+            "to": "category",
+            "rel": "creates"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "port.ts",
+          "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport async function triage(input: TicketInput, classifier: TriageClassifier): Promise<Category> {\n  return classifier.classify(input);\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return classifier.classify(input);",
+          "note": "Esta linha realiza a ideia central desta etapa."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "async",
+          "conceptId": "async-contract",
+          "title": "Aceitar espera",
+          "quick": "A resposta passa a ser Promise<Category>; a mesma porta serve para trabalho que leva tempo.",
+          "normal": "No código real, TriageClassifier aparece em src/application/ports/triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/ports/triage-classifier.ts",
+          "startLine": 3,
+          "endLine": 5,
+          "symbol": "TriageClassifier",
+          "replayFile": "port.ts",
+          "note": "O Replay reduz o resultado à categoria; o projeto real também carrega decisão, prioridade e política.",
+          "snippet": "export interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/ports/triage-classifier.ts#L3-L5"
+        }
+      ],
+      "exercise": {
+        "instructions": "Faça o contrato e triage devolverem Promise<Category>; use async na função.",
+        "starterFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Category; }\nexport function triage(input: TicketInput, classifier: TriageClassifier): Category {\n  return classifier.classify(input);\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport async function triage(input: TicketInput, classifier: TriageClassifier): Promise<Category> {\n  return classifier.classify(input);\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\ninterface Signal {\n  pattern: RegExp;\n  weight: number;\n}\n\n// Cada categoria tem sinais com peso. Mais peso = evidência mais forte.\nconst SIGNALS: Record<Category, Signal[]> = {\n  [Category.INCIDENT]: [\n    { pattern: /\\bproduction (is )?down\\b/, weight: 6 },\n    { pattern: /\\b(service|system|site) (is )?down\\b/, weight: 5 },\n    { pattern: /\\boutage\\b/, weight: 4 },\n    { pattern: /\\bunavailable\\b/, weight: 2 },\n  ],\n  [Category.BUG]: [\n    { pattern: /\\bregression\\b/, weight: 4 },\n    { pattern: /\\bbug\\b/, weight: 3 },\n    { pattern: /\\b(exception|broken|fails?)\\b/, weight: 2 },\n    { pattern: /\\berror\\b/, weight: 1 },\n  ],\n  [Category.ACCESS]: [\n    { pattern: /\\b(cannot|can't|unable to) log ?in\\b/, weight: 5 },\n    { pattern: /\\baccess denied\\b/, weight: 5 },\n    { pattern: /\\b(permission|unauthorized|forbidden)\\b/, weight: 4 },\n    { pattern: /\\b(password|log ?in)\\b/, weight: 2 },\n  ],\n  [Category.SUPPORT]: [\n    { pattern: /\\bhow (do|can|to)\\b/, weight: 4 },\n    { pattern: /\\bneed help\\b/, weight: 4 },\n    { pattern: /\\bhelp\\b/, weight: 2 },\n  ],\n  [Category.OTHER]: [],\n};\n\n// Em empate vence quem aparece primeiro: incidentes antes de tudo.\nconst TIE_BREAK: Category[] = [\n  Category.INCIDENT,\n  Category.ACCESS,\n  Category.BUG,\n  Category.SUPPORT,\n  Category.OTHER,\n];\n\nexport function classify(input: TicketInput): Category {\n  const title = normalize(input.title);\n  const description = normalize(input.description);\n\n  let best = Category.OTHER;\n  let bestScore = 0;\n  for (const category of TIE_BREAK) {\n    const score = scoreCategory(category, title, description);\n    if (score > bestScore) {\n      best = category;\n      bestScore = score;\n    }\n  }\n  return best;\n}\n\nexport function scoreCategory(category: Category, title: string, description: string): number {\n  let score = 0;\n  for (const signal of SIGNALS[category]) {\n    if (signal.pattern.test(title)) score += signal.weight * 2;\n    if (signal.pattern.test(description)) score += signal.weight;\n  }\n  return score;\n}\n\nexport function normalize(value: string): string {\n  return value\n    .toLowerCase()\n    .replace(/[^a-z0-9' ]+/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { triage } from \"./port.ts\";\ntest(\"espera resposta assíncrona\", async () => { const result = triage({ title: \"\", description: \"\" }, { classify: async () => \"ACCESS\" }); expect(result).toBeInstanceOf(Promise); expect(await result).toBe(\"ACCESS\"); });"
+        },
+        "typecheck": {
+          "files": [
+            {
+              "path": "check.ts",
+              "content": "import { Category } from \"./triage.ts\";\nimport type { TriageClassifier } from \"./port.ts\";\nconst classifier: TriageClassifier = { classify: async () => Category.ACCESS };\n"
+            }
+          ]
+        }
+      },
+      "toolbox": [
+        {
+          "id": "async",
+          "name": "Promise / async",
+          "summary": "Uma operação pode terminar mais tarde.",
+          "example": "async function answer(): Promise<number> { return 1; }"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "port.ts",
+          "src/application/ports/triage-classifier.ts"
+        ],
+        "concepts": [
+          "dependency-inversion",
+          "interface-contract",
+          "async-contract"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.m2-01",
+          "ops-triage-ai.m2-02",
+          "ops-triage-ai.m2-03"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "O chamador ainda precisa montar a chamada; falta um caso de uso com a dependência guardada.",
+      "summary": {
+        "added": [
+          "Aceitar espera"
+        ],
+        "why": "O chamador ainda precisa montar a chamada; falta um caso de uso com a dependência guardada.",
+        "flow": [
+          "TicketInput",
+          "Category",
+          "TriageClassifier"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m2-05",
+      "order": 23,
+      "moduleId": "m2",
+      "kind": "micro",
+      "title": "Criar o caso de uso",
+      "goal": "Aprender criar o caso de uso a partir do limite anterior.",
+      "problem": "O chamador ainda precisa montar a chamada; falta um caso de uso com a dependência guardada.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "use-case"
+      ],
+      "prerequisites": [
+        "dependency-inversion",
+        "interface-contract",
+        "async-contract"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "ticket",
+            "label": "TicketInput",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "port",
+            "label": "TriageClassifier",
+            "kind": "interface",
+            "col": 1,
+            "row": 0
+          },
+          {
+            "id": "use-case",
+            "label": "TriageTicket",
+            "kind": "class",
+            "col": 1,
+            "row": 1
+          }
+        ],
+        "edges": [
+          {
+            "from": "ticket",
+            "to": "category",
+            "rel": "flows_to"
+          },
+          {
+            "from": "port",
+            "to": "category",
+            "rel": "creates"
+          },
+          {
+            "from": "use-case",
+            "to": "port",
+            "rel": "depends_on"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "port.ts",
+          "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport class TriageTicket {\n  constructor(private readonly classifier: TriageClassifier) {}\n  async execute(input: TicketInput): Promise<Category> {\n    return this.classifier.classify(input);\n  }\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return this.classifier.classify(input);",
+          "note": "Esta linha realiza a ideia central desta etapa."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "use-case",
+          "conceptId": "use-case",
+          "title": "Criar o caso de uso",
+          "quick": "TriageTicket guarda o classificador recebido e delega a ele cada ticket.",
+          "normal": "No código real, TriageTicket aparece em src/application/triage-ticket.ts. O Replay mostra uma versão menor da mesma relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/triage-ticket.ts",
+          "startLine": 24,
+          "endLine": 45,
+          "symbol": "TriageTicket",
+          "replayFile": "port.ts",
+          "note": "O Replay reduz o resultado à categoria; o projeto real também carrega decisão, prioridade e política.",
+          "snippet": "export class TriageTicket {\n  constructor(\n    private readonly configuration: TriageTicketMode,\n    private readonly policy = new HybridPolicy(),\n  ) {}\n\n  async execute(input: TicketInput): Promise<TriageDecision> {\n    if (this.configuration.mode === \"deterministic\") {\n      const result = await this.configuration.classifier.classify(input);\n      return this.policy.decideSingle(result, DecisionSource.DETERMINISTIC);\n    }\n\n    if (this.configuration.mode === \"ollama\") {\n      const result = await this.configuration.classifier.classify(input);\n      return this.policy.decideSingle(result, DecisionSource.LLM);\n    }\n\n    const deterministic = await this.configuration.deterministicClassifier.classify(input);\n    const llm = await classifyWithLlmFallback(this.configuration.llmClassifier, input);\n    return this.policy.decide({ deterministic, llm });\n  }\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/triage-ticket.ts#L24-L45"
+        }
+      ],
+      "exercise": {
+        "instructions": "Substitua a função solta pela classe TriageTicket, recebendo o contrato no construtor e delegando em execute.",
+        "starterFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport async function triage(input: TicketInput, classifier: TriageClassifier): Promise<Category> {\n  return classifier.classify(input);\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport class TriageTicket {\n  constructor(private readonly classifier: TriageClassifier) {}\n  async execute(input: TicketInput): Promise<Category> {\n    return this.classifier.classify(input);\n  }\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\ninterface Signal {\n  pattern: RegExp;\n  weight: number;\n}\n\n// Cada categoria tem sinais com peso. Mais peso = evidência mais forte.\nconst SIGNALS: Record<Category, Signal[]> = {\n  [Category.INCIDENT]: [\n    { pattern: /\\bproduction (is )?down\\b/, weight: 6 },\n    { pattern: /\\b(service|system|site) (is )?down\\b/, weight: 5 },\n    { pattern: /\\boutage\\b/, weight: 4 },\n    { pattern: /\\bunavailable\\b/, weight: 2 },\n  ],\n  [Category.BUG]: [\n    { pattern: /\\bregression\\b/, weight: 4 },\n    { pattern: /\\bbug\\b/, weight: 3 },\n    { pattern: /\\b(exception|broken|fails?)\\b/, weight: 2 },\n    { pattern: /\\berror\\b/, weight: 1 },\n  ],\n  [Category.ACCESS]: [\n    { pattern: /\\b(cannot|can't|unable to) log ?in\\b/, weight: 5 },\n    { pattern: /\\baccess denied\\b/, weight: 5 },\n    { pattern: /\\b(permission|unauthorized|forbidden)\\b/, weight: 4 },\n    { pattern: /\\b(password|log ?in)\\b/, weight: 2 },\n  ],\n  [Category.SUPPORT]: [\n    { pattern: /\\bhow (do|can|to)\\b/, weight: 4 },\n    { pattern: /\\bneed help\\b/, weight: 4 },\n    { pattern: /\\bhelp\\b/, weight: 2 },\n  ],\n  [Category.OTHER]: [],\n};\n\n// Em empate vence quem aparece primeiro: incidentes antes de tudo.\nconst TIE_BREAK: Category[] = [\n  Category.INCIDENT,\n  Category.ACCESS,\n  Category.BUG,\n  Category.SUPPORT,\n  Category.OTHER,\n];\n\nexport function classify(input: TicketInput): Category {\n  const title = normalize(input.title);\n  const description = normalize(input.description);\n\n  let best = Category.OTHER;\n  let bestScore = 0;\n  for (const category of TIE_BREAK) {\n    const score = scoreCategory(category, title, description);\n    if (score > bestScore) {\n      best = category;\n      bestScore = score;\n    }\n  }\n  return best;\n}\n\nexport function scoreCategory(category: Category, title: string, description: string): number {\n  let score = 0;\n  for (const signal of SIGNALS[category]) {\n    if (signal.pattern.test(title)) score += signal.weight * 2;\n    if (signal.pattern.test(description)) score += signal.weight;\n  }\n  return score;\n}\n\nexport function normalize(value: string): string {\n  return value\n    .toLowerCase()\n    .replace(/[^a-z0-9' ]+/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { TriageTicket } from \"./port.ts\";\ntest(\"caso de uso delega ao contrato\", async () => { const input = { title: \"\", description: \"\" }; let seen; const service = new TriageTicket({ classify: async (value) => { seen = value; return \"BUG\"; } }); expect(await service.execute(input)).toBe(\"BUG\"); expect(seen).toBe(input); });"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "constructor",
+          "name": "constructor",
+          "summary": "Guarda uma dependência escolhida pelo chamador.",
+          "example": "class Greeter { constructor(private readonly text: string) {} greet() { return this.text; } }"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "port.ts",
+          "src/application/triage-ticket.ts"
+        ],
+        "concepts": [
+          "dependency-inversion",
+          "interface-contract",
+          "async-contract",
+          "use-case"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.m2-01",
+          "ops-triage-ai.m2-02",
+          "ops-triage-ai.m2-03",
+          "ops-triage-ai.m2-04"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "O caso de uso aceita o contrato, mas a regra determinística ainda não foi conectada a ele.",
+      "summary": {
+        "added": [
+          "Criar o caso de uso"
+        ],
+        "why": "O caso de uso aceita o contrato, mas a regra determinística ainda não foi conectada a ele.",
+        "flow": [
+          "TicketInput",
+          "Category",
+          "TriageClassifier",
+          "TriageTicket"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m2-06",
+      "order": 24,
+      "moduleId": "m2",
+      "kind": "micro",
+      "title": "Conectar a implementação",
+      "goal": "Aprender conectar a implementação a partir do limite anterior.",
+      "problem": "O caso de uso aceita o contrato, mas a regra determinística ainda não foi conectada a ele.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [
+        "dependency-inversion",
+        "interface-contract",
+        "async-contract",
+        "use-case"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "ticket",
+            "label": "TicketInput",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "port",
+            "label": "TriageClassifier",
+            "kind": "interface",
+            "col": 1,
+            "row": 0
+          },
+          {
+            "id": "use-case",
+            "label": "TriageTicket",
+            "kind": "class",
+            "col": 1,
+            "row": 1
+          },
+          {
+            "id": "adapter",
+            "label": "DeterministicTriageClassifier",
+            "kind": "class",
+            "col": 2,
+            "row": 1
+          }
+        ],
+        "edges": [
+          {
+            "from": "ticket",
+            "to": "category",
+            "rel": "flows_to"
+          },
+          {
+            "from": "port",
+            "to": "category",
+            "rel": "creates"
+          },
+          {
+            "from": "use-case",
+            "to": "port",
+            "rel": "depends_on"
+          },
+          {
+            "from": "adapter",
+            "to": "port",
+            "rel": "implements"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "port.ts",
+          "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport class TriageTicket {\n  constructor(private readonly classifier: TriageClassifier) {}\n  async execute(input: TicketInput): Promise<Category> {\n    return this.classifier.classify(input);\n  }\n}\nexport class DeterministicTriageClassifier implements TriageClassifier {\n  async classify(input: TicketInput): Promise<Category> {\n    return classify(input);\n  }\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return this.classifier.classify(input);",
+          "note": "Esta linha realiza a ideia central desta etapa."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "adapter",
+          "title": "Conectar a implementação",
+          "quick": "A classe determinística cumpre o contrato e reaproveita classify do módulo anterior.",
+          "normal": "No código real, DeterministicTriageClassifier aparece em src/application/classifiers/deterministic-triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+          "startLine": 78,
+          "endLine": 114,
+          "symbol": "DeterministicTriageClassifier",
+          "replayFile": "port.ts",
+          "note": "O Replay reduz o resultado à categoria; o projeto real também carrega decisão, prioridade e política.",
+          "snippet": "export class DeterministicTriageClassifier implements TriageClassifier {\n  async classify(input: TicketInput): Promise<ClassifierResult> {\n    const title = normalize(input.title);\n    const description = normalize(input.description);\n    const scores = CATEGORY_TIE_BREAK.map((category) =>\n      scoreCategory(category, title, description),\n    );\n    const highestScore = Math.max(...scores.map(({ score }) => score));\n    const leaders = scores.filter(({ score }) => score === highestScore);\n    const winner =\n      highestScore === 0 ? scoreCategory(Category.OTHER, title, description) : leaders[0]!;\n    const runnerUpScore = Math.max(\n      0,\n      ...scores\n        .filter(({ category }) => category !== winner.category)\n        .map(({ score }) => score),\n    );\n    const confidence = confidenceFor(winner, leaders.length, runnerUpScore);\n    const combined = title + \" \" + description;\n    const priority = classifyPriority(winner.category, combined);\n    const risk = classifyRisk(winner.category, combined);\n\n    return {\n      category: winner.category,\n      priority: priority.value,\n      risk: risk.value,\n      suggestedTeam: suggestedTeamForCategory(winner.category),\n      confidence,\n      summary: summarize(input.title),\n      rationale: [\n        categoryRationale(winner, confidence, leaders.length),\n        priority.code,\n        risk.code,\n      ].join(\" | \"),\n    };\n  }\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/classifiers/deterministic-triage-classifier.ts#L78-L114"
+        }
+      ],
+      "exercise": {
+        "instructions": "Crie DeterministicTriageClassifier que implementa o contrato e chama classify.",
+        "starterFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport class TriageTicket {\n  constructor(private readonly classifier: TriageClassifier) {}\n  async execute(input: TicketInput): Promise<Category> {\n    return this.classifier.classify(input);\n  }\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport class TriageTicket {\n  constructor(private readonly classifier: TriageClassifier) {}\n  async execute(input: TicketInput): Promise<Category> {\n    return this.classifier.classify(input);\n  }\n}\nexport class DeterministicTriageClassifier implements TriageClassifier {\n  async classify(input: TicketInput): Promise<Category> {\n    return classify(input);\n  }\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\ninterface Signal {\n  pattern: RegExp;\n  weight: number;\n}\n\n// Cada categoria tem sinais com peso. Mais peso = evidência mais forte.\nconst SIGNALS: Record<Category, Signal[]> = {\n  [Category.INCIDENT]: [\n    { pattern: /\\bproduction (is )?down\\b/, weight: 6 },\n    { pattern: /\\b(service|system|site) (is )?down\\b/, weight: 5 },\n    { pattern: /\\boutage\\b/, weight: 4 },\n    { pattern: /\\bunavailable\\b/, weight: 2 },\n  ],\n  [Category.BUG]: [\n    { pattern: /\\bregression\\b/, weight: 4 },\n    { pattern: /\\bbug\\b/, weight: 3 },\n    { pattern: /\\b(exception|broken|fails?)\\b/, weight: 2 },\n    { pattern: /\\berror\\b/, weight: 1 },\n  ],\n  [Category.ACCESS]: [\n    { pattern: /\\b(cannot|can't|unable to) log ?in\\b/, weight: 5 },\n    { pattern: /\\baccess denied\\b/, weight: 5 },\n    { pattern: /\\b(permission|unauthorized|forbidden)\\b/, weight: 4 },\n    { pattern: /\\b(password|log ?in)\\b/, weight: 2 },\n  ],\n  [Category.SUPPORT]: [\n    { pattern: /\\bhow (do|can|to)\\b/, weight: 4 },\n    { pattern: /\\bneed help\\b/, weight: 4 },\n    { pattern: /\\bhelp\\b/, weight: 2 },\n  ],\n  [Category.OTHER]: [],\n};\n\n// Em empate vence quem aparece primeiro: incidentes antes de tudo.\nconst TIE_BREAK: Category[] = [\n  Category.INCIDENT,\n  Category.ACCESS,\n  Category.BUG,\n  Category.SUPPORT,\n  Category.OTHER,\n];\n\nexport function classify(input: TicketInput): Category {\n  const title = normalize(input.title);\n  const description = normalize(input.description);\n\n  let best = Category.OTHER;\n  let bestScore = 0;\n  for (const category of TIE_BREAK) {\n    const score = scoreCategory(category, title, description);\n    if (score > bestScore) {\n      best = category;\n      bestScore = score;\n    }\n  }\n  return best;\n}\n\nexport function scoreCategory(category: Category, title: string, description: string): number {\n  let score = 0;\n  for (const signal of SIGNALS[category]) {\n    if (signal.pattern.test(title)) score += signal.weight * 2;\n    if (signal.pattern.test(description)) score += signal.weight;\n  }\n  return score;\n}\n\nexport function normalize(value: string): string {\n  return value\n    .toLowerCase()\n    .replace(/[^a-z0-9' ]+/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { TriageTicket, DeterministicTriageClassifier } from \"./port.ts\";\ntest(\"implementação determinística encaixa\", async () => expect(await new TriageTicket(new DeterministicTriageClassifier()).execute({ title: \"site down\", description: \"\" })).toBe(\"INCIDENT\"));"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "implements",
+          "name": "implements",
+          "summary": "Confere se a classe cumpre a interface.",
+          "example": "interface Greeter { greet(): string }\nclass Hi implements Greeter { greet() { return \"oi\"; } }"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "port.ts",
+          "src/application/classifiers/deterministic-triage-classifier.ts"
+        ],
+        "concepts": [
+          "dependency-inversion",
+          "interface-contract",
+          "async-contract",
+          "use-case"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.m2-01",
+          "ops-triage-ai.m2-02",
+          "ops-triage-ai.m2-03",
+          "ops-triage-ai.m2-04",
+          "ops-triage-ai.m2-05"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "A implementação real funciona; falta provar que o caso de uso aceita uma substituta em teste.",
+      "summary": {
+        "added": [
+          "Conectar a implementação"
+        ],
+        "why": "A implementação real funciona; falta provar que o caso de uso aceita uma substituta em teste.",
+        "flow": [
+          "TicketInput",
+          "Category",
+          "TriageClassifier",
+          "TriageTicket",
+          "DeterministicTriageClassifier"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m2-07",
+      "order": 25,
+      "moduleId": "m2",
+      "kind": "micro",
+      "title": "Testar com uma substituta",
+      "goal": "Aprender testar com uma substituta a partir do limite anterior.",
+      "problem": "A implementação real funciona; falta provar que o caso de uso aceita uma substituta em teste.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "test-double"
+      ],
+      "prerequisites": [
+        "dependency-inversion",
+        "interface-contract",
+        "async-contract",
+        "use-case"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "ticket",
+            "label": "TicketInput",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "port",
+            "label": "TriageClassifier",
+            "kind": "interface",
+            "col": 1,
+            "row": 0
+          },
+          {
+            "id": "use-case",
+            "label": "TriageTicket",
+            "kind": "class",
+            "col": 1,
+            "row": 1
+          },
+          {
+            "id": "adapter",
+            "label": "DeterministicTriageClassifier",
+            "kind": "class",
+            "col": 2,
+            "row": 1
+          }
+        ],
+        "edges": [
+          {
+            "from": "ticket",
+            "to": "category",
+            "rel": "flows_to"
+          },
+          {
+            "from": "port",
+            "to": "category",
+            "rel": "creates"
+          },
+          {
+            "from": "use-case",
+            "to": "port",
+            "rel": "depends_on"
+          },
+          {
+            "from": "adapter",
+            "to": "port",
+            "rel": "implements"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "port.ts",
+          "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport class TriageTicket {\n  constructor(private readonly classifier: TriageClassifier) {}\n  async execute(input: TicketInput): Promise<Category> {\n    return this.classifier.classify(input);\n  }\n}\nexport class DeterministicTriageClassifier implements TriageClassifier {\n  async classify(input: TicketInput): Promise<Category> {\n    return classify(input);\n  }\n}\nexport class FakeClassifier implements TriageClassifier {\n  readonly calls: TicketInput[] = [];\n  constructor(private readonly answer: Category) {}\n  async classify(input: TicketInput): Promise<Category> { this.calls.push(input); return this.answer; }\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return this.classifier.classify(input);",
+          "note": "Esta linha realiza a ideia central desta etapa."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "test-double",
+          "conceptId": "test-double",
+          "title": "Testar com uma substituta",
+          "quick": "Um classificador falso devolve uma resposta controlada e registra o ticket recebido.",
+          "normal": "No código real, TriageClassifier aparece em src/application/ports/triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/ports/triage-classifier.ts",
+          "startLine": 3,
+          "endLine": 5,
+          "symbol": "TriageClassifier",
+          "replayFile": "port.ts",
+          "note": "O Replay reduz o resultado à categoria; o projeto real também carrega decisão, prioridade e política.",
+          "snippet": "export interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/ports/triage-classifier.ts#L3-L5"
+        }
+      ],
+      "exercise": {
+        "instructions": "Crie FakeClassifier que implementa o contrato, devolve uma resposta fixa e registra as chamadas.",
+        "starterFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport class TriageTicket {\n  constructor(private readonly classifier: TriageClassifier) {}\n  async execute(input: TicketInput): Promise<Category> {\n    return this.classifier.classify(input);\n  }\n}\nexport class DeterministicTriageClassifier implements TriageClassifier {\n  async classify(input: TicketInput): Promise<Category> {\n    return classify(input);\n  }\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport class TriageTicket {\n  constructor(private readonly classifier: TriageClassifier) {}\n  async execute(input: TicketInput): Promise<Category> {\n    return this.classifier.classify(input);\n  }\n}\nexport class DeterministicTriageClassifier implements TriageClassifier {\n  async classify(input: TicketInput): Promise<Category> {\n    return classify(input);\n  }\n}\nexport class FakeClassifier implements TriageClassifier {\n  readonly calls: TicketInput[] = [];\n  constructor(private readonly answer: Category) {}\n  async classify(input: TicketInput): Promise<Category> { this.calls.push(input); return this.answer; }\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\ninterface Signal {\n  pattern: RegExp;\n  weight: number;\n}\n\n// Cada categoria tem sinais com peso. Mais peso = evidência mais forte.\nconst SIGNALS: Record<Category, Signal[]> = {\n  [Category.INCIDENT]: [\n    { pattern: /\\bproduction (is )?down\\b/, weight: 6 },\n    { pattern: /\\b(service|system|site) (is )?down\\b/, weight: 5 },\n    { pattern: /\\boutage\\b/, weight: 4 },\n    { pattern: /\\bunavailable\\b/, weight: 2 },\n  ],\n  [Category.BUG]: [\n    { pattern: /\\bregression\\b/, weight: 4 },\n    { pattern: /\\bbug\\b/, weight: 3 },\n    { pattern: /\\b(exception|broken|fails?)\\b/, weight: 2 },\n    { pattern: /\\berror\\b/, weight: 1 },\n  ],\n  [Category.ACCESS]: [\n    { pattern: /\\b(cannot|can't|unable to) log ?in\\b/, weight: 5 },\n    { pattern: /\\baccess denied\\b/, weight: 5 },\n    { pattern: /\\b(permission|unauthorized|forbidden)\\b/, weight: 4 },\n    { pattern: /\\b(password|log ?in)\\b/, weight: 2 },\n  ],\n  [Category.SUPPORT]: [\n    { pattern: /\\bhow (do|can|to)\\b/, weight: 4 },\n    { pattern: /\\bneed help\\b/, weight: 4 },\n    { pattern: /\\bhelp\\b/, weight: 2 },\n  ],\n  [Category.OTHER]: [],\n};\n\n// Em empate vence quem aparece primeiro: incidentes antes de tudo.\nconst TIE_BREAK: Category[] = [\n  Category.INCIDENT,\n  Category.ACCESS,\n  Category.BUG,\n  Category.SUPPORT,\n  Category.OTHER,\n];\n\nexport function classify(input: TicketInput): Category {\n  const title = normalize(input.title);\n  const description = normalize(input.description);\n\n  let best = Category.OTHER;\n  let bestScore = 0;\n  for (const category of TIE_BREAK) {\n    const score = scoreCategory(category, title, description);\n    if (score > bestScore) {\n      best = category;\n      bestScore = score;\n    }\n  }\n  return best;\n}\n\nexport function scoreCategory(category: Category, title: string, description: string): number {\n  let score = 0;\n  for (const signal of SIGNALS[category]) {\n    if (signal.pattern.test(title)) score += signal.weight * 2;\n    if (signal.pattern.test(description)) score += signal.weight;\n  }\n  return score;\n}\n\nexport function normalize(value: string): string {\n  return value\n    .toLowerCase()\n    .replace(/[^a-z0-9' ]+/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { TriageTicket, FakeClassifier } from \"./port.ts\";\ntest(\"substituta registra a chamada\", async () => { const input = { title: \"\", description: \"\" }; const fake = new FakeClassifier(\"ACCESS\"); expect(await new TriageTicket(fake).execute(input)).toBe(\"ACCESS\"); expect(fake.calls).toEqual([input]); });"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "fake",
+          "name": "Fake de teste",
+          "summary": "Uma implementação simples do contrato, controlada pelo teste.",
+          "example": "interface Clock { now(): number }\nclass FixedClock implements Clock { now() { return 10; } }"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "port.ts",
+          "src/application/ports/triage-classifier.ts"
+        ],
+        "concepts": [
+          "dependency-inversion",
+          "interface-contract",
+          "async-contract",
+          "use-case",
+          "test-double"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.m2-01",
+          "ops-triage-ai.m2-02",
+          "ops-triage-ai.m2-03",
+          "ops-triage-ai.m2-04",
+          "ops-triage-ai.m2-05",
+          "ops-triage-ai.m2-06"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Agora reúna as peças do módulo sem o ponto de partida.",
+      "summary": {
+        "added": [
+          "Testar com uma substituta"
+        ],
+        "why": "Agora reúna as peças do módulo sem o ponto de partida.",
+        "flow": [
+          "TicketInput",
+          "Category",
+          "TriageClassifier",
+          "TriageTicket",
+          "DeterministicTriageClassifier"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m2-99",
+      "order": 26,
+      "moduleId": "m2",
+      "kind": "checkpoint",
+      "title": "Checkpoint: reconstruir o contrato",
+      "goal": "Reconstruir o contrato, caso de uso e implementação do zero.",
+      "problem": "Agora reúna as peças do módulo sem o ponto de partida.",
+      "examples": [],
+      "requirements": [
+        "Defina o contrato assíncrono.",
+        "Injete o contrato em TriageTicket.",
+        "Conecte a implementação determinística.",
+        "Crie uma substituta que registre chamadas."
+      ],
+      "estimatedMinutes": 5,
+      "introduces": [],
+      "prerequisites": [
+        "dependency-inversion",
+        "interface-contract",
+        "async-contract",
+        "use-case",
+        "test-double"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "ticket",
+            "label": "TicketInput",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "port",
+            "label": "TriageClassifier",
+            "kind": "interface",
+            "col": 1,
+            "row": 0
+          },
+          {
+            "id": "use-case",
+            "label": "TriageTicket",
+            "kind": "class",
+            "col": 1,
+            "row": 1
+          },
+          {
+            "id": "adapter",
+            "label": "DeterministicTriageClassifier",
+            "kind": "class",
+            "col": 2,
+            "row": 1
+          }
+        ],
+        "edges": [
+          {
+            "from": "ticket",
+            "to": "category",
+            "rel": "flows_to"
+          },
+          {
+            "from": "port",
+            "to": "category",
+            "rel": "creates"
+          },
+          {
+            "from": "use-case",
+            "to": "port",
+            "rel": "depends_on"
+          },
+          {
+            "from": "adapter",
+            "to": "port",
+            "rel": "implements"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "port.ts",
+          "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport class TriageTicket {\n  constructor(private readonly classifier: TriageClassifier) {}\n  async execute(input: TicketInput): Promise<Category> {\n    return this.classifier.classify(input);\n  }\n}\nexport class DeterministicTriageClassifier implements TriageClassifier {\n  async classify(input: TicketInput): Promise<Category> {\n    return classify(input);\n  }\n}\nexport class FakeClassifier implements TriageClassifier {\n  readonly calls: TicketInput[] = [];\n  constructor(private readonly answer: Category) {}\n  async classify(input: TicketInput): Promise<Category> { this.calls.push(input); return this.answer; }\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return this.classifier.classify(input);",
+          "note": "Esta linha realiza a ideia central desta etapa."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "checkpoint",
+          "title": "Checkpoint: reconstruir o contrato",
+          "quick": "Reconstrua contrato, caso de uso, implementação e substituta de teste do editor vazio.",
+          "normal": "No código real, TriageTicket aparece em src/application/triage-ticket.ts. O Replay mostra uma versão menor da mesma relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/triage-ticket.ts",
+          "startLine": 24,
+          "endLine": 45,
+          "symbol": "TriageTicket",
+          "replayFile": "port.ts",
+          "note": "O Replay reduz o resultado à categoria; o projeto real também carrega decisão, prioridade e política.",
+          "snippet": "export class TriageTicket {\n  constructor(\n    private readonly configuration: TriageTicketMode,\n    private readonly policy = new HybridPolicy(),\n  ) {}\n\n  async execute(input: TicketInput): Promise<TriageDecision> {\n    if (this.configuration.mode === \"deterministic\") {\n      const result = await this.configuration.classifier.classify(input);\n      return this.policy.decideSingle(result, DecisionSource.DETERMINISTIC);\n    }\n\n    if (this.configuration.mode === \"ollama\") {\n      const result = await this.configuration.classifier.classify(input);\n      return this.policy.decideSingle(result, DecisionSource.LLM);\n    }\n\n    const deterministic = await this.configuration.deterministicClassifier.classify(input);\n    const llm = await classifyWithLlmFallback(this.configuration.llmClassifier, input);\n    return this.policy.decide({ deterministic, llm });\n  }\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/triage-ticket.ts#L24-L45"
+        }
+      ],
+      "exercise": {
+        "instructions": "Reconstrua port.ts do zero com contrato assíncrono, TriageTicket, implementação determinística e fake.",
+        "starterFiles": [
+          {
+            "path": "port.ts",
+            "content": ""
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "port.ts",
+            "content": "import { classify, type TicketInput, type Category } from \"./triage.ts\";\nexport interface TriageClassifier { classify(input: TicketInput): Promise<Category>; }\nexport class TriageTicket {\n  constructor(private readonly classifier: TriageClassifier) {}\n  async execute(input: TicketInput): Promise<Category> {\n    return this.classifier.classify(input);\n  }\n}\nexport class DeterministicTriageClassifier implements TriageClassifier {\n  async classify(input: TicketInput): Promise<Category> {\n    return classify(input);\n  }\n}\nexport class FakeClassifier implements TriageClassifier {\n  readonly calls: TicketInput[] = [];\n  constructor(private readonly answer: Category) {}\n  async classify(input: TicketInput): Promise<Category> { this.calls.push(input); return this.answer; }\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\ninterface Signal {\n  pattern: RegExp;\n  weight: number;\n}\n\n// Cada categoria tem sinais com peso. Mais peso = evidência mais forte.\nconst SIGNALS: Record<Category, Signal[]> = {\n  [Category.INCIDENT]: [\n    { pattern: /\\bproduction (is )?down\\b/, weight: 6 },\n    { pattern: /\\b(service|system|site) (is )?down\\b/, weight: 5 },\n    { pattern: /\\boutage\\b/, weight: 4 },\n    { pattern: /\\bunavailable\\b/, weight: 2 },\n  ],\n  [Category.BUG]: [\n    { pattern: /\\bregression\\b/, weight: 4 },\n    { pattern: /\\bbug\\b/, weight: 3 },\n    { pattern: /\\b(exception|broken|fails?)\\b/, weight: 2 },\n    { pattern: /\\berror\\b/, weight: 1 },\n  ],\n  [Category.ACCESS]: [\n    { pattern: /\\b(cannot|can't|unable to) log ?in\\b/, weight: 5 },\n    { pattern: /\\baccess denied\\b/, weight: 5 },\n    { pattern: /\\b(permission|unauthorized|forbidden)\\b/, weight: 4 },\n    { pattern: /\\b(password|log ?in)\\b/, weight: 2 },\n  ],\n  [Category.SUPPORT]: [\n    { pattern: /\\bhow (do|can|to)\\b/, weight: 4 },\n    { pattern: /\\bneed help\\b/, weight: 4 },\n    { pattern: /\\bhelp\\b/, weight: 2 },\n  ],\n  [Category.OTHER]: [],\n};\n\n// Em empate vence quem aparece primeiro: incidentes antes de tudo.\nconst TIE_BREAK: Category[] = [\n  Category.INCIDENT,\n  Category.ACCESS,\n  Category.BUG,\n  Category.SUPPORT,\n  Category.OTHER,\n];\n\nexport function classify(input: TicketInput): Category {\n  const title = normalize(input.title);\n  const description = normalize(input.description);\n\n  let best = Category.OTHER;\n  let bestScore = 0;\n  for (const category of TIE_BREAK) {\n    const score = scoreCategory(category, title, description);\n    if (score > bestScore) {\n      best = category;\n      bestScore = score;\n    }\n  }\n  return best;\n}\n\nexport function scoreCategory(category: Category, title: string, description: string): number {\n  let score = 0;\n  for (const signal of SIGNALS[category]) {\n    if (signal.pattern.test(title)) score += signal.weight * 2;\n    if (signal.pattern.test(description)) score += signal.weight;\n  }\n  return score;\n}\n\nexport function normalize(value: string): string {\n  return value\n    .toLowerCase()\n    .replace(/[^a-z0-9' ]+/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { TriageTicket, DeterministicTriageClassifier, FakeClassifier } from \"./port.ts\";\ntest(\"reconstrói o módulo\", async () => { const input = { title: \"site down\", description: \"\" }; expect(await new TriageTicket(new DeterministicTriageClassifier()).execute(input)).toBe(\"INCIDENT\"); const fake = new FakeClassifier(\"ACCESS\"); expect(await new TriageTicket(fake).execute(input)).toBe(\"ACCESS\"); expect(fake.calls).toEqual([input]); });"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "port.ts",
+          "src/application/triage-ticket.ts"
+        ],
+        "concepts": [
+          "dependency-inversion",
+          "interface-contract",
+          "async-contract",
+          "use-case",
+          "test-double"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.m2-01",
+          "ops-triage-ai.m2-02",
+          "ops-triage-ai.m2-03",
+          "ops-triage-ai.m2-04",
+          "ops-triage-ai.m2-05",
+          "ops-triage-ai.m2-06",
+          "ops-triage-ai.m2-07"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "checkpoint": {
+        "question": "Por que TriageTicket recebe o contrato?",
+        "answer": "Para trocar implementações sem alterar o caso de uso; o ponto de montagem escolhe o classificador."
+      },
+      "summary": {
+        "added": [
+          "Checkpoint: reconstruir o contrato"
+        ],
+        "why": "Compare sua reconstrução com o código real.",
+        "flow": [
+          "TicketInput",
+          "Category",
+          "TriageClassifier",
+          "TriageTicket",
+          "DeterministicTriageClassifier"
+        ]
+      }
+    }
+  ]
+}

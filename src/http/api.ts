@@ -13,6 +13,7 @@ import { ModuleError, completeExercise, prepareExercise } from "../sandbox/modul
 import { TypecheckBusyError, type TypeChecker, type TypeDiagnostic } from "../sandbox/typecheck.ts";
 import type { SandboxRunner } from "../sandbox/runner.ts";
 import { parseGithubRepoUrl } from "../services/repo-url.ts";
+import { isModule2Goal, type ModuleGenerationService } from "../services/stage-generation.ts";
 import type { TutorService } from "../services/tutor.ts";
 import { HttpError, Router, json, readBody } from "./router.ts";
 
@@ -28,6 +29,7 @@ export type ApiDeps = {
   metrics: Metrics;
   /** The real repository of each journey at its pinned SHA, indexed (architecture node → code). */
   codeIndexes: Map<string, RepositoryIndex>;
+  generation?: ModuleGenerationService;
 };
 
 const RunRequest = z.strictObject({ files: z.array(CodeFile).min(1).max(10) });
@@ -45,6 +47,16 @@ export function createApi(deps: ApiDeps): Router {
     journeys.flatMap((journey) => journey.stages.map((stage) => [stage.id, { journey, stage }] as const)),
   );
   const tutorWindow = new Map<string, { windowStart: number; count: number }>();
+  const publishModule = async (journey: Journey, moduleId: string, goal: string): Promise<Journey> => {
+    const index = deps.codeIndexes.get(journey.id);
+    if (!deps.generation || !index) throw new HttpError(503, "GENERATION_UNAVAILABLE", "Geração indisponível neste servidor.");
+    const generated = await deps.generation.generate(journey, moduleId, goal, index);
+    Object.assign(journey, generated);
+    for (const [id, value] of stageById) if (value.journey === journey) stageById.delete(id);
+    for (const stage of journey.stages) stageById.set(stage.id, { journey, stage });
+    logger.info("module_generated", { journeyId: journey.id, moduleId, stages: journey.modules.find((m) => m.id === moduleId)?.stageIds.length ?? 0 });
+    return journey;
+  };
 
   const findJourney = (id: string | undefined): Journey => {
     const journey = id ? journeyById.get(id) : undefined;
@@ -86,10 +98,22 @@ export function createApi(deps: ApiDeps): Router {
         (j) => j.repo.owner.toLowerCase() === repo.owner.toLowerCase() && j.repo.name.toLowerCase() === repo.name.toLowerCase(),
       );
       const match = sameRepo.find((j) => j.goal.kind === goal.kind);
+      const candidateModule = sameRepo[0]?.modules.find((m) => m.id === "m2");
+      const canGenerateTarget = goal.kind === "specific_part" && Boolean(goal.target && isModule2Goal(goal.target) && candidateModule && deps.generation);
       const learnerId = LearnerId.safeParse(req.headers.get("x-learner-id"));
-      repository.recordJourneyRequest({ learnerId: learnerId.success ? learnerId.data : null, owner: repo.owner, name: repo.name, goal, served: Boolean(match) });
-      logger.info("journey_requested", { repo: `${repo.owner}/${repo.name}`, goal: goal.kind, served: Boolean(match) });
+      repository.recordJourneyRequest({ learnerId: learnerId.success ? learnerId.data : null, owner: repo.owner, name: repo.name, goal, served: Boolean(match || canGenerateTarget) });
+      logger.info("journey_requested", { repo: `${repo.owner}/${repo.name}`, goal: goal.kind, served: Boolean(match || canGenerateTarget) });
       if (match) return json({ id: match.id, status: match.status });
+      if (canGenerateTarget && candidateModule && sameRepo[0] && goal.target) {
+        const journey = sameRepo[0];
+        if (candidateModule.stageIds.length > 1) return json({ id: journey.id, status: journey.status });
+        try {
+          await publishModule(journey, "m2", goal.target);
+          return json({ id: journey.id, status: journey.status });
+        } catch (error) {
+          return json({ error: { code: "GENERATION_FAILED", message: error instanceof Error ? error.message : "Falha ao gerar o módulo." }, fallback: { id: journey.id } }, 422);
+        }
+      }
       // plan(repository, goal) → journey is a later phase (Planner). Be explicit about what exists today.
       const fallback = sameRepo[0];
       if (fallback) {
@@ -101,6 +125,21 @@ export function createApi(deps: ApiDeps): Router {
       throw new HttpError(501, "GENERATION_NOT_AVAILABLE", `Geração automática para ${repo.owner}/${repo.name} ainda não está disponível.`);
     })
     .on("GET", "/api/journeys/:id", (_req, params) => json(outline(findJourney(params.id))))
+    .on("POST", "/api/journeys/:id/modules/:moduleId/generate", async (req, params) => {
+      const journey = findJourney(params.id);
+      const moduleId = params.moduleId ?? "";
+      const module = journey.modules.find((m) => m.id === moduleId);
+      if (!module) throw new HttpError(404, "MODULE_NOT_FOUND", "Módulo não encontrado.");
+      if (module.stageIds.length > 1) return json(outline(journey));
+      const body = await readBody(req, z.strictObject({ goal: z.string().min(1).max(200) }));
+      try {
+        await publishModule(journey, moduleId, body.goal);
+        return json(outline(journey));
+      } catch (error) {
+        logger.error("module_generation_failed", { journeyId: journey.id, moduleId, error: error instanceof Error ? error.message : String(error) });
+        throw new HttpError(422, "GENERATION_FAILED", error instanceof Error ? error.message : "Falha ao gerar o módulo.");
+      }
+    })
     .on("GET", "/api/journeys/:id/stages", (_req, params) => json(outline(findJourney(params.id)).stages))
     .on("GET", "/api/journeys/:id/events", (_req, params) => {
       const journey = findJourney(params.id);

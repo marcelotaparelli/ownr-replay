@@ -70,6 +70,8 @@ export const api = {
   journeys: () => request<JourneyCard[]>("GET", "/api/journeys"),
   journey: (id: string) => request<JourneyOutline>("GET", `/api/journeys/${encodeURIComponent(id)}`),
   createJourney: (repoUrl: string, goal: LearningGoal) => request<{ id: string }>("POST", "/api/journeys", { repoUrl, goal }),
+  generateModule: (journeyId: string, moduleId: string, goal: string) =>
+    request<JourneyOutline>("POST", `/api/journeys/${encodeURIComponent(journeyId)}/modules/${encodeURIComponent(moduleId)}/generate`, { goal }, 90_000),
   progress: (journeyId: string) =>
     request<{ stages: StageProgress[]; knowledge: { conceptId: string; state: KnowledgeLevel }[] }>(
       "GET",

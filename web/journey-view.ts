@@ -137,7 +137,7 @@ function renderPlan(plan: JourneyPlan): HTMLElement {
 }
 
 /** Journey landing: what this is, and where you left off. */
-export function renderOverview(journey: JourneyOutline, store: ProgressStore): HTMLElement {
+export function renderOverview(journey: JourneyOutline, store: ProgressStore, onGenerate?: (moduleId: string) => Promise<void>): HTMLElement {
   const last = journey.stages.find((s) => s.id === store.snapshot.lastStageId);
   const next = journey.stages.find((s) => !["completed", "skipped_known"].includes(store.status(s.id)));
   const anchor = last ? store.snapshot.stages[last.id]?.anchor : undefined;
@@ -169,20 +169,34 @@ export function renderOverview(journey: JourneyOutline, store: ProgressStore): H
         )
       : h("aside", { class: "resume done" }, h("p", {}, "Jornada concluída. Abra o repositório real e confira se ele agora parece familiar.")),
     h("h2", {}, "Evolução"),
-    h("ol", { class: "evolution" }, ...journey.modules.map((m) => evolutionItem(journey, m, store))),
+    h("ol", { class: "evolution" }, ...journey.modules.map((m) => evolutionItem(journey, m, store, onGenerate))),
   );
 }
 
-function evolutionItem(journey: JourneyOutline, module: Module, store: ProgressStore): HTMLElement {
+function evolutionItem(journey: JourneyOutline, module: Module, store: ProgressStore, onGenerate?: (moduleId: string) => Promise<void>): HTMLElement {
   const stages = journey.stages.filter((s) => s.moduleId === module.id);
   const done = stages.filter((s) => DONE.includes(store.status(s.id))).length;
   const first = stages.find((s) => !DONE.includes(store.status(s.id))) ?? stages[0];
   const minutes = stages.reduce((n, s) => n + s.estimatedMinutes, 0);
+  const legacy = journey.id === "ops-triage-ai" && module.id === "m2" && stages.length === 1 && stages[0]?.kind === "chapter";
+  const message = h("span", { class: "muted", role: "status" });
+  const generate = legacy && onGenerate ? h("button", { type: "button", class: "btn", onclick: async (event: Event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    message.textContent = "Gerando percurso…";
+    try { await onGenerate(module.id); } catch (error) {
+      message.className = "fail";
+      message.textContent = error instanceof Error ? error.message : "Falha ao gerar o percurso.";
+      button.disabled = false;
+    }
+  } }, "Gerar percurso deste módulo") : null;
   return h(
     "li",
     { class: done === stages.length ? "completed" : done > 0 ? "in_progress" : "not_started" },
     h("a", { href: first ? stageHref(journey.id, first.order) : "#" }, h("strong", {}, module.title)),
     h("span", { class: "muted" }, ` — ${module.subtitle ?? ""} · ${stages.length > 1 ? `${stages.length} etapas, ` : ""}~${minutes} min${done ? ` · ${done}/${stages.length}` : ""}`),
+    generate,
+    legacy ? message : null,
   );
 }
 
@@ -355,4 +369,3 @@ function fallbackId(body: unknown): string | undefined {
   const fallback = body.fallback;
   return typeof fallback === "object" && fallback !== null && "id" in fallback && typeof fallback.id === "string" ? fallback.id : undefined;
 }
-

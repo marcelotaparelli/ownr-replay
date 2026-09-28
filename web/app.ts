@@ -93,7 +93,12 @@ async function render(): Promise<void> {
       draw();
     } else {
       setCrumb(journey);
-      main.replaceChildren(renderOverview(journey, store));
+      main.replaceChildren(renderOverview(journey, store, async (moduleId) => {
+        await api.generateModule(journey.id, moduleId, `Aprender ${journey.modules.find((m) => m.id === moduleId)?.title ?? moduleId} e entender TriageClassifier`);
+        outlines.delete(journey.id);
+        stages.clear();
+        await route();
+      }));
     }
     main.scrollTop = 0;
   } catch (error) {
