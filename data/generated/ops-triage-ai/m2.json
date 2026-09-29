@@ -83,7 +83,7 @@
       "kind": "micro",
       "title": "Chamar a regra",
       "goal": "Aprender chamar a regra a partir do limite anterior.",
-      "problem": "O classificador do módulo anterior decide a categoria, mas o caso de uso ainda precisa chamá-lo.",
+      "problem": "A regra sozinha não é chamada pelo fluxo da aplicação. Nesta etapa, crie triage para chamar classify. Assim, o ticket devolve a categoria calculada.",
       "examples": [],
       "requirements": [],
       "estimatedMinutes": 3,
@@ -122,16 +122,16 @@
       ],
       "lineNotes": [
         {
-          "match": "return classify(input);",
-          "note": "Esta linha realiza a ideia central desta etapa."
+          "match": "return classify(input)",
+          "note": "O return chama classify(input) e entrega sua resposta ao chamador."
         }
       ],
       "explanation": [
         {
           "id": "direct-call",
           "title": "Chamar a regra",
-          "quick": "A função triage recebe um ticket e devolve a categoria calculada pela regra anterior.",
-          "normal": "No código real, classify aparece em src/application/classifiers/deterministic-triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+          "quick": "O return chama classify(input) e entrega sua resposta ao chamador.",
+          "normal": "No projeto real, classify aparece em src/application/classifiers/deterministic-triage-classifier.ts. O Replay pratica esta relação com uma versão menor."
         }
       ],
       "originalCodeRefs": [
@@ -216,7 +216,8 @@
           "TicketInput",
           "Category"
         ]
-      }
+      },
+      "context": "No módulo anterior, construímos a regra classify que recebe um ticket e calcula sua categoria. Na triagem real, um ticket precisa chegar à regra antes de receber uma categoria."
     },
     {
       "id": "ops-triage-ai.m2-02",
@@ -225,7 +226,7 @@
       "kind": "micro",
       "title": "Trocar a função",
       "goal": "Aprender trocar a função a partir do limite anterior.",
-      "problem": "Quem tria ainda escolhe as regras por conta própria; precisamos poder trocar essa decisão.",
+      "problem": "Quem tria ainda escolhe as regras por conta própria; precisamos poder trocar essa decisão. Nesta etapa, receba a função classifier como parâmetro. Assim, o chamador escolhe a regra usada para cada chamada.",
       "examples": [],
       "requirements": [],
       "estimatedMinutes": 3,
@@ -266,8 +267,8 @@
       ],
       "lineNotes": [
         {
-          "match": "return classifier(input);",
-          "note": "Esta linha realiza a ideia central desta etapa."
+          "match": "return classifier(input)",
+          "note": "O parâmetro classifier substitui a chamada fixa; triage repassa o mesmo input."
         }
       ],
       "explanation": [
@@ -275,8 +276,8 @@
           "id": "inject-function",
           "conceptId": "dependency-inversion",
           "title": "Trocar a função",
-          "quick": "O classificador chega como parâmetro. Assim o chamador decide qual regra usar.",
-          "normal": "No código real, classify aparece em src/application/classifiers/deterministic-triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+          "quick": "O parâmetro classifier substitui a chamada fixa; triage repassa o mesmo input.",
+          "normal": "No projeto real, classify aparece em src/application/classifiers/deterministic-triage-classifier.ts. O Replay pratica esta relação com uma versão menor."
         }
       ],
       "originalCodeRefs": [
@@ -371,7 +372,8 @@
           "TicketInput",
           "Category"
         ]
-      }
+      },
+      "context": "Na etapa anterior, A função triage recebe um ticket e devolve a categoria calculada pela regra anterior. Na aplicação, podemos querer escolher outra regra sem editar quem faz a chamada."
     },
     {
       "id": "ops-triage-ai.m2-03",
@@ -380,7 +382,7 @@
       "kind": "micro",
       "title": "Nomear o contrato",
       "goal": "Aprender nomear o contrato a partir do limite anterior.",
-      "problem": "Uma função solta não nomeia o compromisso que outras implementações devem cumprir.",
+      "problem": "Uma função solta não nomeia o compromisso que outras implementações devem cumprir. Nesta etapa, declare TriageClassifier e use seu método classify. Assim, qualquer objeto com essa operação pode classificar o ticket.",
       "examples": [],
       "requirements": [],
       "estimatedMinutes": 3,
@@ -435,8 +437,8 @@
       ],
       "lineNotes": [
         {
-          "match": "return classifier.classify(input);",
-          "note": "Esta linha realiza a ideia central desta etapa."
+          "match": "export interface TriageClassifier",
+          "note": "A interface TriageClassifier define classify(input); triage chama esse método no objeto recebido."
         }
       ],
       "explanation": [
@@ -444,8 +446,8 @@
           "id": "interface",
           "conceptId": "interface-contract",
           "title": "Nomear o contrato",
-          "quick": "TriageClassifier nomeia a operação classify que qualquer classificador deve oferecer.",
-          "normal": "No código real, TriageClassifier aparece em src/application/ports/triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+          "quick": "A interface TriageClassifier define classify(input); triage chama esse método no objeto recebido.",
+          "normal": "No projeto real, TriageClassifier aparece em src/application/ports/triage-classifier.ts. O Replay pratica esta relação com uma versão menor."
         }
       ],
       "originalCodeRefs": [
@@ -542,7 +544,8 @@
           "Category",
           "TriageClassifier"
         ]
-      }
+      },
+      "context": "Na etapa anterior, O classificador chega como parâmetro. Assim o chamador decide qual regra usar. Com mais de um classificador, todos precisam oferecer a mesma operação."
     },
     {
       "id": "ops-triage-ai.m2-04",
@@ -551,7 +554,7 @@
       "kind": "micro",
       "title": "Aceitar espera",
       "goal": "Aprender aceitar espera a partir do limite anterior.",
-      "problem": "O contrato síncrono exclui classificadores que esperam rede ou disco.",
+      "problem": "O contrato síncrono exclui classificadores que esperam rede ou disco. Nesta etapa, faça o contrato e triage devolverem uma Promise. Assim, a mesma chamada pode aguardar uma resposta futura.",
       "examples": [],
       "requirements": [],
       "estimatedMinutes": 3,
@@ -607,8 +610,8 @@
       ],
       "lineNotes": [
         {
-          "match": "return classifier.classify(input);",
-          "note": "Esta linha realiza a ideia central desta etapa."
+          "match": "Promise<Category>",
+          "note": "Promise<Category> representa uma resposta futura; async permite que triage a devolva."
         }
       ],
       "explanation": [
@@ -616,8 +619,8 @@
           "id": "async",
           "conceptId": "async-contract",
           "title": "Aceitar espera",
-          "quick": "A resposta passa a ser Promise<Category>; a mesma porta serve para trabalho que leva tempo.",
-          "normal": "No código real, TriageClassifier aparece em src/application/ports/triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+          "quick": "Promise<Category> representa uma resposta futura; async permite que triage a devolva.",
+          "normal": "No projeto real, TriageClassifier aparece em src/application/ports/triage-classifier.ts. O Replay pratica esta relação com uma versão menor."
         }
       ],
       "originalCodeRefs": [
@@ -724,7 +727,8 @@
           "Category",
           "TriageClassifier"
         ]
-      }
+      },
+      "context": "Na etapa anterior, TriageClassifier nomeia a operação classify que qualquer classificador deve oferecer. Um classificador pode consultar rede ou disco antes de responder."
     },
     {
       "id": "ops-triage-ai.m2-05",
@@ -733,7 +737,7 @@
       "kind": "micro",
       "title": "Criar o caso de uso",
       "goal": "Aprender criar o caso de uso a partir do limite anterior.",
-      "problem": "O chamador ainda precisa montar a chamada; falta um caso de uso com a dependência guardada.",
+      "problem": "O chamador ainda precisa montar a chamada; falta um caso de uso com a dependência guardada. Nesta etapa, crie TriageTicket e guarde o classificador no construtor. Assim, execute classifica cada ticket com a dependência recebida.",
       "examples": [],
       "requirements": [],
       "estimatedMinutes": 3,
@@ -802,8 +806,8 @@
       ],
       "lineNotes": [
         {
-          "match": "return this.classifier.classify(input);",
-          "note": "Esta linha realiza a ideia central desta etapa."
+          "match": "constructor(private readonly classifier",
+          "note": "O construtor guarda classifier; execute(input) delega a chamada ao método classify."
         }
       ],
       "explanation": [
@@ -811,8 +815,8 @@
           "id": "use-case",
           "conceptId": "use-case",
           "title": "Criar o caso de uso",
-          "quick": "TriageTicket guarda o classificador recebido e delega a ele cada ticket.",
-          "normal": "No código real, TriageTicket aparece em src/application/triage-ticket.ts. O Replay mostra uma versão menor da mesma relação."
+          "quick": "O construtor guarda classifier; execute(input) delega a chamada ao método classify.",
+          "normal": "No projeto real, TriageTicket aparece em src/application/triage-ticket.ts. O Replay pratica esta relação com uma versão menor."
         }
       ],
       "originalCodeRefs": [
@@ -914,7 +918,8 @@
           "TriageClassifier",
           "TriageTicket"
         ]
-      }
+      },
+      "context": "Na etapa anterior, A resposta passa a ser Promise<Category>; a mesma porta serve para trabalho que leva tempo. Cada ticket passa pelo mesmo fluxo de triagem da aplicação."
     },
     {
       "id": "ops-triage-ai.m2-06",
@@ -923,7 +928,7 @@
       "kind": "micro",
       "title": "Conectar a implementação",
       "goal": "Aprender conectar a implementação a partir do limite anterior.",
-      "problem": "O caso de uso aceita o contrato, mas a regra determinística ainda não foi conectada a ele.",
+      "problem": "O caso de uso aceita o contrato, mas a regra determinística ainda não foi conectada a ele. Nesta etapa, crie DeterministicTriageClassifier implementando TriageClassifier. Assim, o caso de uso pode usar a regra determinística existente.",
       "examples": [],
       "requirements": [],
       "estimatedMinutes": 3,
@@ -1003,16 +1008,16 @@
       ],
       "lineNotes": [
         {
-          "match": "return this.classifier.classify(input);",
-          "note": "Esta linha realiza a ideia central desta etapa."
+          "match": "implements TriageClassifier",
+          "note": "implements verifica o contrato; classify chama classify(input) e devolve o resultado."
         }
       ],
       "explanation": [
         {
           "id": "adapter",
           "title": "Conectar a implementação",
-          "quick": "A classe determinística cumpre o contrato e reaproveita classify do módulo anterior.",
-          "normal": "No código real, DeterministicTriageClassifier aparece em src/application/classifiers/deterministic-triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+          "quick": "implements verifica o contrato; classify chama classify(input) e devolve o resultado.",
+          "normal": "No projeto real, DeterministicTriageClassifier aparece em src/application/classifiers/deterministic-triage-classifier.ts. O Replay pratica esta relação com uma versão menor."
         }
       ],
       "originalCodeRefs": [
@@ -1116,7 +1121,8 @@
           "TriageTicket",
           "DeterministicTriageClassifier"
         ]
-      }
+      },
+      "context": "Na etapa anterior, TriageTicket guarda o classificador recebido e delega a ele cada ticket. Para usar a regra já construída, precisamos ligá-la ao contrato do caso de uso."
     },
     {
       "id": "ops-triage-ai.m2-07",
@@ -1125,7 +1131,7 @@
       "kind": "micro",
       "title": "Testar com uma substituta",
       "goal": "Aprender testar com uma substituta a partir do limite anterior.",
-      "problem": "A implementação real funciona; falta provar que o caso de uso aceita uma substituta em teste.",
+      "problem": "A implementação real funciona; falta provar que o caso de uso aceita uma substituta em teste. Nesta etapa, crie FakeClassifier com resposta fixa e registro de chamadas. Assim, o teste observa a delegação sem depender da regra real.",
       "examples": [],
       "requirements": [],
       "estimatedMinutes": 3,
@@ -1207,8 +1213,8 @@
       ],
       "lineNotes": [
         {
-          "match": "return this.classifier.classify(input);",
-          "note": "Esta linha realiza a ideia central desta etapa."
+          "match": "this.calls.push(input)",
+          "note": "FakeClassifier guarda input em calls e devolve answer; TriageTicket aceita a substituta pelo mesmo contrato."
         }
       ],
       "explanation": [
@@ -1216,8 +1222,8 @@
           "id": "test-double",
           "conceptId": "test-double",
           "title": "Testar com uma substituta",
-          "quick": "Um classificador falso devolve uma resposta controlada e registra o ticket recebido.",
-          "normal": "No código real, TriageClassifier aparece em src/application/ports/triage-classifier.ts. O Replay mostra uma versão menor da mesma relação."
+          "quick": "FakeClassifier guarda input em calls e devolve answer; TriageTicket aceita a substituta pelo mesmo contrato.",
+          "normal": "No projeto real, TriageClassifier aparece em src/application/ports/triage-classifier.ts. O Replay pratica esta relação com uma versão menor."
         }
       ],
       "originalCodeRefs": [
@@ -1323,7 +1329,8 @@
           "TriageTicket",
           "DeterministicTriageClassifier"
         ]
-      }
+      },
+      "context": "Na etapa anterior, A classe determinística cumpre o contrato e reaproveita classify do módulo anterior. No teste, precisamos controlar a resposta e verificar qual ticket foi enviado."
     },
     {
       "id": "ops-triage-ai.m2-99",
@@ -1332,7 +1339,7 @@
       "kind": "checkpoint",
       "title": "Checkpoint: reconstruir o contrato",
       "goal": "Reconstruir o contrato, caso de uso e implementação do zero.",
-      "problem": "Agora reúna as peças do módulo sem o ponto de partida.",
+      "problem": "Agora reúna as peças do módulo sem o ponto de partida. Nesta etapa, reconstrua o conjunto a partir do editor vazio. Assim, o contrato, o caso de uso e as implementações voltam a funcionar juntos.",
       "examples": [],
       "requirements": [
         "Defina o contrato assíncrono.",
@@ -1418,16 +1425,16 @@
       ],
       "lineNotes": [
         {
-          "match": "return this.classifier.classify(input);",
-          "note": "Esta linha realiza a ideia central desta etapa."
+          "match": "export class TriageTicket",
+          "note": "Reúna as operações praticadas nas etapas anteriores."
         }
       ],
       "explanation": [
         {
           "id": "checkpoint",
           "title": "Checkpoint: reconstruir o contrato",
-          "quick": "Reconstrua contrato, caso de uso, implementação e substituta de teste do editor vazio.",
-          "normal": "No código real, TriageTicket aparece em src/application/triage-ticket.ts. O Replay mostra uma versão menor da mesma relação."
+          "quick": "Reúna as operações praticadas nas etapas anteriores.",
+          "normal": "No projeto real, TriageTicket aparece em src/application/triage-ticket.ts. O Replay pratica esta relação com uma versão menor."
         }
       ],
       "originalCodeRefs": [
@@ -1530,7 +1537,8 @@
           "TriageTicket",
           "DeterministicTriageClassifier"
         ]
-      }
+      },
+      "context": "Na etapa anterior, Um classificador falso devolve uma resposta controlada e registra o ticket recebido. As peças do módulo já funcionam juntas."
     }
   ]
 }

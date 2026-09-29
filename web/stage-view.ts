@@ -46,7 +46,7 @@ export function renderStage(deps: StageViewDeps): MountedStage {
 }
 
 // ---------------------------------------------------------------- micro stage
-// PROBLEMA → SOLUÇÃO MÍNIMA → ENTENDA → RECONSTRUA (solution hidden) → TESTE → NOVA LIMITAÇÃO
+// CONTEXTO → PROBLEMA → SOLUÇÃO MÍNIMA → ENTENDA → RECONSTRUA (solution hidden) → TESTE → NOVA LIMITAÇÃO
 
 function renderMicro(deps: StageViewDeps): MountedStage {
   const { stage, actions } = deps;
@@ -102,6 +102,7 @@ function renderMicro(deps: StageViewDeps): MountedStage {
     "article",
     { class: "stage micro", "aria-labelledby": "stage-title" },
     microHeader(deps),
+    stage.context ? section("contexto", "Contexto", h("div", { html: md(stage.context) })) : null,
     section("problema", "Problema", h("div", { class: "problem", html: md(stage.problem) }), examplesBox(stage.examples)),
     study,
     rebuild ? startRebuild : null,

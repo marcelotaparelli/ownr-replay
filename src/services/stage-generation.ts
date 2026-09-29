@@ -9,6 +9,7 @@ import type { TypeChecker } from "../sandbox/typecheck.ts";
 import { resolveNode, type RepositoryIndex } from "./code-map.ts";
 import { validateJourney } from "./curriculum.ts";
 import { shownSnippets, snippetProblems } from "./curriculum-check.ts";
+import { stageNarrative } from "./stage-narrative.ts";
 
 /** One narrow provider contract. Other generators can replace this without entering the API or core. */
 export interface StageGenerationProvider {
@@ -51,6 +52,32 @@ const INSTRUCTIONS: Record<Idea, string> = {
   "test-double": "Crie FakeClassifier que implementa o contrato, devolve uma resposta fixa e registra as chamadas.",
   checkpoint: "Reconstrua port.ts do zero com contrato assíncrono, TriageTicket, implementação determinística e fake.",
 };
+const lineMatch = (b: Binding): Record<Idea, string> => ({
+  "direct-call": `return ${b.rule}(input)`,
+  "inject-function": "return classifier(input)",
+  interface: `export interface ${b.contract}`,
+  async: `Promise<${b.output}>`,
+  "use-case": "constructor(private readonly classifier",
+  adapter: `implements ${b.contract}`,
+  "test-double": "this.calls.push(input)",
+  checkpoint: `export class ${b.useCase}`,
+});
+
+function contractNarrative(idea: Idea, binding: Binding, previous: string, limitation: string, realSymbol: string, realPath: string) {
+  const b = binding;
+  const needs: Record<Idea, [string, string, string, string]> = {
+    "direct-call": ["Na triagem real, um ticket precisa chegar à regra antes de receber uma categoria.", `crie triage para chamar ${b.rule}.`, "o ticket devolve a categoria calculada.", `O return chama ${b.rule}(input) e entrega sua resposta ao chamador.`],
+    "inject-function": ["Na aplicação, podemos querer escolher outra regra sem editar quem faz a chamada.", "receba a função classifier como parâmetro.", "o chamador escolhe a regra usada para cada chamada.", "O parâmetro classifier substitui a chamada fixa; triage repassa o mesmo input."],
+    interface: ["Com mais de um classificador, todos precisam oferecer a mesma operação.", `declare ${b.contract} e use seu método ${b.method}.`, "qualquer objeto com essa operação pode classificar o ticket.", `A interface ${b.contract} define ${b.method}(input); triage chama esse método no objeto recebido.`],
+    async: ["Um classificador pode consultar rede ou disco antes de responder.", "faça o contrato e triage devolverem uma Promise.", "a mesma chamada pode aguardar uma resposta futura.", `Promise<${b.output}> representa uma resposta futura; async permite que triage a devolva.`],
+    "use-case": ["Cada ticket passa pelo mesmo fluxo de triagem da aplicação.", `crie ${b.useCase} e guarde o classificador no construtor.`, `execute classifica cada ticket com a dependência recebida.`, `O construtor guarda classifier; ${b.execute}(input) delega a chamada ao método ${b.method}.`],
+    adapter: ["Para usar a regra já construída, precisamos ligá-la ao contrato do caso de uso.", `crie ${b.adapter} implementando ${b.contract}.`, "o caso de uso pode usar a regra determinística existente.", `implements verifica o contrato; ${b.method} chama ${b.rule}(input) e devolve o resultado.`],
+    "test-double": ["No teste, precisamos controlar a resposta e verificar qual ticket foi enviado.", "crie FakeClassifier com resposta fixa e registro de chamadas.", "o teste observa a delegação sem depender da regra real.", "FakeClassifier guarda input em calls e devolve answer; TriageTicket aceita a substituta pelo mesmo contrato."],
+    checkpoint: ["As peças do módulo já funcionam juntas.", "reconstrua o conjunto a partir do editor vazio.", "o contrato, o caso de uso e as implementações voltam a funcionar juntos.", "Reúna as operações praticadas nas etapas anteriores."],
+  };
+  const [need, task, outcome, code] = needs[idea];
+  return stageNarrative({ previous, need, limitation, task, outcome, code, detail: `No projeto real, ${realSymbol} aparece em ${realPath}. O Replay pratica esta relação com uma versão menor.` });
+}
 
 /** Planner reads declarations from the pinned source and returns pedagogy only, never stages. */
 export class StagePlanner {
@@ -173,14 +200,16 @@ export class StageGenerator implements StageGenerationProvider {
         url: `${journey.repo.url}/blob/${journey.repo.sha}/${evidence.path}#L${declaration.startLine}-L${declaration.endLine}`,
       };
       const id = `${journey.id}.${plan.moduleId}-${checkpoint ? "99" : String(i + 1).padStart(2, "0")}`;
+      const narrative = contractNarrative(item.idea, plan.binding, i === 0 ? "No módulo anterior, construímos a regra classify que recebe um ticket e calcula sua categoria." : `Na etapa anterior, ${QUICK[plan.steps[i - 1]!.idea]}`, i === 0 ? "A regra sozinha não é chamada pelo fluxo da aplicação." : plan.steps[i - 1]!.limitation, evidence.symbol, evidence.path);
       const stage = Stage.parse({
         id, order: chapter.order + i, moduleId: plan.moduleId, kind: checkpoint ? "checkpoint" : "micro", title: item.title,
         goal: checkpoint ? "Reconstruir o contrato, caso de uso e implementação do zero." : `Aprender ${item.title.toLowerCase()} a partir do limite anterior.`,
-        problem: i === 0 ? "O classificador do módulo anterior decide a categoria, mas o caso de uso ainda precisa chamá-lo." : plan.steps[i - 1]!.limitation,
+        context: narrative.context,
+        problem: narrative.problem,
         examples: [], requirements: checkpoint ? ["Defina o contrato assíncrono.", "Injete o contrato em TriageTicket.", "Conecte a implementação determinística.", "Crie uma substituta que registre chamadas."] : [],
         estimatedMinutes: checkpoint ? 5 : 3, introduces: concept && !checkpoint ? [concept] : [], prerequisites: known, architecture: architecture(item.idea),
-        referenceCode: [file(content)], lineNotes: [{ match: content.split("\n").find((line) => line.includes("return "))?.trim() ?? "classify", note: "Esta linha realiza a ideia central desta etapa." }],
-        explanation: [{ id: item.idea, ...(concept ? { conceptId: concept } : {}), title: item.title, quick: QUICK[item.idea], normal: `No código real, ${evidence.symbol} aparece em ${evidence.path}. O Replay mostra uma versão menor da mesma relação.` }],
+        referenceCode: [file(content)], lineNotes: [{ match: lineMatch(plan.binding)[item.idea], note: narrative.quick }],
+        explanation: [{ id: item.idea, ...(concept ? { conceptId: concept } : {}), title: item.title, quick: narrative.quick, normal: narrative.normal }],
         originalCodeRefs: [reference],
         exercise: { instructions: INSTRUCTIONS[item.idea], starterFiles: [{ path: "port.ts", content: checkpoint || i === 0 ? "" : file(before).content }], solutionFiles: [file(content)], supportFiles: [support], expose: [], testFile: { path: "tests.ts", content: tests[item.idea] }, ...(item.idea === "async" ? { typecheck: { files: [{ path: "check.ts", content: 'import { Category } from "./triage.ts";\nimport type { TriageClassifier } from "./port.ts";\nconst classifier: TriageClassifier = { classify: async () => Category.ACCESS };\n' }] } } : {}) },
         toolbox: tools[item.idea] ? [tools[item.idea]] : [],

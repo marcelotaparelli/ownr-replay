@@ -24,6 +24,9 @@ test("pedido do Module 2 gera e persiste somente após validação", async () =>
   expect(stages.slice(0, -1).every((s) => s.kind === "micro")).toBe(true);
   expect(noveltyReport(stages).every((row) => row.newLines <= 5)).toBe(true);
   expect(stages.slice(1, -1).every((s) => (stageCodeHighlights(generated.stages, s.id)["port.ts"]?.length ?? 0) > 0)).toBe(true);
+  expect(stages.slice(0, -1).every((s, i) => s.context?.includes(i === 0 ? "módulo anterior" : "etapa anterior") && s.problem.includes("Nesta etapa,") && (s.explanation[0]?.quick.length ?? 0) > 60)).toBe(true);
+  expect(stages[0]?.explanation[0]?.quick).toContain("classify(input)");
+  expect(stages.every((s) => s.lineNotes.every((note) => s.referenceCode[0]?.content.includes(note.match)))).toBe(true);
   expect(generated.modules.find((m) => m.id === "m3")?.stageIds).toEqual(journey.modules.find((m) => m.id === "m3")?.stageIds);
   expect(service.restore(journey).modules.find((m) => m.id === "m2")?.stageIds).toEqual(stages.map((s) => s.id));
   expect(JSON.parse(readFileSync(service.path(journey.id, "m2"), "utf8")).sha).toBe(journey.repo.sha);

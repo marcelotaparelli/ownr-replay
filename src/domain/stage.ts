@@ -122,6 +122,8 @@ export const Stage = z.strictObject({
   title: z.string().min(1),
   subtitle: z.string().optional(),
   goal: z.string().min(1),
+  /** What the learner already has and where the next need appears in use. */
+  context: z.string().min(1).optional(),
   problem: z.string().min(1),
   /** Concrete input → output: says WHAT is expected, never HOW. Verified by execution. */
   examples: z.array(IoExample),
