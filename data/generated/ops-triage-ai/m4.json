@@ -1,0 +1,1721 @@
+{
+  "sha": "840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67",
+  "goal": "OllamaTriageClassifier",
+  "plan": {
+    "kind": "remote-classifier",
+    "moduleId": "m4",
+    "goal": "OllamaTriageClassifier",
+    "className": "LlmTriageClassifier",
+    "parserName": "parseLlmResult",
+    "endpoint": "/api/chat",
+    "symbols": {
+      "adapter": "OllamaTriageClassifier",
+      "schema": "OllamaClassifierResultSchema",
+      "fetch": "HttpFetch",
+      "error": "ClassifierTimeoutError"
+    },
+    "evidence": [
+      {
+        "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+        "symbol": "OllamaTriageClassifier"
+      },
+      {
+        "path": "src/infrastructure/ollama/ollama-result-schema.ts",
+        "symbol": "OllamaClassifierResultSchema"
+      },
+      {
+        "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+        "symbol": "HttpFetch"
+      },
+      {
+        "path": "src/application/errors/classifier-errors.ts",
+        "symbol": "ClassifierTimeoutError"
+      }
+    ]
+  },
+  "stages": [
+    {
+      "id": "ops-triage-ai.m4-01",
+      "order": 21,
+      "moduleId": "m4",
+      "kind": "micro",
+      "title": "Enviar uma requisição",
+      "goal": "Envie POST ao serviço usando fetch injetado.",
+      "context": "Até aqui, um contrato classifica tickets sem depender de uma tecnologia específica. Uma nova necessidade aparece no fluxo de triagem.",
+      "problem": "O contrato ainda não consulta um serviço externo. Nesta etapa, Envie POST ao serviço usando fetch injetado. Assim, Uma chamada HTTP permite consultar o classificador externo.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "export async function requestClassifier(url: string, fetchImpl: typeof fetch): Promise<Response> {\n  return fetchImpl(url + \"/api/chat\", { method: \"POST\" });\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return fetchImpl",
+          "note": "Uma chamada HTTP permite consultar o classificador externo. A linha return fetchImpl torna essa mudança visível no código."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "remote-1",
+          "title": "Enviar uma requisição",
+          "quick": "Uma chamada HTTP permite consultar o classificador externo. A linha return fetchImpl torna essa mudança visível no código.",
+          "normal": "No projeto real, HttpFetch aparece em src/infrastructure/ollama/ollama-triage-classifier.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "startLine": 25,
+          "endLine": 28,
+          "symbol": "HttpFetch",
+          "replayFile": "remote.ts",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export type HttpFetch = (\n  input: string | URL | Request,\n  init?: RequestInit,\n) => Promise<Response>;",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/ollama/ollama-triage-classifier.ts#L25-L28"
+        }
+      ],
+      "exercise": {
+        "instructions": "Envie POST ao serviço usando fetch injetado.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": ""
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "export async function requestClassifier(url: string, fetchImpl: typeof fetch): Promise<Response> {\n  return fetchImpl(url + \"/api/chat\", { method: \"POST\" });\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"envia POST\", async () => { let method = \"\"; await requestClassifier(\"http://local\", async (_url, init) => { method = init?.method ?? \"\"; return reply(); }); expect(method).toBe(\"POST\"); });"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "fetch",
+          "name": "fetch",
+          "summary": "Envia uma requisição HTTP.",
+          "example": "async function send(url: string) { return fetch(url, { method: \"POST\" }); }"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "triage.ts"
+        ],
+        "concepts": [],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "A requisição ainda não leva o ticket.",
+      "summary": {
+        "added": [
+          "Enviar uma requisição"
+        ],
+        "why": "A requisição ainda não leva o ticket.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m4-02",
+      "order": 22,
+      "moduleId": "m4",
+      "kind": "micro",
+      "title": "Enviar o ticket",
+      "goal": "Inclua o ticket no corpo JSON.",
+      "context": "Na etapa anterior, Uma chamada HTTP permite consultar o classificador externo. Uma nova necessidade aparece no fluxo de triagem.",
+      "problem": "A requisição ainda não leva o ticket. Nesta etapa, Inclua o ticket no corpo JSON. Assim, O corpo leva o título e a descrição do ticket.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "injected-fetch"
+      ],
+      "prerequisites": [],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "export async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<Response> {\n  return fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "body: JSON.stringify",
+          "note": "O corpo leva o título e a descrição do ticket. A linha body: JSON.stringify torna essa mudança visível no código."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "remote-2",
+          "conceptId": "injected-fetch",
+          "title": "Enviar o ticket",
+          "quick": "O corpo leva o título e a descrição do ticket. A linha body: JSON.stringify torna essa mudança visível no código.",
+          "normal": "No projeto real, HttpFetch aparece em src/infrastructure/ollama/ollama-triage-classifier.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "startLine": 25,
+          "endLine": 28,
+          "symbol": "HttpFetch",
+          "replayFile": "remote.ts",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export type HttpFetch = (\n  input: string | URL | Request,\n  init?: RequestInit,\n) => Promise<Response>;",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/ollama/ollama-triage-classifier.ts#L25-L28"
+        }
+      ],
+      "exercise": {
+        "instructions": "Inclua o ticket no corpo JSON.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": "export async function requestClassifier(url: string, fetchImpl: typeof fetch): Promise<Response> {\n  return fetchImpl(url + \"/api/chat\", { method: \"POST\" });\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "export async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<Response> {\n  return fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"envia o ticket\", async () => { let body = \"\"; await requestClassifier(\"http://local\", input, async (_url, init) => { body = String(init?.body); return reply(); }); expect(JSON.parse(body)).toEqual(input); });"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "injected-fetch"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03",
+          "ops-triage-ai.m4-01"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Uma resposta HTTP com falha ainda parece sucesso.",
+      "summary": {
+        "added": [
+          "Enviar o ticket"
+        ],
+        "why": "Uma resposta HTTP com falha ainda parece sucesso.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m4-03",
+      "order": 23,
+      "moduleId": "m4",
+      "kind": "micro",
+      "title": "Verificar o status",
+      "goal": "Rejeite respostas HTTP sem ok.",
+      "context": "Na etapa anterior, O corpo leva o título e a descrição do ticket. Uma nova necessidade aparece no fluxo de triagem.",
+      "problem": "Uma resposta HTTP com falha ainda parece sucesso. Nesta etapa, Rejeite respostas HTTP sem ok. Assim, O status HTTP interrompe uma resposta indisponível.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [
+        "injected-fetch"
+      ],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "export async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<Response> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  return response;\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "if (!response.ok)",
+          "note": "O status HTTP interrompe uma resposta indisponível. A linha if (!response.ok) torna essa mudança visível no código."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "remote-3",
+          "title": "Verificar o status",
+          "quick": "O status HTTP interrompe uma resposta indisponível. A linha if (!response.ok) torna essa mudança visível no código.",
+          "normal": "No projeto real, OllamaTriageClassifier aparece em src/infrastructure/ollama/ollama-triage-classifier.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "startLine": 36,
+          "endLine": 116,
+          "symbol": "OllamaTriageClassifier",
+          "replayFile": "remote.ts",
+          "replaySymbol": "LlmTriageClassifier",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export class OllamaTriageClassifier implements TriageClassifier {\n  constructor(\n    private readonly config: OllamaTriageClassifierConfig,\n    private readonly fetchImpl: HttpFetch = fetch,\n  ) {}\n\n  async classify(input: TicketInput): Promise<ClassifierResult> {\n    const controller = new AbortController();\n    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);\n\n    try {\n      const url = this.chatUrl();\n      const request: RequestInit = {\n        method: \"POST\",\n        headers: { \"content-type\": \"application/json\" },\n        signal: controller.signal,\n        body: JSON.stringify({\n          model: this.config.model,\n          messages: [\n            { role: \"system\", content: OLLAMA_TRIAGE_SYSTEM_PROMPT },\n            { role: \"user\", content: buildOllamaTicketPrompt(input) },\n          ],\n          stream: false,\n          format: OLLAMA_CLASSIFIER_RESULT_JSON_SCHEMA,\n          options: { temperature: 0 },\n        }),\n      };\n\n      let response: Response;\n      try {\n        response = await this.fetchImpl(url, request);\n      } catch {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        throw new ClassifierUnavailableError();\n      }\n\n      if (!response.ok) throw new ClassifierUnavailableError();\n\n      let envelope: unknown;\n      try {\n        envelope = await response.json();\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const parsedEnvelope = OllamaResponseSchema.safeParse(envelope);\n      if (!parsedEnvelope.success) throw new ClassifierInvalidResponseError();\n\n      let content: unknown;\n      try {\n        content = JSON.parse(parsedEnvelope.data.message.content);\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const result = OllamaClassifierResultSchema.safeParse(content);\n      if (!result.success) throw new ClassifierInvalidResponseError();\n      return {\n        ...result.data,\n        suggestedTeam: suggestedTeamForCategory(result.data.category),\n      };\n    } finally {\n      clearTimeout(timeout);\n    }\n  }\n\n  private chatUrl(): string {\n    const baseUrl = this.config.baseUrl.endsWith(\"/\")\n      ? this.config.baseUrl\n      : this.config.baseUrl + \"/\";\n    return new URL(\"api/chat\", baseUrl).toString();\n  }\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/ollama/ollama-triage-classifier.ts#L36-L116"
+        }
+      ],
+      "exercise": {
+        "instructions": "Rejeite respostas HTTP sem ok.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": "export async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<Response> {\n  return fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "export async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<Response> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  return response;\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"rejeita status ruim\", async () => { let failed = false; try { await requestClassifier(\"http://local\", input, async () => new Response(\"\", { status: 503 })); } catch { failed = true; } expect(failed).toBe(true); });"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "injected-fetch"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03",
+          "ops-triage-ai.m4-01",
+          "ops-triage-ai.m4-02"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "O corpo ainda é um envelope, não uma decisão.",
+      "summary": {
+        "added": [
+          "Verificar o status"
+        ],
+        "why": "O corpo ainda é um envelope, não uma decisão.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m4-04",
+      "order": 24,
+      "moduleId": "m4",
+      "kind": "micro",
+      "title": "Ler o envelope",
+      "goal": "Leia o conteúdo do envelope e converta seu JSON.",
+      "context": "Na etapa anterior, O status HTTP interrompe uma resposta indisponível. Uma nova necessidade aparece no fluxo de triagem.",
+      "problem": "O corpo ainda é um envelope, não uma decisão. Nesta etapa, Leia o conteúdo do envelope e converta seu JSON. Assim, A resposta contém texto JSON dentro de message.content.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [
+        "injected-fetch"
+      ],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "export async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<unknown> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  return value;\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "JSON.parse",
+          "note": "A resposta contém texto JSON dentro de message.content. A linha JSON.parse torna essa mudança visível no código."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "remote-4",
+          "title": "Ler o envelope",
+          "quick": "A resposta contém texto JSON dentro de message.content. A linha JSON.parse torna essa mudança visível no código.",
+          "normal": "No projeto real, OllamaTriageClassifier aparece em src/infrastructure/ollama/ollama-triage-classifier.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "startLine": 36,
+          "endLine": 116,
+          "symbol": "OllamaTriageClassifier",
+          "replayFile": "remote.ts",
+          "replaySymbol": "LlmTriageClassifier",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export class OllamaTriageClassifier implements TriageClassifier {\n  constructor(\n    private readonly config: OllamaTriageClassifierConfig,\n    private readonly fetchImpl: HttpFetch = fetch,\n  ) {}\n\n  async classify(input: TicketInput): Promise<ClassifierResult> {\n    const controller = new AbortController();\n    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);\n\n    try {\n      const url = this.chatUrl();\n      const request: RequestInit = {\n        method: \"POST\",\n        headers: { \"content-type\": \"application/json\" },\n        signal: controller.signal,\n        body: JSON.stringify({\n          model: this.config.model,\n          messages: [\n            { role: \"system\", content: OLLAMA_TRIAGE_SYSTEM_PROMPT },\n            { role: \"user\", content: buildOllamaTicketPrompt(input) },\n          ],\n          stream: false,\n          format: OLLAMA_CLASSIFIER_RESULT_JSON_SCHEMA,\n          options: { temperature: 0 },\n        }),\n      };\n\n      let response: Response;\n      try {\n        response = await this.fetchImpl(url, request);\n      } catch {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        throw new ClassifierUnavailableError();\n      }\n\n      if (!response.ok) throw new ClassifierUnavailableError();\n\n      let envelope: unknown;\n      try {\n        envelope = await response.json();\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const parsedEnvelope = OllamaResponseSchema.safeParse(envelope);\n      if (!parsedEnvelope.success) throw new ClassifierInvalidResponseError();\n\n      let content: unknown;\n      try {\n        content = JSON.parse(parsedEnvelope.data.message.content);\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const result = OllamaClassifierResultSchema.safeParse(content);\n      if (!result.success) throw new ClassifierInvalidResponseError();\n      return {\n        ...result.data,\n        suggestedTeam: suggestedTeamForCategory(result.data.category),\n      };\n    } finally {\n      clearTimeout(timeout);\n    }\n  }\n\n  private chatUrl(): string {\n    const baseUrl = this.config.baseUrl.endsWith(\"/\")\n      ? this.config.baseUrl\n      : this.config.baseUrl + \"/\";\n    return new URL(\"api/chat\", baseUrl).toString();\n  }\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/ollama/ollama-triage-classifier.ts#L36-L116"
+        }
+      ],
+      "exercise": {
+        "instructions": "Leia o conteúdo do envelope e converta seu JSON.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": "export async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<Response> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  return response;\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "export async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<unknown> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  return value;\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"lê o envelope\", async () => expect(await requestClassifier(\"http://local\", input, async () => reply())).toEqual(valid));"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "injected-fetch"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03",
+          "ops-triage-ai.m4-01",
+          "ops-triage-ai.m4-02",
+          "ops-triage-ai.m4-03"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "O texto pode conter valores inventados.",
+      "summary": {
+        "added": [
+          "Ler o envelope"
+        ],
+        "why": "O texto pode conter valores inventados.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m4-05",
+      "order": 25,
+      "moduleId": "m4",
+      "kind": "micro",
+      "title": "Validar os campos",
+      "goal": "Valide o conteúdo antes de devolvê-lo.",
+      "context": "Na etapa anterior, A resposta contém texto JSON dentro de message.content. Uma nova necessidade aparece no fluxo de triagem.",
+      "problem": "O texto pode conter valores inventados. Nesta etapa, Valide o conteúdo antes de devolvê-lo. Assim, O parser recusa campos extras e valores fora do domínio.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "structured-output"
+      ],
+      "prerequisites": [
+        "injected-fetch"
+      ],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "import { parseLlmResult } from \"./llm-result.ts\";\nexport async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<unknown> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return result;\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "parseLlmResult",
+          "note": "O parser recusa campos extras e valores fora do domínio. A linha parseLlmResult torna essa mudança visível no código."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "remote-5",
+          "conceptId": "structured-output",
+          "title": "Validar os campos",
+          "quick": "O parser recusa campos extras e valores fora do domínio. A linha parseLlmResult torna essa mudança visível no código.",
+          "normal": "No projeto real, OllamaClassifierResultSchema aparece em src/infrastructure/ollama/ollama-result-schema.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/infrastructure/ollama/ollama-result-schema.ts",
+          "startLine": 8,
+          "endLine": 15,
+          "symbol": "OllamaClassifierResultSchema",
+          "replayFile": "remote.ts",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export const OllamaClassifierResultSchema = z.strictObject({\n  category: z.enum(Category),\n  priority: z.enum(Priority),\n  risk: z.enum(Risk),\n  confidence: z.union([z.literal(0.5), z.literal(0.7), z.literal(0.9)]),\n  summary: z.string().min(1).max(160).refine((value) => value.trim().length > 0),\n  rationale: z.string().min(1).max(240).refine((value) => value.trim().length > 0),\n});",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/ollama/ollama-result-schema.ts#L8-L15"
+        }
+      ],
+      "exercise": {
+        "instructions": "Valide o conteúdo antes de devolvê-lo.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": "export async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<unknown> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  return value;\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nexport async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<unknown> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return result;\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"rejeita categoria inventada\", async () => { let failed = false; try { await requestClassifier(\"http://local\", input, async () => new Response(JSON.stringify({ message: { content: JSON.stringify({ ...valid, category: \"INVENTED\" }) } }))); } catch { failed = true; } expect(failed).toBe(true); });"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "parse",
+          "name": "Validação de dados externos",
+          "summary": "Confira cada campo antes de usar uma resposta externa.",
+          "example": "function required(value: unknown) { if (value === undefined) throw new Error(\"inválido\"); return value; }"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/infrastructure/ollama/ollama-result-schema.ts",
+          "llm-result.ts"
+        ],
+        "concepts": [
+          "injected-fetch",
+          "structured-output"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03",
+          "ops-triage-ai.m4-01",
+          "ops-triage-ai.m4-02",
+          "ops-triage-ai.m4-03",
+          "ops-triage-ai.m4-04"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "O time ainda não foi derivado da categoria.",
+      "summary": {
+        "added": [
+          "Validar os campos"
+        ],
+        "why": "O time ainda não foi derivado da categoria.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m4-06",
+      "order": 26,
+      "moduleId": "m4",
+      "kind": "micro",
+      "title": "Derivar o time",
+      "goal": "Complete o resultado com suggestedTeam local.",
+      "context": "Na etapa anterior, O parser recusa campos extras e valores fora do domínio. Uma nova necessidade aparece no fluxo de triagem.",
+      "problem": "O time ainda não foi derivado da categoria. Nesta etapa, Complete o resultado com suggestedTeam local. Assim, A tabela local escolhe o time pela categoria validada.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [
+        "injected-fetch",
+        "structured-output"
+      ],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nexport async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<object> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "suggestedTeamForCategory",
+          "note": "A tabela local escolhe o time pela categoria validada. A linha suggestedTeamForCategory torna essa mudança visível no código."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "remote-6",
+          "title": "Derivar o time",
+          "quick": "A tabela local escolhe o time pela categoria validada. A linha suggestedTeamForCategory torna essa mudança visível no código.",
+          "normal": "No projeto real, OllamaTriageClassifier aparece em src/infrastructure/ollama/ollama-triage-classifier.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "startLine": 36,
+          "endLine": 116,
+          "symbol": "OllamaTriageClassifier",
+          "replayFile": "remote.ts",
+          "replaySymbol": "LlmTriageClassifier",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export class OllamaTriageClassifier implements TriageClassifier {\n  constructor(\n    private readonly config: OllamaTriageClassifierConfig,\n    private readonly fetchImpl: HttpFetch = fetch,\n  ) {}\n\n  async classify(input: TicketInput): Promise<ClassifierResult> {\n    const controller = new AbortController();\n    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);\n\n    try {\n      const url = this.chatUrl();\n      const request: RequestInit = {\n        method: \"POST\",\n        headers: { \"content-type\": \"application/json\" },\n        signal: controller.signal,\n        body: JSON.stringify({\n          model: this.config.model,\n          messages: [\n            { role: \"system\", content: OLLAMA_TRIAGE_SYSTEM_PROMPT },\n            { role: \"user\", content: buildOllamaTicketPrompt(input) },\n          ],\n          stream: false,\n          format: OLLAMA_CLASSIFIER_RESULT_JSON_SCHEMA,\n          options: { temperature: 0 },\n        }),\n      };\n\n      let response: Response;\n      try {\n        response = await this.fetchImpl(url, request);\n      } catch {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        throw new ClassifierUnavailableError();\n      }\n\n      if (!response.ok) throw new ClassifierUnavailableError();\n\n      let envelope: unknown;\n      try {\n        envelope = await response.json();\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const parsedEnvelope = OllamaResponseSchema.safeParse(envelope);\n      if (!parsedEnvelope.success) throw new ClassifierInvalidResponseError();\n\n      let content: unknown;\n      try {\n        content = JSON.parse(parsedEnvelope.data.message.content);\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const result = OllamaClassifierResultSchema.safeParse(content);\n      if (!result.success) throw new ClassifierInvalidResponseError();\n      return {\n        ...result.data,\n        suggestedTeam: suggestedTeamForCategory(result.data.category),\n      };\n    } finally {\n      clearTimeout(timeout);\n    }\n  }\n\n  private chatUrl(): string {\n    const baseUrl = this.config.baseUrl.endsWith(\"/\")\n      ? this.config.baseUrl\n      : this.config.baseUrl + \"/\";\n    return new URL(\"api/chat\", baseUrl).toString();\n  }\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/ollama/ollama-triage-classifier.ts#L36-L116"
+        }
+      ],
+      "exercise": {
+        "instructions": "Complete o resultado com suggestedTeam local.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nexport async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<unknown> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return result;\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nexport async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<object> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"deriva o time localmente\", async () => expect(await requestClassifier(\"http://local\", input, async () => reply())).toEqual({ ...valid, suggestedTeam: SuggestedTeam.INFRASTRUCTURE }));"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "suggested-team.ts"
+        ],
+        "concepts": [
+          "injected-fetch",
+          "structured-output"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03",
+          "ops-triage-ai.m4-01",
+          "ops-triage-ai.m4-02",
+          "ops-triage-ai.m4-03",
+          "ops-triage-ai.m4-04",
+          "ops-triage-ai.m4-05"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Falta oferecer o contrato que a aplicação usa.",
+      "summary": {
+        "added": [
+          "Derivar o time"
+        ],
+        "why": "Falta oferecer o contrato que a aplicação usa.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m4-07",
+      "order": 27,
+      "moduleId": "m4",
+      "kind": "micro",
+      "title": "Cumprir a porta",
+      "goal": "Crie a classe que implementa TriageClassifier.",
+      "context": "Na etapa anterior, A tabela local escolhe o time pela categoria validada. Uma nova necessidade aparece no fluxo de triagem.",
+      "problem": "Falta oferecer o contrato que a aplicação usa. Nesta etapa, Crie a classe que implementa TriageClassifier. Assim, O adapter agora pode ser usado pelo mesmo caso de uso.",
+      "examples": [],
+      "requirements": [],
+      "noveltyException": "O contrato da classe e o cancelamento exigem poucas linhas adicionais que formam uma única ideia.",
+      "estimatedMinutes": 3,
+      "introduces": [
+        "adapter"
+      ],
+      "prerequisites": [
+        "injected-fetch",
+        "structured-output"
+      ],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch): Promise<ClassifierResult> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl); }\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "implements TriageClassifier",
+          "note": "O adapter agora pode ser usado pelo mesmo caso de uso. A linha implements TriageClassifier torna essa mudança visível no código."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "remote-7",
+          "conceptId": "adapter",
+          "title": "Cumprir a porta",
+          "quick": "O adapter agora pode ser usado pelo mesmo caso de uso. A linha implements TriageClassifier torna essa mudança visível no código.",
+          "normal": "No projeto real, OllamaTriageClassifier aparece em src/infrastructure/ollama/ollama-triage-classifier.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "startLine": 36,
+          "endLine": 116,
+          "symbol": "OllamaTriageClassifier",
+          "replayFile": "remote.ts",
+          "replaySymbol": "LlmTriageClassifier",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export class OllamaTriageClassifier implements TriageClassifier {\n  constructor(\n    private readonly config: OllamaTriageClassifierConfig,\n    private readonly fetchImpl: HttpFetch = fetch,\n  ) {}\n\n  async classify(input: TicketInput): Promise<ClassifierResult> {\n    const controller = new AbortController();\n    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);\n\n    try {\n      const url = this.chatUrl();\n      const request: RequestInit = {\n        method: \"POST\",\n        headers: { \"content-type\": \"application/json\" },\n        signal: controller.signal,\n        body: JSON.stringify({\n          model: this.config.model,\n          messages: [\n            { role: \"system\", content: OLLAMA_TRIAGE_SYSTEM_PROMPT },\n            { role: \"user\", content: buildOllamaTicketPrompt(input) },\n          ],\n          stream: false,\n          format: OLLAMA_CLASSIFIER_RESULT_JSON_SCHEMA,\n          options: { temperature: 0 },\n        }),\n      };\n\n      let response: Response;\n      try {\n        response = await this.fetchImpl(url, request);\n      } catch {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        throw new ClassifierUnavailableError();\n      }\n\n      if (!response.ok) throw new ClassifierUnavailableError();\n\n      let envelope: unknown;\n      try {\n        envelope = await response.json();\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const parsedEnvelope = OllamaResponseSchema.safeParse(envelope);\n      if (!parsedEnvelope.success) throw new ClassifierInvalidResponseError();\n\n      let content: unknown;\n      try {\n        content = JSON.parse(parsedEnvelope.data.message.content);\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const result = OllamaClassifierResultSchema.safeParse(content);\n      if (!result.success) throw new ClassifierInvalidResponseError();\n      return {\n        ...result.data,\n        suggestedTeam: suggestedTeamForCategory(result.data.category),\n      };\n    } finally {\n      clearTimeout(timeout);\n    }\n  }\n\n  private chatUrl(): string {\n    const baseUrl = this.config.baseUrl.endsWith(\"/\")\n      ? this.config.baseUrl\n      : this.config.baseUrl + \"/\";\n    return new URL(\"api/chat\", baseUrl).toString();\n  }\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/ollama/ollama-triage-classifier.ts#L36-L116"
+        }
+      ],
+      "exercise": {
+        "instructions": "Crie a classe que implementa TriageClassifier.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nexport async function requestClassifier(url: string, input: { title: string; description: string }, fetchImpl: typeof fetch): Promise<object> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch): Promise<ClassifierResult> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl); }\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier, LlmTriageClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"cumpre a porta\", async () => expect(await new LlmTriageClassifier(\"http://local\", async () => reply()).classify(input)).toEqual({ ...valid, suggestedTeam: SuggestedTeam.INFRASTRUCTURE }));"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "triage-classifier.ts"
+        ],
+        "concepts": [
+          "injected-fetch",
+          "structured-output",
+          "adapter"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03",
+          "ops-triage-ai.m4-01",
+          "ops-triage-ai.m4-02",
+          "ops-triage-ai.m4-03",
+          "ops-triage-ai.m4-04",
+          "ops-triage-ai.m4-05",
+          "ops-triage-ai.m4-06"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Falhas de rede ainda perdem sua identidade.",
+      "summary": {
+        "added": [
+          "Cumprir a porta"
+        ],
+        "why": "Falhas de rede ainda perdem sua identidade.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m4-08",
+      "order": 28,
+      "moduleId": "m4",
+      "kind": "micro",
+      "title": "Nomear a indisponibilidade",
+      "goal": "Traduza falhas de fetch e status para ClassifierUnavailableError.",
+      "context": "Na etapa anterior, O adapter agora pode ser usado pelo mesmo caso de uso. Uma nova necessidade aparece no fluxo de triagem.",
+      "problem": "Falhas de rede ainda perdem sua identidade. Nesta etapa, Traduza falhas de fetch e status para ClassifierUnavailableError. Assim, Uma falha de conexão vira erro reconhecível.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "typed-errors"
+      ],
+      "prerequisites": [
+        "injected-fetch",
+        "structured-output",
+        "adapter"
+      ],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch): Promise<ClassifierResult> {\n  let response: Response;\n  try { response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) }); } catch { throw new ClassifierUnavailableError(); }\n  if (!response.ok) throw new ClassifierUnavailableError();\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl); }\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "ClassifierUnavailableError",
+          "note": "Uma falha de conexão vira erro reconhecível. A linha ClassifierUnavailableError torna essa mudança visível no código."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "remote-8",
+          "conceptId": "typed-errors",
+          "title": "Nomear a indisponibilidade",
+          "quick": "Uma falha de conexão vira erro reconhecível. A linha ClassifierUnavailableError torna essa mudança visível no código.",
+          "normal": "No projeto real, ClassifierTimeoutError aparece em src/application/errors/classifier-errors.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/errors/classifier-errors.ts",
+          "startLine": 1,
+          "endLine": 7,
+          "symbol": "ClassifierTimeoutError",
+          "replayFile": "remote.ts",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/errors/classifier-errors.ts#L1-L7"
+        }
+      ],
+      "exercise": {
+        "instructions": "Traduza falhas de fetch e status para ClassifierUnavailableError.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch): Promise<ClassifierResult> {\n  const response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) });\n  if (!response.ok) throw new Error(\"HTTP indisponível\");\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl); }\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch): Promise<ClassifierResult> {\n  let response: Response;\n  try { response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) }); } catch { throw new ClassifierUnavailableError(); }\n  if (!response.ok) throw new ClassifierUnavailableError();\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl); }\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier, LlmTriageClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"rede indisponível tem tipo\", async () => { let error: unknown; try { await requestClassifier(\"http://local\", input, async () => { throw new Error(\"offline\"); }); } catch (caught) { error = caught; } expect(error).toBeInstanceOf(ClassifierUnavailableError); });"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/application/errors/classifier-errors.ts",
+          "classifier-errors.ts"
+        ],
+        "concepts": [
+          "injected-fetch",
+          "structured-output",
+          "adapter",
+          "typed-errors"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03",
+          "ops-triage-ai.m4-01",
+          "ops-triage-ai.m4-02",
+          "ops-triage-ai.m4-03",
+          "ops-triage-ai.m4-04",
+          "ops-triage-ai.m4-05",
+          "ops-triage-ai.m4-06",
+          "ops-triage-ai.m4-07"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Um envelope inválido ainda vira erro genérico.",
+      "summary": {
+        "added": [
+          "Nomear a indisponibilidade"
+        ],
+        "why": "Um envelope inválido ainda vira erro genérico.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m4-09",
+      "order": 29,
+      "moduleId": "m4",
+      "kind": "micro",
+      "title": "Nomear a resposta inválida",
+      "goal": "Traduza o conteúdo inválido para ClassifierInvalidResponseError.",
+      "context": "Na etapa anterior, Uma falha de conexão vira erro reconhecível. Uma nova necessidade aparece no fluxo de triagem.",
+      "problem": "Um envelope inválido ainda vira erro genérico. Nesta etapa, Traduza o conteúdo inválido para ClassifierInvalidResponseError. Assim, JSON quebrado ou campos errados viram erro próprio.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [
+        "injected-fetch",
+        "structured-output",
+        "adapter",
+        "typed-errors"
+      ],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch): Promise<ClassifierResult> {\n  let response: Response;\n  try { response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) }); } catch { throw new ClassifierUnavailableError(); }\n  if (!response.ok) throw new ClassifierUnavailableError();\n  let value: unknown;\n  try { const envelope = await response.json(); value = JSON.parse(envelope.message.content); } catch { throw new ClassifierInvalidResponseError(); }\n  const result = parseLlmResult(value);\n  if (!result) throw new ClassifierInvalidResponseError();\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl); }\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "ClassifierInvalidResponseError",
+          "note": "JSON quebrado ou campos errados viram erro próprio. A linha ClassifierInvalidResponseError torna essa mudança visível no código."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "remote-9",
+          "title": "Nomear a resposta inválida",
+          "quick": "JSON quebrado ou campos errados viram erro próprio. A linha ClassifierInvalidResponseError torna essa mudança visível no código.",
+          "normal": "No projeto real, OllamaClassifierResultSchema aparece em src/infrastructure/ollama/ollama-result-schema.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/infrastructure/ollama/ollama-result-schema.ts",
+          "startLine": 8,
+          "endLine": 15,
+          "symbol": "OllamaClassifierResultSchema",
+          "replayFile": "remote.ts",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export const OllamaClassifierResultSchema = z.strictObject({\n  category: z.enum(Category),\n  priority: z.enum(Priority),\n  risk: z.enum(Risk),\n  confidence: z.union([z.literal(0.5), z.literal(0.7), z.literal(0.9)]),\n  summary: z.string().min(1).max(160).refine((value) => value.trim().length > 0),\n  rationale: z.string().min(1).max(240).refine((value) => value.trim().length > 0),\n});",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/ollama/ollama-result-schema.ts#L8-L15"
+        }
+      ],
+      "exercise": {
+        "instructions": "Traduza o conteúdo inválido para ClassifierInvalidResponseError.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch): Promise<ClassifierResult> {\n  let response: Response;\n  try { response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) }); } catch { throw new ClassifierUnavailableError(); }\n  if (!response.ok) throw new ClassifierUnavailableError();\n  const envelope = await response.json();\n  const value = JSON.parse(envelope.message.content);\n  const result = parseLlmResult(value);\n  if (!result) throw new Error(\"Resposta inválida\");\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl); }\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch): Promise<ClassifierResult> {\n  let response: Response;\n  try { response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) }); } catch { throw new ClassifierUnavailableError(); }\n  if (!response.ok) throw new ClassifierUnavailableError();\n  let value: unknown;\n  try { const envelope = await response.json(); value = JSON.parse(envelope.message.content); } catch { throw new ClassifierInvalidResponseError(); }\n  const result = parseLlmResult(value);\n  if (!result) throw new ClassifierInvalidResponseError();\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl); }\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier, LlmTriageClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"corpo inválido tem tipo\", async () => { let error: unknown; try { await requestClassifier(\"http://local\", input, async () => new Response(\"bad\")); } catch (caught) { error = caught; } expect(error).toBeInstanceOf(ClassifierInvalidResponseError); });"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/infrastructure/ollama/ollama-result-schema.ts",
+          "classifier-errors.ts"
+        ],
+        "concepts": [
+          "injected-fetch",
+          "structured-output",
+          "adapter",
+          "typed-errors"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03",
+          "ops-triage-ai.m4-01",
+          "ops-triage-ai.m4-02",
+          "ops-triage-ai.m4-03",
+          "ops-triage-ai.m4-04",
+          "ops-triage-ai.m4-05",
+          "ops-triage-ai.m4-06",
+          "ops-triage-ai.m4-07",
+          "ops-triage-ai.m4-08"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Uma requisição lenta ainda pode ficar pendurada.",
+      "summary": {
+        "added": [
+          "Nomear a resposta inválida"
+        ],
+        "why": "Uma requisição lenta ainda pode ficar pendurada.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m4-10",
+      "order": 30,
+      "moduleId": "m4",
+      "kind": "micro",
+      "title": "Cancelar a espera",
+      "goal": "Use AbortController, signal e finally para distinguir timeout.",
+      "context": "Na etapa anterior, JSON quebrado ou campos errados viram erro próprio. Uma nova necessidade aparece no fluxo de triagem.",
+      "problem": "Uma requisição lenta ainda pode ficar pendurada. Nesta etapa, Use AbortController, signal e finally para distinguir timeout. Assim, O timer cancela o fetch e é limpo ao terminar.",
+      "examples": [],
+      "requirements": [],
+      "noveltyException": "O contrato da classe e o cancelamento exigem poucas linhas adicionais que formam uma única ideia.",
+      "estimatedMinutes": 3,
+      "introduces": [
+        "abort-timeout"
+      ],
+      "prerequisites": [
+        "injected-fetch",
+        "structured-output",
+        "adapter",
+        "typed-errors"
+      ],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch, timeoutMs: number = 1000): Promise<ClassifierResult> {\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), timeoutMs);\n  try {\n    let response: Response;\n    try { response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input), signal: controller.signal }); } catch { throw controller.signal.aborted ? new ClassifierTimeoutError() : new ClassifierUnavailableError(); }\n    if (!response.ok) throw new ClassifierUnavailableError();\n    let value: unknown;\n    try { const envelope = await response.json(); value = JSON.parse(envelope.message.content); } catch { throw new ClassifierInvalidResponseError(); }\n    const result = parseLlmResult(value);\n    if (!result) throw new ClassifierInvalidResponseError();\n    return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n  } finally { clearTimeout(timer); }\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl, this.timeoutMs); }\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "controller.abort()",
+          "note": "O timer cancela o fetch e é limpo ao terminar. A linha controller.abort() torna essa mudança visível no código."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "remote-10",
+          "conceptId": "abort-timeout",
+          "title": "Cancelar a espera",
+          "quick": "O timer cancela o fetch e é limpo ao terminar. A linha controller.abort() torna essa mudança visível no código.",
+          "normal": "No projeto real, OllamaTriageClassifier aparece em src/infrastructure/ollama/ollama-triage-classifier.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "startLine": 36,
+          "endLine": 116,
+          "symbol": "OllamaTriageClassifier",
+          "replayFile": "remote.ts",
+          "replaySymbol": "LlmTriageClassifier",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export class OllamaTriageClassifier implements TriageClassifier {\n  constructor(\n    private readonly config: OllamaTriageClassifierConfig,\n    private readonly fetchImpl: HttpFetch = fetch,\n  ) {}\n\n  async classify(input: TicketInput): Promise<ClassifierResult> {\n    const controller = new AbortController();\n    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);\n\n    try {\n      const url = this.chatUrl();\n      const request: RequestInit = {\n        method: \"POST\",\n        headers: { \"content-type\": \"application/json\" },\n        signal: controller.signal,\n        body: JSON.stringify({\n          model: this.config.model,\n          messages: [\n            { role: \"system\", content: OLLAMA_TRIAGE_SYSTEM_PROMPT },\n            { role: \"user\", content: buildOllamaTicketPrompt(input) },\n          ],\n          stream: false,\n          format: OLLAMA_CLASSIFIER_RESULT_JSON_SCHEMA,\n          options: { temperature: 0 },\n        }),\n      };\n\n      let response: Response;\n      try {\n        response = await this.fetchImpl(url, request);\n      } catch {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        throw new ClassifierUnavailableError();\n      }\n\n      if (!response.ok) throw new ClassifierUnavailableError();\n\n      let envelope: unknown;\n      try {\n        envelope = await response.json();\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const parsedEnvelope = OllamaResponseSchema.safeParse(envelope);\n      if (!parsedEnvelope.success) throw new ClassifierInvalidResponseError();\n\n      let content: unknown;\n      try {\n        content = JSON.parse(parsedEnvelope.data.message.content);\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const result = OllamaClassifierResultSchema.safeParse(content);\n      if (!result.success) throw new ClassifierInvalidResponseError();\n      return {\n        ...result.data,\n        suggestedTeam: suggestedTeamForCategory(result.data.category),\n      };\n    } finally {\n      clearTimeout(timeout);\n    }\n  }\n\n  private chatUrl(): string {\n    const baseUrl = this.config.baseUrl.endsWith(\"/\")\n      ? this.config.baseUrl\n      : this.config.baseUrl + \"/\";\n    return new URL(\"api/chat\", baseUrl).toString();\n  }\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/ollama/ollama-triage-classifier.ts#L36-L116"
+        }
+      ],
+      "exercise": {
+        "instructions": "Use AbortController, signal e finally para distinguir timeout.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch): Promise<ClassifierResult> {\n  let response: Response;\n  try { response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input) }); } catch { throw new ClassifierUnavailableError(); }\n  if (!response.ok) throw new ClassifierUnavailableError();\n  let value: unknown;\n  try { const envelope = await response.json(); value = JSON.parse(envelope.message.content); } catch { throw new ClassifierInvalidResponseError(); }\n  const result = parseLlmResult(value);\n  if (!result) throw new ClassifierInvalidResponseError();\n  return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl); }\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch, timeoutMs: number = 1000): Promise<ClassifierResult> {\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), timeoutMs);\n  try {\n    let response: Response;\n    try { response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input), signal: controller.signal }); } catch { throw controller.signal.aborted ? new ClassifierTimeoutError() : new ClassifierUnavailableError(); }\n    if (!response.ok) throw new ClassifierUnavailableError();\n    let value: unknown;\n    try { const envelope = await response.json(); value = JSON.parse(envelope.message.content); } catch { throw new ClassifierInvalidResponseError(); }\n    const result = parseLlmResult(value);\n    if (!result) throw new ClassifierInvalidResponseError();\n    return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n  } finally { clearTimeout(timer); }\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl, this.timeoutMs); }\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier, LlmTriageClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"timeout cancela e limpa\", async () => { let signal: AbortSignal | undefined; let error: unknown; try { await requestClassifier(\"http://local\", input, async (_url, init) => { signal = init?.signal as AbortSignal; return new Promise((_resolve, reject) => signal?.addEventListener(\"abort\", () => reject(new Error(\"aborted\")))); }, 1); } catch (caught) { error = caught; } expect(signal?.aborted).toBe(true); expect(error).toBeInstanceOf(ClassifierTimeoutError); });"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "abort-controller",
+          "name": "AbortController",
+          "summary": "Cancela uma operação pelo signal.",
+          "example": "const controller = new AbortController(); controller.abort();"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "classifier-errors.ts"
+        ],
+        "concepts": [
+          "injected-fetch",
+          "structured-output",
+          "adapter",
+          "typed-errors",
+          "abort-timeout"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03",
+          "ops-triage-ai.m4-01",
+          "ops-triage-ai.m4-02",
+          "ops-triage-ai.m4-03",
+          "ops-triage-ai.m4-04",
+          "ops-triage-ai.m4-05",
+          "ops-triage-ai.m4-06",
+          "ops-triage-ai.m4-07",
+          "ops-triage-ai.m4-08",
+          "ops-triage-ai.m4-09"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Agora reúna o fluxo sem o ponto de partida.",
+      "summary": {
+        "added": [
+          "Cancelar a espera"
+        ],
+        "why": "Agora reúna o fluxo sem o ponto de partida.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    },
+    {
+      "id": "ops-triage-ai.m4-99",
+      "order": 31,
+      "moduleId": "m4",
+      "kind": "checkpoint",
+      "title": "Checkpoint: reconstruir o adapter remoto",
+      "goal": "Reconstruir o classificador remoto completo.",
+      "context": "Na etapa anterior, O timer cancela o fetch e é limpo ao terminar. Agora o adapter está completo e pode ser reconstruído.",
+      "problem": "Agora reúna o fluxo sem o ponto de partida. Nesta etapa, reconstrua o adapter do zero. Assim, o fluxo completo volta a funcionar.",
+      "examples": [],
+      "requirements": [
+        "Envie o ticket.",
+        "Valide a saída.",
+        "Distinga indisponibilidade, resposta inválida e timeout."
+      ],
+      "estimatedMinutes": 6,
+      "introduces": [],
+      "prerequisites": [
+        "injected-fetch",
+        "structured-output",
+        "adapter",
+        "typed-errors",
+        "abort-timeout"
+      ],
+      "referenceCode": [
+        {
+          "path": "remote.ts",
+          "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch, timeoutMs: number = 1000): Promise<ClassifierResult> {\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), timeoutMs);\n  try {\n    let response: Response;\n    try { response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input), signal: controller.signal }); } catch { throw controller.signal.aborted ? new ClassifierTimeoutError() : new ClassifierUnavailableError(); }\n    if (!response.ok) throw new ClassifierUnavailableError();\n    let value: unknown;\n    try { const envelope = await response.json(); value = JSON.parse(envelope.message.content); } catch { throw new ClassifierInvalidResponseError(); }\n    const result = parseLlmResult(value);\n    if (!result) throw new ClassifierInvalidResponseError();\n    return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n  } finally { clearTimeout(timer); }\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl, this.timeoutMs); }\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "controller.abort()",
+          "note": "Reúna requisição, validação, erros e cancelamento no mesmo fluxo."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "checkpoint",
+          "title": "Reconstrua o adapter",
+          "quick": "Reúna requisição, validação, erros e cancelamento no mesmo fluxo.",
+          "normal": "No projeto real, OllamaTriageClassifier aparece em src/infrastructure/ollama/ollama-triage-classifier.ts. O Replay usa uma versão menor do mesmo fluxo."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "startLine": 36,
+          "endLine": 116,
+          "symbol": "OllamaTriageClassifier",
+          "replayFile": "remote.ts",
+          "replaySymbol": "LlmTriageClassifier",
+          "note": "O Replay reduz o protocolo HTTP ao fluxo necessário para estudar a porta, as falhas e a validação. O projeto usa Ollama local e schema Zod.",
+          "snippet": "export class OllamaTriageClassifier implements TriageClassifier {\n  constructor(\n    private readonly config: OllamaTriageClassifierConfig,\n    private readonly fetchImpl: HttpFetch = fetch,\n  ) {}\n\n  async classify(input: TicketInput): Promise<ClassifierResult> {\n    const controller = new AbortController();\n    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);\n\n    try {\n      const url = this.chatUrl();\n      const request: RequestInit = {\n        method: \"POST\",\n        headers: { \"content-type\": \"application/json\" },\n        signal: controller.signal,\n        body: JSON.stringify({\n          model: this.config.model,\n          messages: [\n            { role: \"system\", content: OLLAMA_TRIAGE_SYSTEM_PROMPT },\n            { role: \"user\", content: buildOllamaTicketPrompt(input) },\n          ],\n          stream: false,\n          format: OLLAMA_CLASSIFIER_RESULT_JSON_SCHEMA,\n          options: { temperature: 0 },\n        }),\n      };\n\n      let response: Response;\n      try {\n        response = await this.fetchImpl(url, request);\n      } catch {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        throw new ClassifierUnavailableError();\n      }\n\n      if (!response.ok) throw new ClassifierUnavailableError();\n\n      let envelope: unknown;\n      try {\n        envelope = await response.json();\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const parsedEnvelope = OllamaResponseSchema.safeParse(envelope);\n      if (!parsedEnvelope.success) throw new ClassifierInvalidResponseError();\n\n      let content: unknown;\n      try {\n        content = JSON.parse(parsedEnvelope.data.message.content);\n      } catch (error) {\n        if (controller.signal.aborted) throw new ClassifierTimeoutError();\n        if (error instanceof SyntaxError) {\n          throw new ClassifierInvalidResponseError();\n        }\n        throw error;\n      }\n\n      const result = OllamaClassifierResultSchema.safeParse(content);\n      if (!result.success) throw new ClassifierInvalidResponseError();\n      return {\n        ...result.data,\n        suggestedTeam: suggestedTeamForCategory(result.data.category),\n      };\n    } finally {\n      clearTimeout(timeout);\n    }\n  }\n\n  private chatUrl(): string {\n    const baseUrl = this.config.baseUrl.endsWith(\"/\")\n      ? this.config.baseUrl\n      : this.config.baseUrl + \"/\";\n    return new URL(\"api/chat\", baseUrl).toString();\n  }\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/ollama/ollama-triage-classifier.ts#L36-L116"
+        }
+      ],
+      "exercise": {
+        "instructions": "Reconstrua remote.ts completo: requisição, contrato, validação, erros tipados e timeout.",
+        "starterFiles": [
+          {
+            "path": "remote.ts",
+            "content": ""
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "remote.ts",
+            "content": "import { parseLlmResult } from \"./llm-result.ts\";\nimport { suggestedTeamForCategory } from \"./suggested-team.ts\";\nimport type { TriageClassifier } from \"./triage-classifier.ts\";\nimport type { TicketInput, ClassifierResult } from \"./triage.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nexport async function requestClassifier(url: string, input: TicketInput, fetchImpl: typeof fetch, timeoutMs: number = 1000): Promise<ClassifierResult> {\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), timeoutMs);\n  try {\n    let response: Response;\n    try { response = await fetchImpl(url + \"/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(input), signal: controller.signal }); } catch { throw controller.signal.aborted ? new ClassifierTimeoutError() : new ClassifierUnavailableError(); }\n    if (!response.ok) throw new ClassifierUnavailableError();\n    let value: unknown;\n    try { const envelope = await response.json(); value = JSON.parse(envelope.message.content); } catch { throw new ClassifierInvalidResponseError(); }\n    const result = parseLlmResult(value);\n    if (!result) throw new ClassifierInvalidResponseError();\n    return { ...result, suggestedTeam: suggestedTeamForCategory(result.category) };\n  } finally { clearTimeout(timer); }\n}\nexport class LlmTriageClassifier implements TriageClassifier {\n  constructor(private readonly url: string, private readonly fetchImpl: typeof fetch, private readonly timeoutMs = 1000) {}\n  classify(input: TicketInput): Promise<ClassifierResult> { return requestClassifier(this.url, input, this.fetchImpl, this.timeoutMs); }\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          },
+          {
+            "path": "triage-classifier.ts",
+            "content": "import type { ClassifierResult, TicketInput } from \"./triage.ts\";\n\nexport interface TriageClassifier {\n  classify(input: TicketInput): Promise<ClassifierResult>;\n}\n"
+          },
+          {
+            "path": "classifier-errors.ts",
+            "content": "// Três falhas com consequências diferentes para quem chama.\nexport class ClassifierTimeoutError extends Error {\n  override readonly name = \"ClassifierTimeoutError\";\n  constructor() {\n    super(\"Classifier request timed out\");\n  }\n}\n\nexport class ClassifierUnavailableError extends Error {\n  override readonly name = \"ClassifierUnavailableError\";\n  constructor() {\n    super(\"Classifier service is unavailable\");\n  }\n}\n\nexport class ClassifierInvalidResponseError extends Error {\n  override readonly name = \"ClassifierInvalidResponseError\";\n  constructor() {\n    super(\"Classifier returned an invalid response\");\n  }\n}\n"
+          },
+          {
+            "path": "llm-result.ts",
+            "content": "import { Category, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\n\nexport type LlmResult = Omit<ClassifierResult, \"suggestedTeam\">;\n\nconst FIELDS = [\"category\", \"priority\", \"risk\", \"confidence\", \"summary\", \"rationale\"];\n\n// O que o schema Zod do projeto real verifica, escrito à mão:\n// objeto estrito, enums válidos, confiança discreta, textos não vazios e curtos.\nexport function parseLlmResult(value: unknown): LlmResult | undefined {\n  if (typeof value !== \"object\" || value === null || Array.isArray(value)) return undefined;\n  const v = value as Record<string, unknown>;\n  if (Object.keys(v).some((key) => !FIELDS.includes(key))) return undefined;\n  if (!isOneOf(v.category, Object.values(Category))) return undefined;\n  if (!isOneOf(v.priority, Object.values(Priority))) return undefined;\n  if (!isOneOf(v.risk, Object.values(Risk))) return undefined;\n  if (v.confidence !== 0.5 && v.confidence !== 0.7 && v.confidence !== 0.9) return undefined;\n  if (!isText(v.summary, 160) || !isText(v.rationale, 240)) return undefined;\n  return {\n    category: v.category,\n    priority: v.priority,\n    risk: v.risk,\n    confidence: v.confidence,\n    summary: v.summary,\n    rationale: v.rationale,\n  };\n}\n\nfunction isOneOf<T extends string>(value: unknown, options: T[]): value is T {\n  return typeof value === \"string\" && (options as string[]).includes(value);\n}\n\nfunction isText(value: unknown, max: number): value is string {\n  return typeof value === \"string\" && value.trim().length > 0 && value.length <= max;\n}\n"
+          },
+          {
+            "path": "suggested-team.ts",
+            "content": "import { Category, SuggestedTeam } from \"./triage.ts\";\n\n// Record exige uma entrada por categoria: esquecer uma não compila.\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE,\n  [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT,\n  [Category.SUPPORT]: SuggestedTeam.SUPPORT,\n  [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\n\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { requestClassifier, LlmTriageClassifier } from \"./remote.ts\";\nimport { ClassifierUnavailableError, ClassifierInvalidResponseError, ClassifierTimeoutError } from \"./classifier-errors.ts\";\nconst input = { title: \"site down\", description: \"all users\" };\nconst valid = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, confidence: 0.9, summary: \"site\", rationale: \"down\" };\nconst reply = () => new Response(JSON.stringify({ message: { content: JSON.stringify(valid) } }));\ntest(\"rejeita status ruim\", async () => { let failed = false; try { await requestClassifier(\"http://local\", input, async () => new Response(\"\", { status: 503 })); } catch { failed = true; } expect(failed).toBe(true); });\ntest(\"rejeita categoria inventada\", async () => { let failed = false; try { await requestClassifier(\"http://local\", input, async () => new Response(JSON.stringify({ message: { content: JSON.stringify({ ...valid, category: \"INVENTED\" }) } }))); } catch { failed = true; } expect(failed).toBe(true); });\ntest(\"deriva o time localmente\", async () => expect(await requestClassifier(\"http://local\", input, async () => reply())).toEqual({ ...valid, suggestedTeam: SuggestedTeam.INFRASTRUCTURE }));\ntest(\"cumpre a porta\", async () => expect(await new LlmTriageClassifier(\"http://local\", async () => reply()).classify(input)).toEqual({ ...valid, suggestedTeam: SuggestedTeam.INFRASTRUCTURE }));\ntest(\"rede indisponível tem tipo\", async () => { let error: unknown; try { await requestClassifier(\"http://local\", input, async () => { throw new Error(\"offline\"); }); } catch (caught) { error = caught; } expect(error).toBeInstanceOf(ClassifierUnavailableError); });\ntest(\"corpo inválido tem tipo\", async () => { let error: unknown; try { await requestClassifier(\"http://local\", input, async () => new Response(\"bad\")); } catch (caught) { error = caught; } expect(error).toBeInstanceOf(ClassifierInvalidResponseError); });\ntest(\"timeout cancela e limpa\", async () => { let signal: AbortSignal | undefined; let error: unknown; try { await requestClassifier(\"http://local\", input, async (_url, init) => { signal = init?.signal as AbortSignal; return new Promise((_resolve, reject) => signal?.addEventListener(\"abort\", () => reject(new Error(\"aborted\")))); }, 1); } catch (caught) { error = caught; } expect(signal?.aborted).toBe(true); expect(error).toBeInstanceOf(ClassifierTimeoutError); });"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "remote.ts",
+          "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "classifier-errors.ts"
+        ],
+        "concepts": [
+          "injected-fetch",
+          "structured-output",
+          "adapter",
+          "typed-errors",
+          "abort-timeout"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.03",
+          "ops-triage-ai.m4-01",
+          "ops-triage-ai.m4-02",
+          "ops-triage-ai.m4-03",
+          "ops-triage-ai.m4-04",
+          "ops-triage-ai.m4-05",
+          "ops-triage-ai.m4-06",
+          "ops-triage-ai.m4-07",
+          "ops-triage-ai.m4-08",
+          "ops-triage-ai.m4-09",
+          "ops-triage-ai.m4-10"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "checkpoint": {
+        "question": "Por que validar a resposta depois de solicitar JSON ao modelo?",
+        "answer": "O formato pedido ao modelo é apenas uma instrução; a validação impede que dados inventados ou malformados entrem no domínio."
+      },
+      "summary": {
+        "added": [
+          "classificador remoto completo"
+        ],
+        "why": "Manter o contrato previsível com uma dependência externa.",
+        "flow": [
+          "TicketInput",
+          "LlmTriageClassifier",
+          "ClassifierResult"
+        ]
+      }
+    }
+  ]
+}

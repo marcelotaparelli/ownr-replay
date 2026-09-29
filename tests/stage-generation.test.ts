@@ -32,6 +32,25 @@ test("pedido do Module 2 gera e persiste somente após validação", async () =>
   expect(JSON.parse(readFileSync(service.path(journey.id, "m2"), "utf8")).sha).toBe(journey.repo.sha);
 });
 
+test("resultado estruturado gera Module 3 do SHA fixado e preserva Module 2", async () => {
+  const root = mkdtempSync(join(tmpdir(), "replay-decision-generation-"));
+  const service = new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker));
+  const journey = golden();
+  const withM2 = await service.generate(journey, "m2", "Aprender Module 2 e TriageClassifier", index);
+  const generated = await service.generate(withM2, "m3", "Aprender Module 3: decisão estruturada", index);
+  const stages = generated.stages.filter((stage) => stage.moduleId === "m3");
+  expect(stages.length).toBe(9);
+  expect(stages.at(-1)?.kind).toBe("checkpoint");
+  expect(stages.at(-1)?.exercise?.starterFiles[0]?.content).toBe("");
+  expect(noveltyReport(stages).every((row) => row.newLines <= 4)).toBe(true);
+  expect(stages.slice(1, -1).every((stage) => (stageCodeHighlights(generated.stages, stage.id)["decision.ts"]?.length ?? 0) > 0)).toBe(true);
+  expect(stages.slice(0, -1).every((stage, i) => stage.context?.includes(i === 0 ? "Até aqui" : "etapa anterior") && stage.problem.includes("Nesta etapa,") && (stage.explanation[0]?.quick.length ?? 0) > 60)).toBe(true);
+  expect(stages.every((s) => s.lineNotes.every((note) => s.referenceCode[0]?.content.includes(note.match)))).toBe(true);
+  expect(stages.every((stage) => stage.originalCodeRefs.every((ref) => ref.url.includes(journey.repo.sha)))).toBe(true);
+  expect(generated.modules.find((module) => module.id === "m2")?.stageIds).toEqual(withM2.modules.find((module) => module.id === "m2")?.stageIds);
+  expect(service.restore(journey).modules.find((module) => module.id === "m3")?.stageIds).toEqual(stages.map((stage) => stage.id));
+});
+
 test("falha de validação deixa capítulo legado e arquivo persistido intactos", async () => {
   const root = mkdtempSync(join(tmpdir(), "replay-generation-failure-"));
   const generator = new StageGenerator();
@@ -44,6 +63,31 @@ test("falha de validação deixa capítulo legado e arquivo persistido intactos"
   const journey = golden();
   await expect(service.generate(journey, "m2", "Aprender Module 2", index)).rejects.toThrow("referência real inválida");
   expect(service.restore(journey).modules.find((m) => m.id === "m2")?.stageIds).toEqual(["ops-triage-ai.02"]);
+});
+
+test("Module 3 inválido mantém o capítulo legado", async () => {
+  const root = mkdtempSync(join(tmpdir(), "replay-decision-failure-"));
+  const generator = new StageGenerator();
+  const provider = { generate: (plan: Parameters<StageGenerator["generate"]>[0], journey: Parameters<StageGenerator["generate"]>[1], repo: Parameters<StageGenerator["generate"]>[2]) => {
+    const stages = generator.generate(plan, journey, repo);
+    return stages.map((stage, index) => index === 0 ? { ...stage, originalCodeRefs: [{ ...stage.originalCodeRefs[0]!, snippet: "inventado" }] } : stage);
+  } };
+  const service = new ModuleGenerationService(root, new StagePlanner(), provider, new StageValidator(checker));
+  const journey = golden();
+  await expect(service.generate(journey, "m3", "Aprender decisão estruturada", index)).rejects.toThrow("referência real inválida");
+  expect(service.restore(journey).modules.find((module) => module.id === "m3")?.stageIds).toEqual(["ops-triage-ai.03"]);
+});
+
+test("ação do capítulo gera Module 3 pela API", async () => {
+  const root = mkdtempSync(join(tmpdir(), "replay-decision-api-"));
+  const service = new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker));
+  const app = testApp({ generation: service, typeChecker: checker });
+  const response = await app.call("POST", "/api/journeys/ops-triage-ai/modules/m3/generate", { goal: "Aprender Decisão estruturada e entender TriageClassifier" });
+  expect(response.status).toBe(200);
+  const outline = await response.json();
+  expect(outline.modules.find((module: { id: string }) => module.id === "m3").stageIds.length).toBe(9);
+  expect(outline.modules.find((module: { id: string }) => module.id === "m2").stageIds).toEqual(["ops-triage-ai.02"]);
+  app.repository.close();
 });
 
 test("objetivo específico solicitado pela home publica Module 2 sem editar journey.json", async () => {

@@ -10,6 +10,8 @@ import { resolveNode, type RepositoryIndex } from "./code-map.ts";
 import { validateJourney } from "./curriculum.ts";
 import { shownSnippets, snippetProblems } from "./curriculum-check.ts";
 import { stageNarrative } from "./stage-narrative.ts";
+import { generateStructuredDecision, planStructuredDecision, type StructuredDecisionPlan } from "./structured-decision-generation.ts";
+import { generateRemoteClassifier, planRemoteClassifier, type RemoteClassifierPlan } from "./remote-classifier-generation.ts";
 
 /** One narrow provider contract. Other generators can replace this without entering the API or core. */
 export interface StageGenerationProvider {
@@ -17,7 +19,7 @@ export interface StageGenerationProvider {
 }
 
 type Binding = { contract: string; method: string; input: string; output: string; useCase: string; execute: string; adapter: string; rule: string };
-export type StagePlan = { moduleId: string; goal: string; evidence: { path: string; symbol: string }[]; binding: Binding; steps: { idea: Idea; title: string; limitation: string }[] };
+export type StagePlan = { kind: "contract"; moduleId: string; goal: string; evidence: { path: string; symbol: string }[]; binding: Binding; steps: { idea: Idea; title: string; limitation: string }[] } | StructuredDecisionPlan | RemoteClassifierPlan;
 type Idea = "direct-call" | "inject-function" | "interface" | "async" | "use-case" | "adapter" | "test-double" | "checkpoint";
 const IDEAS: Idea[] = ["direct-call", "inject-function", "interface", "async", "use-case", "adapter", "test-double", "checkpoint"];
 const TITLES = ["Chamar a regra", "Trocar a função", "Nomear o contrato", "Aceitar espera", "Criar o caso de uso", "Conectar a implementação", "Testar com uma substituta", "Checkpoint: reconstruir o contrato"];
@@ -31,7 +33,7 @@ const LIMITS = [
   "Agora reúna as peças do módulo sem o ponto de partida.",
   "Compare sua reconstrução com o código real.",
 ];
-export const isModule2Goal = (goal: string): boolean => /triageclassifier|triageticket|m[oó]dulo\s*2|module\s*2|contrato.*classificador|classificador.*contrato/i.test(goal);
+export const isModule2Goal = (goal: string): boolean => /(?:^|\W)(?:triageclassifier|triageticket)(?:$|\W)|m[oó]dulo\s*2|module\s*2|contrato.*classificador|classificador.*contrato/i.test(goal);
 const QUICK: Record<Idea, string> = {
   "direct-call": "A função triage recebe um ticket e devolve a categoria calculada pela regra anterior.",
   "inject-function": "O classificador chega como parâmetro. Assim o chamador decide qual regra usar.",
@@ -82,10 +84,14 @@ function contractNarrative(idea: Idea, binding: Binding, previous: string, limit
 /** Planner reads declarations from the pinned source and returns pedagogy only, never stages. */
 export class StagePlanner {
   plan(goal: string, journey: Journey, moduleId: string, index: RepositoryIndex): StagePlan {
-    if (moduleId !== "m2" || journey.repo.owner !== "marcelotaparelli" || journey.repo.name !== "ops-triage-ai") throw new Error("Este gerador piloto atende somente o Module 2 do ops-triage-ai.");
+    if (journey.repo.owner !== "marcelotaparelli" || journey.repo.name !== "ops-triage-ai") throw new Error("Este gerador atende somente o repositório acompanhado nesta jornada.");
     const module = journey.modules.find((m) => m.id === moduleId);
     const chapter = journey.stages.find((s) => s.moduleId === moduleId && s.kind === "chapter");
     if (!module || !chapter || module.stageIds.length !== 1) throw new Error("Este módulo não é um capítulo legado único.");
+    if (chapter.referenceCode.some((file) => /implements TriageClassifier/.test(file.content) && /fetchImpl/.test(file.content)) &&
+        chapter.referenceCode.some((file) => /export function parse\w+Result\(/.test(file.content))) return planRemoteClassifier(goal, journey, moduleId, chapter, index);
+    if (chapter.originalCodeRefs.some((ref) => ref.symbol === "TriageDecision")) return planStructuredDecision(goal, journey, moduleId, chapter, index);
+    if (!chapter.referenceCode.some((file) => file.path === "triage-classifier.ts")) throw new Error("A estrutura solicitada ainda não é suportada pelo gerador de percursos deste repositório.");
     if (!isModule2Goal(goal)) throw new Error("O objetivo ainda não corresponde ao contrato deste módulo.");
     const evidence = ["TriageClassifier", "TriageTicket", "DeterministicTriageClassifier"].map((symbol) => {
       const declaration = index.declarations.find((d) => d.symbol === symbol && d.container === null);
@@ -111,7 +117,7 @@ export class StagePlanner {
     const rule = /export function (\w+)\(input: \w+\): \w+/.exec(ruleCode);
     if (!contract || !useCaseClass || !execute || !adapterClass || !rule || adapterClass[2] !== contract[1]) throw new Error("Não foi possível extrair o contrato executável do capítulo legado.");
     const binding: Binding = { contract: contract[1]!, method: contract[2]!, input: contract[3]!, output: contract[4]!, useCase: useCaseClass[1]!, execute: execute[1]!, adapter: adapterClass[1]!, rule: rule[1]! };
-    return { moduleId, goal, evidence, binding, steps: IDEAS.map((idea, i) => ({ idea, title: TITLES[i]!, limitation: LIMITS[i]! })) };
+    return { kind: "contract", moduleId, goal, evidence, binding, steps: IDEAS.map((idea, i) => ({ idea, title: TITLES[i]!, limitation: LIMITS[i]! })) };
   }
 
 }
@@ -177,6 +183,8 @@ const architecture = (idea: Idea) => {
 /** Generator turns each planned idea into a complete runnable exercise. */
 export class StageGenerator implements StageGenerationProvider {
   generate(plan: StagePlan, journey: Journey, index: RepositoryIndex): Stage[] {
+    if (plan.kind === "remote-classifier") return generateRemoteClassifier(plan, journey, index);
+    if (plan.kind === "structured-decision") return generateStructuredDecision(plan, journey, index);
     const chapter = journey.stages.find((s) => s.moduleId === plan.moduleId && s.kind === "chapter");
     const support = chapter?.referenceCode.find((f) => f.path === "triage.ts");
     if (!chapter || !support) throw new Error("A base do classificador anterior não foi encontrada.");

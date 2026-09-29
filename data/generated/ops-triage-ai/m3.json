@@ -1,0 +1,1648 @@
+{
+  "sha": "840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67",
+  "goal": "Aprender Module 3: decisão estruturada",
+  "plan": {
+    "kind": "structured-decision",
+    "moduleId": "m3",
+    "goal": "Aprender Module 3: decisão estruturada",
+    "evidence": [
+      {
+        "path": "src/domain/triage.ts",
+        "symbol": "ClassifierResult",
+        "container": null
+      },
+      {
+        "path": "src/domain/suggested-team.ts",
+        "symbol": "suggestedTeamForCategory",
+        "container": null
+      },
+      {
+        "path": "src/domain/triage-decision.ts",
+        "symbol": "TriageDecision",
+        "container": null
+      },
+      {
+        "path": "src/application/policies/hybrid-policy.ts",
+        "symbol": "decideSingle",
+        "container": "HybridPolicy"
+      },
+      {
+        "path": "src/domain/triage-decision.ts",
+        "symbol": "DecisionSource",
+        "container": null
+      },
+      {
+        "path": "src/domain/triage-decision.ts",
+        "symbol": "HumanReviewReason",
+        "container": null
+      },
+      {
+        "path": "src/domain/triage.ts",
+        "symbol": "Category",
+        "container": null
+      },
+      {
+        "path": "src/domain/triage.ts",
+        "symbol": "SuggestedTeam",
+        "container": null
+      }
+    ],
+    "names": {
+      "lookup": "suggestedTeamForCategory",
+      "result": "ClassifierResult",
+      "decision": "TriageDecision",
+      "source": "DecisionSource",
+      "reason": "HumanReviewReason",
+      "decide": "decideSingle",
+      "category": "Category",
+      "team": "SuggestedTeam"
+    },
+    "entries": [
+      {
+        "category": "INCIDENT",
+        "team": "INFRASTRUCTURE"
+      },
+      {
+        "category": "BUG",
+        "team": "DEVELOPMENT"
+      },
+      {
+        "category": "ACCESS",
+        "team": "SUPPORT"
+      },
+      {
+        "category": "SUPPORT",
+        "team": "SUPPORT"
+      },
+      {
+        "category": "OTHER",
+        "team": "HUMAN_REVIEW"
+      }
+    ],
+    "sourceValues": [
+      "DETERMINISTIC",
+      "LLM"
+    ],
+    "reasonValues": [
+      "LOW_CONFIDENCE",
+      "HIGH_SEVERITY"
+    ]
+  },
+  "stages": [
+    {
+      "id": "ops-triage-ai.m3-01",
+      "order": 20,
+      "moduleId": "m3",
+      "kind": "micro",
+      "title": "Roteamento inicial",
+      "goal": "Crie a função de time sugerido para INCIDENT e um valor padrão.",
+      "problem": "A categoria e os demais dados ainda não definem sozinhos o encaminhamento. Nesta etapa, crie a função de encaminhamento inicial. Assim, INCIDENT vai para infraestrutura e os demais casos apontam para o time HUMAN_REVIEW.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "team",
+            "label": "SuggestedTeam",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          }
+        ],
+        "edges": [
+          {
+            "from": "category",
+            "to": "team",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "decision.ts",
+          "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return category === Category.INCIDENT ? SuggestedTeam.INFRASTRUCTURE : SuggestedTeam.HUMAN_REVIEW;\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return category ===",
+          "note": "A categoria já pode orientar o primeiro encaminhamento."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "step-1",
+          "title": "Roteamento inicial",
+          "quick": "A condição compara category com INCIDENT e retorna o time correspondente; o outro ramo é o destino padrão.",
+          "normal": "No projeto real, suggestedTeamForCategory aparece em src/domain/suggested-team.ts. O Replay usa os valores necessários para praticar esta relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/domain/suggested-team.ts",
+          "startLine": 13,
+          "endLine": 15,
+          "symbol": "suggestedTeamForCategory",
+          "replayFile": "decision.ts",
+          "note": "O Replay conserva a relação e reduz categorias, origens e motivos ao conjunto usado neste percurso.",
+          "snippet": "export function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return SUGGESTED_TEAM_BY_CATEGORY[category];\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/domain/suggested-team.ts#L13-L15"
+        }
+      ],
+      "exercise": {
+        "instructions": "Crie a função de time sugerido para INCIDENT e um valor padrão.",
+        "starterFiles": [
+          {
+            "path": "decision.ts",
+            "content": ""
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return category === Category.INCIDENT ? SuggestedTeam.INFRASTRUCTURE : SuggestedTeam.HUMAN_REVIEW;\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { suggestedTeamForCategory } from \"./decision.ts\";\ntest(\"primeiro destino\", () => expect(suggestedTeamForCategory(Category.INCIDENT)).toBe(SuggestedTeam.INFRASTRUCTURE));"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "decision.ts",
+          "src/domain/suggested-team.ts",
+          "triage.ts"
+        ],
+        "concepts": [],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Uma condição isolada não cobre todas as categorias.",
+      "summary": {
+        "added": [
+          "Roteamento inicial"
+        ],
+        "why": "Uma condição isolada não cobre todas as categorias.",
+        "flow": [
+          "Category",
+          "SuggestedTeam"
+        ]
+      },
+      "context": "Até aqui, classificamos tickets e organizamos a chamada ao classificador. O código de apoio deste módulo também descreve prioridade, risco e confiança. No atendimento real, a categoria precisa apontar para um time responsável."
+    },
+    {
+      "id": "ops-triage-ai.m3-02",
+      "order": 21,
+      "moduleId": "m3",
+      "kind": "micro",
+      "title": "Tabela completa por categoria",
+      "goal": "Troque a condição por um Readonly<Record<Category, SuggestedTeam>> com todas as categorias.",
+      "problem": "Uma condição isolada não cobre todas as categorias. Nesta etapa, troque a condição por uma tabela completa. Assim, cada categoria consulta seu time sugerido.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "record-type"
+      ],
+      "prerequisites": [],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "team",
+            "label": "SuggestedTeam",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          }
+        ],
+        "edges": [
+          {
+            "from": "category",
+            "to": "team",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "decision.ts",
+          "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return TEAM_BY_CATEGORY",
+          "note": "Record exige uma entrada para cada categoria, e a função só consulta a tabela."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "step-2",
+          "conceptId": "record-type",
+          "title": "Tabela completa por categoria",
+          "quick": "Readonly<Record<Category, SuggestedTeam>> exige uma entrada por categoria; a função lê a tabela pela chave category.",
+          "normal": "No projeto real, suggestedTeamForCategory aparece em src/domain/suggested-team.ts. O Replay usa os valores necessários para praticar esta relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/domain/suggested-team.ts",
+          "startLine": 13,
+          "endLine": 15,
+          "symbol": "suggestedTeamForCategory",
+          "replayFile": "decision.ts",
+          "note": "O Replay conserva a relação e reduz categorias, origens e motivos ao conjunto usado neste percurso.",
+          "snippet": "export function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return SUGGESTED_TEAM_BY_CATEGORY[category];\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/domain/suggested-team.ts#L13-L15"
+        }
+      ],
+      "exercise": {
+        "instructions": "Troque a condição por um Readonly<Record<Category, SuggestedTeam>> com todas as categorias.",
+        "starterFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return category === Category.INCIDENT ? SuggestedTeam.INFRASTRUCTURE : SuggestedTeam.HUMAN_REVIEW;\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { suggestedTeamForCategory } from \"./decision.ts\";\ntest(\"tabela completa\", () => { expect(suggestedTeamForCategory(Category.INCIDENT)).toBe(SuggestedTeam.INFRASTRUCTURE); expect(suggestedTeamForCategory(Category.BUG)).toBe(SuggestedTeam.DEVELOPMENT); expect(suggestedTeamForCategory(Category.ACCESS)).toBe(SuggestedTeam.SUPPORT); expect(suggestedTeamForCategory(Category.SUPPORT)).toBe(SuggestedTeam.SUPPORT); expect(suggestedTeamForCategory(Category.OTHER)).toBe(SuggestedTeam.HUMAN_REVIEW); });"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "record-lookup",
+          "name": "Record como tabela",
+          "summary": "Exige uma entrada por chave e permite consulta direta.",
+          "example": "type Color = \"red\" | \"blue\"; const labels: Record<Color, string> = { red: \"vermelho\", blue: \"azul\" };",
+          "whenToUse": "Quando cada categoria precisa de um destino obrigatório."
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "decision.ts",
+          "src/domain/suggested-team.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "record-type"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.m3-01"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "O time está definido; falta marcar a origem da decisão.",
+      "summary": {
+        "added": [
+          "Tabela completa por categoria"
+        ],
+        "why": "O time está definido; falta marcar a origem da decisão.",
+        "flow": [
+          "Category",
+          "SuggestedTeam"
+        ]
+      },
+      "context": "Na etapa anterior, INCIDENT vai para infraestrutura e os demais casos apontam para o time HUMAN_REVIEW. Cada categoria do resultado precisa ter um destino próprio."
+    },
+    {
+      "id": "ops-triage-ai.m3-03",
+      "order": 22,
+      "moduleId": "m3",
+      "kind": "micro",
+      "title": "Origem da decisão",
+      "goal": "Declare DecisionSource com as duas origens usadas neste percurso.",
+      "problem": "O time está definido; falta marcar a origem da decisão. Nesta etapa, declare DecisionSource com as duas origens. Assim, o resultado poderá distinguir regra determinística e LLM.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [
+        "record-type"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "team",
+            "label": "SuggestedTeam",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          }
+        ],
+        "edges": [
+          {
+            "from": "category",
+            "to": "team",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "decision.ts",
+          "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "export enum DecisionSource",
+          "note": "DecisionSource nomeia as duas origens que uma decisão poderá registrar."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "step-3",
+          "title": "Origem da decisão",
+          "quick": "O enum DecisionSource dá nomes estáveis a DETERMINISTIC e LLM; ainda não altera a função de encaminhamento.",
+          "normal": "No projeto real, DecisionSource aparece em src/domain/triage-decision.ts. O Replay usa os valores necessários para praticar esta relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/domain/triage-decision.ts",
+          "startLine": 3,
+          "endLine": 8,
+          "symbol": "DecisionSource",
+          "replayFile": "decision.ts",
+          "note": "O Replay conserva a relação e reduz categorias, origens e motivos ao conjunto usado neste percurso.",
+          "snippet": "export enum DecisionSource {\n  DETERMINISTIC = \"DETERMINISTIC\",\n  LLM = \"LLM\",\n  HYBRID = \"HYBRID\",\n  DETERMINISTIC_FALLBACK = \"DETERMINISTIC_FALLBACK\",\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/domain/triage-decision.ts#L3-L8"
+        }
+      ],
+      "exercise": {
+        "instructions": "Declare DecisionSource com as duas origens usadas neste percurso.",
+        "starterFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { suggestedTeamForCategory, DecisionSource } from \"./decision.ts\";\ntest(\"origem explícita\", () => { expect(DecisionSource.DETERMINISTIC).toBe(\"DETERMINISTIC\"); expect(DecisionSource.LLM).toBe(\"LLM\"); });"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "decision.ts",
+          "src/domain/triage-decision.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "record-type"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.m3-01",
+          "ops-triage-ai.m3-02"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "A origem está explícita; ainda faltam nomes para os motivos de revisão.",
+      "summary": {
+        "added": [
+          "Origem da decisão"
+        ],
+        "why": "A origem está explícita; ainda faltam nomes para os motivos de revisão.",
+        "flow": [
+          "Category",
+          "SuggestedTeam"
+        ]
+      },
+      "context": "Na etapa anterior, cada categoria consulta seu time sugerido. O encaminhamento já tem destino, mas a operação também precisa registrar de onde veio a decisão."
+    },
+    {
+      "id": "ops-triage-ai.m3-04",
+      "order": 23,
+      "moduleId": "m3",
+      "kind": "micro",
+      "title": "Motivos de revisão",
+      "goal": "Declare HumanReviewReason para baixa confiança e alta severidade.",
+      "problem": "A origem está explícita; ainda faltam nomes para os motivos de revisão. Nesta etapa, declare HumanReviewReason com os dois motivos. Assim, baixa confiança e alta severidade terão nomes explícitos.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "human-review"
+      ],
+      "prerequisites": [
+        "record-type"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "team",
+            "label": "SuggestedTeam",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          }
+        ],
+        "edges": [
+          {
+            "from": "category",
+            "to": "team",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "decision.ts",
+          "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "export enum HumanReviewReason",
+          "note": "Motivos explícitos explicam por que alguém deve revisar."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "step-4",
+          "conceptId": "human-review",
+          "title": "Motivos de revisão",
+          "quick": "O enum HumanReviewReason define LOW_CONFIDENCE e HIGH_SEVERITY para uso nas próximas decisões.",
+          "normal": "No projeto real, HumanReviewReason aparece em src/domain/triage-decision.ts. O Replay usa os valores necessários para praticar esta relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/domain/triage-decision.ts",
+          "startLine": 10,
+          "endLine": 15,
+          "symbol": "HumanReviewReason",
+          "replayFile": "decision.ts",
+          "note": "O Replay conserva a relação e reduz categorias, origens e motivos ao conjunto usado neste percurso.",
+          "snippet": "export enum HumanReviewReason {\n  CLASSIFIER_DISAGREEMENT = \"CLASSIFIER_DISAGREEMENT\",\n  LOW_CONFIDENCE = \"LOW_CONFIDENCE\",\n  HIGH_SEVERITY = \"HIGH_SEVERITY\",\n  LLM_UNAVAILABLE = \"LLM_UNAVAILABLE\",\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/domain/triage-decision.ts#L10-L15"
+        }
+      ],
+      "exercise": {
+        "instructions": "Declare HumanReviewReason para baixa confiança e alta severidade.",
+        "starterFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { suggestedTeamForCategory, DecisionSource, HumanReviewReason } from \"./decision.ts\";\ntest(\"motivos explícitos\", () => { expect(HumanReviewReason.LOW_CONFIDENCE).toBe(\"LOW_CONFIDENCE\"); expect(HumanReviewReason.HIGH_SEVERITY).toBe(\"HIGH_SEVERITY\"); });"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "decision.ts",
+          "src/domain/triage-decision.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "record-type",
+          "human-review"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.m3-01",
+          "ops-triage-ai.m3-02",
+          "ops-triage-ai.m3-03"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Os motivos têm nome; falta definir a forma da decisão que os carrega.",
+      "summary": {
+        "added": [
+          "Motivos de revisão"
+        ],
+        "why": "Os motivos têm nome; falta definir a forma da decisão que os carrega.",
+        "flow": [
+          "Category",
+          "SuggestedTeam"
+        ]
+      },
+      "context": "Na etapa anterior, o resultado poderá distinguir regra determinística e LLM. Uma decisão que pede revisão deve dizer qual alerta a motivou."
+    },
+    {
+      "id": "ops-triage-ai.m3-05",
+      "order": 24,
+      "moduleId": "m3",
+      "kind": "micro",
+      "title": "Forma da decisão",
+      "goal": "Declare TriageDecision estendendo ClassifierResult e acrescente revisão, origem e motivos.",
+      "problem": "Os motivos têm nome; falta definir a forma da decisão que os carrega. Nesta etapa, declare TriageDecision estendendo ClassifierResult. Assim, a decisão preserva o resultado e inclui revisão, origem e motivos.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "structured-result"
+      ],
+      "prerequisites": [
+        "record-type",
+        "human-review"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "team",
+            "label": "SuggestedTeam",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "result",
+            "label": "ClassifierResult",
+            "kind": "data",
+            "col": 0,
+            "row": 1
+          },
+          {
+            "id": "decision",
+            "label": "TriageDecision",
+            "kind": "data",
+            "col": 2,
+            "row": 1
+          }
+        ],
+        "edges": [
+          {
+            "from": "category",
+            "to": "team",
+            "rel": "flows_to"
+          },
+          {
+            "from": "result",
+            "to": "decision",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "decision.ts",
+          "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "export interface TriageDecision",
+          "note": "A decisão conserva o resultado e acrescenta metadados para ação e revisão."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "step-5",
+          "conceptId": "structured-result",
+          "title": "Forma da decisão",
+          "quick": "extends mantém os campos de ClassifierResult; os três campos novos descrevem a revisão e sua origem.",
+          "normal": "No projeto real, TriageDecision aparece em src/domain/triage-decision.ts. O Replay usa os valores necessários para praticar esta relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/domain/triage-decision.ts",
+          "startLine": 17,
+          "endLine": 21,
+          "symbol": "TriageDecision",
+          "replayFile": "decision.ts",
+          "note": "O Replay conserva a relação e reduz categorias, origens e motivos ao conjunto usado neste percurso.",
+          "snippet": "export interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/domain/triage-decision.ts#L17-L21"
+        }
+      ],
+      "exercise": {
+        "instructions": "Declare TriageDecision estendendo ClassifierResult e acrescente revisão, origem e motivos.",
+        "starterFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { suggestedTeamForCategory, DecisionSource, HumanReviewReason } from \"./decision.ts\";\ntest(\"formato preservado\", () => expect(DecisionSource.DETERMINISTIC).toBe(\"DETERMINISTIC\"));"
+        },
+        "typecheck": {
+          "files": [
+            {
+              "path": "check.ts",
+              "content": "import type { TriageDecision } from \"./decision.ts\";\nimport { DecisionSource } from \"./decision.ts\";\nconst decision = {} as TriageDecision;\nconst origin: DecisionSource = decision.decisionSource;\nvoid origin;\n"
+            }
+          ]
+        }
+      },
+      "toolbox": [
+        {
+          "id": "extends",
+          "name": "interface extends",
+          "summary": "Acrescenta campos mantendo o formato anterior.",
+          "example": "interface Result { ok: boolean } interface Decision extends Result { reviewed: boolean }"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "decision.ts",
+          "src/domain/triage-decision.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "record-type",
+          "human-review",
+          "structured-result"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.m3-01",
+          "ops-triage-ai.m3-02",
+          "ops-triage-ai.m3-03",
+          "ops-triage-ai.m3-04"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "O tipo existe; falta construir uma decisão concreta.",
+      "summary": {
+        "added": [
+          "Forma da decisão"
+        ],
+        "why": "O tipo existe; falta construir uma decisão concreta.",
+        "flow": [
+          "Category",
+          "SuggestedTeam",
+          "ClassifierResult",
+          "TriageDecision"
+        ]
+      },
+      "context": "Na etapa anterior, baixa confiança e alta severidade terão nomes explícitos. O resultado já traz categoria, prioridade, risco e time; agora precisa carregar dados da decisão."
+    },
+    {
+      "id": "ops-triage-ai.m3-06",
+      "order": 25,
+      "moduleId": "m3",
+      "kind": "micro",
+      "title": "Decisão sem alerta",
+      "goal": "Crie decideSingle: copie o resultado, registre a origem e inicie sem motivos.",
+      "problem": "O tipo existe; falta construir uma decisão concreta. Nesta etapa, crie decideSingle sem alertas. Assim, uma resposta comum conserva os dados de entrada e não pede revisão.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [
+        "record-type",
+        "human-review",
+        "structured-result"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "team",
+            "label": "SuggestedTeam",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "result",
+            "label": "ClassifierResult",
+            "kind": "data",
+            "col": 0,
+            "row": 1
+          },
+          {
+            "id": "decision",
+            "label": "TriageDecision",
+            "kind": "data",
+            "col": 2,
+            "row": 1
+          }
+        ],
+        "edges": [
+          {
+            "from": "category",
+            "to": "team",
+            "rel": "flows_to"
+          },
+          {
+            "from": "result",
+            "to": "decision",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "decision.ts",
+          "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\nexport function decideSingle(result: ClassifierResult, origin: DecisionSource): TriageDecision {\n  const reviewReasons: HumanReviewReason[] = [];\n  return { ...result, requiresHumanReview: false, decisionSource: origin, reviewReasons };\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "return { ...result",
+          "note": "Um resultado confiante e de baixa severidade dispensa revisão."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "step-6",
+          "title": "Decisão sem alerta",
+          "quick": "O spread copia os campos de result; a função acrescenta origem, lista vazia e requiresHumanReview falso.",
+          "normal": "No projeto real, decideSingle aparece em src/application/policies/hybrid-policy.ts. O Replay usa os valores necessários para praticar esta relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/policies/hybrid-policy.ts",
+          "startLine": 54,
+          "endLine": 56,
+          "symbol": "decideSingle",
+          "replayFile": "decision.ts",
+          "note": "O Replay conserva a relação e reduz categorias, origens e motivos ao conjunto usado neste percurso.",
+          "snippet": "  decideSingle(result: ClassifierResult, source: SingleDecisionSource): TriageDecision {\n    return decision(result, source, reviewReasons([result], false, false));\n  }",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/policies/hybrid-policy.ts#L54-L56"
+        }
+      ],
+      "exercise": {
+        "instructions": "Crie decideSingle: copie o resultado, registre a origem e inicie sem motivos.",
+        "starterFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\nexport function decideSingle(result: ClassifierResult, origin: DecisionSource): TriageDecision {\n  const reviewReasons: HumanReviewReason[] = [];\n  return { ...result, requiresHumanReview: false, decisionSource: origin, reviewReasons };\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { suggestedTeamForCategory, DecisionSource, HumanReviewReason, decideSingle } from \"./decision.ts\";\nconst base = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, suggestedTeam: SuggestedTeam.INFRASTRUCTURE, confidence: 0.9 as const, summary: \"ticket\", rationale: \"regra\" };\ntest(\"decisão sem alerta\", () => { const input = { ...base }; expect(decideSingle(input, DecisionSource.DETERMINISTIC)).toEqual({ ...input, requiresHumanReview: false, decisionSource: DecisionSource.DETERMINISTIC, reviewReasons: [] }); expect(input).toEqual(base); });"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "spread",
+          "name": "Spread em objeto",
+          "summary": "Copia campos para um novo objeto.",
+          "example": "const result = { ok: true }; const decision = { ...result, reviewed: false };"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "decision.ts",
+          "src/application/policies/hybrid-policy.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "record-type",
+          "human-review",
+          "structured-result"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.m3-01",
+          "ops-triage-ai.m3-02",
+          "ops-triage-ai.m3-03",
+          "ops-triage-ai.m3-04",
+          "ops-triage-ai.m3-05"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Uma resposta confiante funciona; baixa confiança ainda passa sozinha.",
+      "summary": {
+        "added": [
+          "Decisão sem alerta"
+        ],
+        "why": "Uma resposta confiante funciona; baixa confiança ainda passa sozinha.",
+        "flow": [
+          "Category",
+          "SuggestedTeam",
+          "ClassifierResult",
+          "TriageDecision"
+        ]
+      },
+      "context": "Na etapa anterior, a decisão preserva o resultado e inclui revisão, origem e motivos. Com o formato definido, o fluxo precisa produzir uma decisão concreta para cada resultado."
+    },
+    {
+      "id": "ops-triage-ai.m3-07",
+      "order": 26,
+      "moduleId": "m3",
+      "kind": "micro",
+      "title": "Baixa confiança pede revisão",
+      "goal": "Inclua LOW_CONFIDENCE quando confidence for 0.5 e derive requiresHumanReview da lista.",
+      "problem": "Uma resposta confiante funciona; baixa confiança ainda passa sozinha. Nesta etapa, registre LOW_CONFIDENCE e derive o booleano da lista. Assim, baixa confiança marca a decisão para uma pessoa revisar.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [
+        "confidence"
+      ],
+      "prerequisites": [
+        "record-type",
+        "human-review",
+        "structured-result"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "team",
+            "label": "SuggestedTeam",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "result",
+            "label": "ClassifierResult",
+            "kind": "data",
+            "col": 0,
+            "row": 1
+          },
+          {
+            "id": "decision",
+            "label": "TriageDecision",
+            "kind": "data",
+            "col": 2,
+            "row": 1
+          }
+        ],
+        "edges": [
+          {
+            "from": "category",
+            "to": "team",
+            "rel": "flows_to"
+          },
+          {
+            "from": "result",
+            "to": "decision",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "decision.ts",
+          "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\nexport function decideSingle(result: ClassifierResult, origin: DecisionSource): TriageDecision {\n  const reviewReasons: HumanReviewReason[] = [];\n  if (result.confidence === 0.5) reviewReasons.push(HumanReviewReason.LOW_CONFIDENCE);\n  return { ...result, requiresHumanReview: reviewReasons.length > 0, decisionSource: origin, reviewReasons };\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "result.confidence === 0.5",
+          "note": "Confiança 0.5 indica que a decisão precisa de uma pessoa."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "step-7",
+          "conceptId": "confidence",
+          "title": "Baixa confiança pede revisão",
+          "quick": "O if acrescenta LOW_CONFIDENCE quando confidence é 0.5; reviewReasons.length > 0 define requiresHumanReview.",
+          "normal": "No projeto real, decideSingle aparece em src/application/policies/hybrid-policy.ts. O Replay usa os valores necessários para praticar esta relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/policies/hybrid-policy.ts",
+          "startLine": 54,
+          "endLine": 56,
+          "symbol": "decideSingle",
+          "replayFile": "decision.ts",
+          "note": "O Replay conserva a relação e reduz categorias, origens e motivos ao conjunto usado neste percurso.",
+          "snippet": "  decideSingle(result: ClassifierResult, source: SingleDecisionSource): TriageDecision {\n    return decision(result, source, reviewReasons([result], false, false));\n  }",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/policies/hybrid-policy.ts#L54-L56"
+        }
+      ],
+      "exercise": {
+        "instructions": "Inclua LOW_CONFIDENCE quando confidence for 0.5 e derive requiresHumanReview da lista.",
+        "starterFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\nexport function decideSingle(result: ClassifierResult, origin: DecisionSource): TriageDecision {\n  const reviewReasons: HumanReviewReason[] = [];\n  return { ...result, requiresHumanReview: false, decisionSource: origin, reviewReasons };\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\nexport function decideSingle(result: ClassifierResult, origin: DecisionSource): TriageDecision {\n  const reviewReasons: HumanReviewReason[] = [];\n  if (result.confidence === 0.5) reviewReasons.push(HumanReviewReason.LOW_CONFIDENCE);\n  return { ...result, requiresHumanReview: reviewReasons.length > 0, decisionSource: origin, reviewReasons };\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { suggestedTeamForCategory, DecisionSource, HumanReviewReason, decideSingle } from \"./decision.ts\";\nconst base = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, suggestedTeam: SuggestedTeam.INFRASTRUCTURE, confidence: 0.9 as const, summary: \"ticket\", rationale: \"regra\" };\ntest(\"baixa confiança\", () => { const result = decideSingle({ ...base, confidence: 0.5 }, DecisionSource.LLM); expect(result.reviewReasons).toEqual([HumanReviewReason.LOW_CONFIDENCE]); expect(result.requiresHumanReview).toBe(true); });"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "array-push",
+          "name": "Array.push",
+          "summary": "Acrescenta um motivo no fim, preservando a ordem.",
+          "example": "const reasons: string[] = []; reasons.push(\"LOW_CONFIDENCE\");"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "decision.ts",
+          "src/application/policies/hybrid-policy.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "record-type",
+          "human-review",
+          "structured-result",
+          "confidence"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.m3-01",
+          "ops-triage-ai.m3-02",
+          "ops-triage-ai.m3-03",
+          "ops-triage-ai.m3-04",
+          "ops-triage-ai.m3-05",
+          "ops-triage-ai.m3-06"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "A incerteza pede revisão; alta severidade ainda não pede.",
+      "summary": {
+        "added": [
+          "Baixa confiança pede revisão"
+        ],
+        "why": "A incerteza pede revisão; alta severidade ainda não pede.",
+        "flow": [
+          "Category",
+          "SuggestedTeam",
+          "ClassifierResult",
+          "TriageDecision"
+        ]
+      },
+      "context": "Na etapa anterior, uma resposta comum conserva os dados de entrada e não pede revisão. Uma resposta com confiança 0.5 não deve seguir sem revisão."
+    },
+    {
+      "id": "ops-triage-ai.m3-08",
+      "order": 27,
+      "moduleId": "m3",
+      "kind": "micro",
+      "title": "Alta severidade pede revisão",
+      "goal": "Inclua HIGH_SEVERITY para prioridade HIGH ou CRITICAL, ou risco HIGH, após LOW_CONFIDENCE.",
+      "problem": "A incerteza pede revisão; alta severidade ainda não pede. Nesta etapa, registre HIGH_SEVERITY após o motivo de baixa confiança. Assim, qualquer uma dessas condições pede revisão, com ordem estável quando ambas ocorrem.",
+      "examples": [],
+      "requirements": [],
+      "estimatedMinutes": 3,
+      "introduces": [],
+      "prerequisites": [
+        "record-type",
+        "human-review",
+        "structured-result",
+        "confidence"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "team",
+            "label": "SuggestedTeam",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "result",
+            "label": "ClassifierResult",
+            "kind": "data",
+            "col": 0,
+            "row": 1
+          },
+          {
+            "id": "decision",
+            "label": "TriageDecision",
+            "kind": "data",
+            "col": 2,
+            "row": 1
+          }
+        ],
+        "edges": [
+          {
+            "from": "category",
+            "to": "team",
+            "rel": "flows_to"
+          },
+          {
+            "from": "result",
+            "to": "decision",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "decision.ts",
+          "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\nexport function decideSingle(result: ClassifierResult, origin: DecisionSource): TriageDecision {\n  const reviewReasons: HumanReviewReason[] = [];\n  if (result.confidence === 0.5) reviewReasons.push(HumanReviewReason.LOW_CONFIDENCE);\n  if (result.priority === Priority.HIGH || result.priority === Priority.CRITICAL || result.risk === Risk.HIGH) reviewReasons.push(HumanReviewReason.HIGH_SEVERITY);\n  return { ...result, requiresHumanReview: reviewReasons.length > 0, decisionSource: origin, reviewReasons };\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "result.priority === Priority.HIGH",
+          "note": "A ordem dos motivos permanece estável mesmo quando dois alertas ocorrem juntos."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "step-8",
+          "title": "Alta severidade pede revisão",
+          "quick": "O segundo if testa HIGH, CRITICAL e risco HIGH; push acrescenta HIGH_SEVERITY depois de LOW_CONFIDENCE.",
+          "normal": "No projeto real, decideSingle aparece em src/application/policies/hybrid-policy.ts. O Replay usa os valores necessários para praticar esta relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/policies/hybrid-policy.ts",
+          "startLine": 54,
+          "endLine": 56,
+          "symbol": "decideSingle",
+          "replayFile": "decision.ts",
+          "note": "O Replay conserva a relação e reduz categorias, origens e motivos ao conjunto usado neste percurso.",
+          "snippet": "  decideSingle(result: ClassifierResult, source: SingleDecisionSource): TriageDecision {\n    return decision(result, source, reviewReasons([result], false, false));\n  }",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/policies/hybrid-policy.ts#L54-L56"
+        }
+      ],
+      "exercise": {
+        "instructions": "Inclua HIGH_SEVERITY para prioridade HIGH ou CRITICAL, ou risco HIGH, após LOW_CONFIDENCE.",
+        "starterFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\nexport function decideSingle(result: ClassifierResult, origin: DecisionSource): TriageDecision {\n  const reviewReasons: HumanReviewReason[] = [];\n  if (result.confidence === 0.5) reviewReasons.push(HumanReviewReason.LOW_CONFIDENCE);\n  return { ...result, requiresHumanReview: reviewReasons.length > 0, decisionSource: origin, reviewReasons };\n}\n"
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\nexport function decideSingle(result: ClassifierResult, origin: DecisionSource): TriageDecision {\n  const reviewReasons: HumanReviewReason[] = [];\n  if (result.confidence === 0.5) reviewReasons.push(HumanReviewReason.LOW_CONFIDENCE);\n  if (result.priority === Priority.HIGH || result.priority === Priority.CRITICAL || result.risk === Risk.HIGH) reviewReasons.push(HumanReviewReason.HIGH_SEVERITY);\n  return { ...result, requiresHumanReview: reviewReasons.length > 0, decisionSource: origin, reviewReasons };\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { suggestedTeamForCategory, DecisionSource, HumanReviewReason, decideSingle } from \"./decision.ts\";\nconst base = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, suggestedTeam: SuggestedTeam.INFRASTRUCTURE, confidence: 0.9 as const, summary: \"ticket\", rationale: \"regra\" };\ntest(\"alta severidade e ordem\", () => { for (const change of [{ priority: Priority.HIGH }, { priority: Priority.CRITICAL }, { risk: Risk.HIGH }]) expect(decideSingle({ ...base, ...change }, DecisionSource.DETERMINISTIC).reviewReasons).toEqual([HumanReviewReason.HIGH_SEVERITY]); expect(decideSingle({ ...base, confidence: 0.5, risk: Risk.HIGH }, DecisionSource.LLM).reviewReasons).toEqual([HumanReviewReason.LOW_CONFIDENCE, HumanReviewReason.HIGH_SEVERITY]); });"
+        }
+      },
+      "toolbox": [
+        {
+          "id": "array-push",
+          "name": "Array.push",
+          "summary": "Acrescenta um motivo no fim, preservando a ordem.",
+          "example": "const reasons: string[] = []; reasons.push(\"LOW_CONFIDENCE\");"
+        }
+      ],
+      "tutorContext": {
+        "relevantFiles": [
+          "decision.ts",
+          "src/application/policies/hybrid-policy.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "record-type",
+          "human-review",
+          "structured-result",
+          "confidence"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.m3-01",
+          "ops-triage-ai.m3-02",
+          "ops-triage-ai.m3-03",
+          "ops-triage-ai.m3-04",
+          "ops-triage-ai.m3-05",
+          "ops-triage-ai.m3-06",
+          "ops-triage-ai.m3-07"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "limitation": "Agora reconstrua a decisão completa sem o ponto de partida.",
+      "summary": {
+        "added": [
+          "Alta severidade pede revisão"
+        ],
+        "why": "Agora reconstrua a decisão completa sem o ponto de partida.",
+        "flow": [
+          "Category",
+          "SuggestedTeam",
+          "ClassifierResult",
+          "TriageDecision"
+        ]
+      },
+      "context": "Na etapa anterior, baixa confiança marca a decisão para uma pessoa revisar. Prioridade alta ou crítica e risco alto também exigem atenção humana."
+    },
+    {
+      "id": "ops-triage-ai.m3-99",
+      "order": 28,
+      "moduleId": "m3",
+      "kind": "checkpoint",
+      "title": "Checkpoint: reconstruir a decisão",
+      "goal": "Reconstruir a tabela e a decisão completa do zero.",
+      "problem": "Agora reconstrua a decisão completa sem o ponto de partida. Nesta etapa, reconstrua decision.ts do zero. Assim, a tabela e a decisão completa voltam a funcionar juntas.",
+      "examples": [],
+      "requirements": [
+        "Mapeie todas as categorias.",
+        "Guarde a origem.",
+        "Registre baixa confiança e alta severidade em ordem."
+      ],
+      "estimatedMinutes": 6,
+      "introduces": [],
+      "prerequisites": [
+        "record-type",
+        "human-review",
+        "structured-result",
+        "confidence"
+      ],
+      "architecture": {
+        "nodes": [
+          {
+            "id": "category",
+            "label": "Category",
+            "kind": "data",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "team",
+            "label": "SuggestedTeam",
+            "kind": "data",
+            "col": 2,
+            "row": 0
+          },
+          {
+            "id": "result",
+            "label": "ClassifierResult",
+            "kind": "data",
+            "col": 0,
+            "row": 1
+          },
+          {
+            "id": "decision",
+            "label": "TriageDecision",
+            "kind": "data",
+            "col": 2,
+            "row": 1
+          }
+        ],
+        "edges": [
+          {
+            "from": "category",
+            "to": "team",
+            "rel": "flows_to"
+          },
+          {
+            "from": "result",
+            "to": "decision",
+            "rel": "flows_to"
+          }
+        ]
+      },
+      "referenceCode": [
+        {
+          "path": "decision.ts",
+          "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\nexport function decideSingle(result: ClassifierResult, origin: DecisionSource): TriageDecision {\n  const reviewReasons: HumanReviewReason[] = [];\n  if (result.confidence === 0.5) reviewReasons.push(HumanReviewReason.LOW_CONFIDENCE);\n  if (result.priority === Priority.HIGH || result.priority === Priority.CRITICAL || result.risk === Risk.HIGH) reviewReasons.push(HumanReviewReason.HIGH_SEVERITY);\n  return { ...result, requiresHumanReview: reviewReasons.length > 0, decisionSource: origin, reviewReasons };\n}\n"
+        }
+      ],
+      "lineNotes": [
+        {
+          "match": "reviewReasons.length > 0",
+          "note": "A revisão decorre dos motivos calculados."
+        }
+      ],
+      "explanation": [
+        {
+          "id": "checkpoint",
+          "title": "Reconstrua a decisão",
+          "quick": "A solução reúne a tabela, os enums, a interface e decideSingle; compare cada parte com o que praticou.",
+          "normal": "No projeto real, decideSingle aparece em src/application/policies/hybrid-policy.ts. O Replay usa os valores necessários para praticar esta relação."
+        }
+      ],
+      "originalCodeRefs": [
+        {
+          "path": "src/application/policies/hybrid-policy.ts",
+          "startLine": 54,
+          "endLine": 56,
+          "symbol": "decideSingle",
+          "replayFile": "decision.ts",
+          "note": "O Replay conserva a relação e reduz categorias, origens e motivos ao conjunto usado neste percurso.",
+          "snippet": "  decideSingle(result: ClassifierResult, source: SingleDecisionSource): TriageDecision {\n    return decision(result, source, reviewReasons([result], false, false));\n  }",
+          "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/policies/hybrid-policy.ts#L54-L56"
+        }
+      ],
+      "exercise": {
+        "instructions": "Reconstrua decision.ts inteiro: tabela exaustiva, enums, interface e decideSingle com os dois motivos.",
+        "starterFiles": [
+          {
+            "path": "decision.ts",
+            "content": ""
+          }
+        ],
+        "solutionFiles": [
+          {
+            "path": "decision.ts",
+            "content": "import { Category, SuggestedTeam, Priority, Risk, type ClassifierResult } from \"./triage.ts\";\nconst TEAM_BY_CATEGORY: Readonly<Record<Category, SuggestedTeam>> = {\n  [Category.INCIDENT]: SuggestedTeam.INFRASTRUCTURE, [Category.BUG]: SuggestedTeam.DEVELOPMENT,\n  [Category.ACCESS]: SuggestedTeam.SUPPORT, [Category.SUPPORT]: SuggestedTeam.SUPPORT, [Category.OTHER]: SuggestedTeam.HUMAN_REVIEW,\n};\nexport function suggestedTeamForCategory(category: Category): SuggestedTeam {\n  return TEAM_BY_CATEGORY[category];\n}\nexport enum DecisionSource { DETERMINISTIC = \"DETERMINISTIC\", LLM = \"LLM\" }\nexport enum HumanReviewReason { LOW_CONFIDENCE = \"LOW_CONFIDENCE\", HIGH_SEVERITY = \"HIGH_SEVERITY\" }\nexport interface TriageDecision extends ClassifierResult {\n  requiresHumanReview: boolean;\n  decisionSource: DecisionSource;\n  reviewReasons: HumanReviewReason[];\n}\nexport function decideSingle(result: ClassifierResult, origin: DecisionSource): TriageDecision {\n  const reviewReasons: HumanReviewReason[] = [];\n  if (result.confidence === 0.5) reviewReasons.push(HumanReviewReason.LOW_CONFIDENCE);\n  if (result.priority === Priority.HIGH || result.priority === Priority.CRITICAL || result.risk === Risk.HIGH) reviewReasons.push(HumanReviewReason.HIGH_SEVERITY);\n  return { ...result, requiresHumanReview: reviewReasons.length > 0, decisionSource: origin, reviewReasons };\n}\n"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "triage.ts",
+            "content": "export enum Category {\n  INCIDENT = \"INCIDENT\",\n  BUG = \"BUG\",\n  ACCESS = \"ACCESS\",\n  SUPPORT = \"SUPPORT\",\n  OTHER = \"OTHER\",\n}\n\nexport enum Priority {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n  CRITICAL = \"CRITICAL\",\n}\n\nexport enum Risk {\n  LOW = \"LOW\",\n  MEDIUM = \"MEDIUM\",\n  HIGH = \"HIGH\",\n}\n\nexport enum SuggestedTeam {\n  INFRASTRUCTURE = \"INFRASTRUCTURE\",\n  DEVELOPMENT = \"DEVELOPMENT\",\n  SUPPORT = \"SUPPORT\",\n  HUMAN_REVIEW = \"HUMAN_REVIEW\",\n}\n\nexport interface TicketInput {\n  title: string;\n  description: string;\n}\n\n// Três degraus, não um float: uma heurística não tem precisão de 0.83.\nexport type Confidence = 0.5 | 0.7 | 0.9;\n\n// O que qualquer classificador devolve.\nexport interface ClassifierResult {\n  category: Category;\n  priority: Priority;\n  risk: Risk;\n  suggestedTeam: SuggestedTeam;\n  confidence: Confidence;\n  summary: string;\n  rationale: string;\n}\n"
+          }
+        ],
+        "expose": [],
+        "testFile": {
+          "path": "tests.ts",
+          "content": "import { test, expect } from \"ownr:test\";\nimport { Category, SuggestedTeam, Priority, Risk } from \"./triage.ts\";\nimport { suggestedTeamForCategory, DecisionSource, HumanReviewReason, decideSingle } from \"./decision.ts\";\nconst base = { category: Category.INCIDENT, priority: Priority.LOW, risk: Risk.LOW, suggestedTeam: SuggestedTeam.INFRASTRUCTURE, confidence: 0.9 as const, summary: \"ticket\", rationale: \"regra\" };\ntest(\"alta severidade e ordem\", () => { for (const change of [{ priority: Priority.HIGH }, { priority: Priority.CRITICAL }, { risk: Risk.HIGH }]) expect(decideSingle({ ...base, ...change }, DecisionSource.DETERMINISTIC).reviewReasons).toEqual([HumanReviewReason.HIGH_SEVERITY]); expect(decideSingle({ ...base, confidence: 0.5, risk: Risk.HIGH }, DecisionSource.LLM).reviewReasons).toEqual([HumanReviewReason.LOW_CONFIDENCE, HumanReviewReason.HIGH_SEVERITY]); });"
+        }
+      },
+      "toolbox": [],
+      "tutorContext": {
+        "relevantFiles": [
+          "decision.ts",
+          "src/application/policies/hybrid-policy.ts",
+          "triage.ts"
+        ],
+        "concepts": [
+          "record-type",
+          "human-review",
+          "structured-result",
+          "confidence"
+        ],
+        "previousStages": [
+          "ops-triage-ai.m1-01",
+          "ops-triage-ai.m1-02",
+          "ops-triage-ai.m1-03",
+          "ops-triage-ai.m1-04",
+          "ops-triage-ai.m1-05",
+          "ops-triage-ai.m1-06",
+          "ops-triage-ai.m1-07",
+          "ops-triage-ai.m1-08",
+          "ops-triage-ai.m1-09",
+          "ops-triage-ai.m1-10",
+          "ops-triage-ai.m1-11",
+          "ops-triage-ai.m1-12",
+          "ops-triage-ai.m1-13",
+          "ops-triage-ai.m1-14",
+          "ops-triage-ai.m1-15",
+          "ops-triage-ai.m1-16",
+          "ops-triage-ai.m1-17",
+          "ops-triage-ai.m1-99",
+          "ops-triage-ai.02",
+          "ops-triage-ai.m3-01",
+          "ops-triage-ai.m3-02",
+          "ops-triage-ai.m3-03",
+          "ops-triage-ai.m3-04",
+          "ops-triage-ai.m3-05",
+          "ops-triage-ai.m3-06",
+          "ops-triage-ai.m3-07",
+          "ops-triage-ai.m3-08"
+        ]
+      },
+      "completionCriteria": [
+        {
+          "kind": "tests_pass"
+        }
+      ],
+      "checkpoint": {
+        "question": "Por que guardar motivos além do booleano de revisão?",
+        "answer": "Os motivos explicam a decisão e preservam a ordem estável quando há baixa confiança e alta severidade juntas."
+      },
+      "summary": {
+        "added": [
+          "decisão completa"
+        ],
+        "why": "Tornar o encaminhamento e a revisão reproduzíveis.",
+        "flow": [
+          "Category",
+          "SuggestedTeam",
+          "ClassifierResult",
+          "TriageDecision"
+        ]
+      },
+      "context": "Na etapa anterior, qualquer uma dessas condições pede revisão, com ordem estável quando ambas ocorrem. Agora é hora de reunir o encaminhamento e as regras de revisão."
+    }
+  ]
+}
