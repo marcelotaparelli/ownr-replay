@@ -14,6 +14,7 @@ import { TypecheckBusyError, type TypeChecker, type TypeDiagnostic } from "../sa
 import type { SandboxRunner } from "../sandbox/runner.ts";
 import { parseGithubRepoUrl } from "../services/repo-url.ts";
 import { isModule2Goal, type ModuleGenerationService } from "../services/stage-generation.ts";
+import type { TargetedJourneyStore } from "../services/targeted-journey.ts";
 import type { TutorService } from "../services/tutor.ts";
 import { HttpError, Router, json, readBody } from "./router.ts";
 
@@ -30,6 +31,7 @@ export type ApiDeps = {
   /** The real repository of each journey at its pinned SHA, indexed (architecture node → code). */
   codeIndexes: Map<string, RepositoryIndex>;
   generation?: ModuleGenerationService;
+  targeted?: TargetedJourneyStore;
 };
 
 const RunRequest = z.strictObject({ files: z.array(CodeFile).min(1).max(10) });
@@ -97,19 +99,31 @@ export function createApi(deps: ApiDeps): Router {
       const sameRepo = journeys.filter(
         (j) => j.repo.owner.toLowerCase() === repo.owner.toLowerCase() && j.repo.name.toLowerCase() === repo.name.toLowerCase(),
       );
-      const match = sameRepo.find((j) => j.goal.kind === goal.kind);
-      const candidateModule = sameRepo[0]?.modules.find((m) => m.id === "m2");
-      const canGenerateTarget = goal.kind === "specific_part" && Boolean(goal.target && isModule2Goal(goal.target) && candidateModule && deps.generation);
+      const match = sameRepo.find((j) => j.goal.kind === goal.kind && (goal.kind !== "specific_part" || j.goal.target?.toLowerCase() === goal.target?.toLowerCase()));
+      const journey = sameRepo.find((item) => item.goal.kind === "from_scratch");
+      const target = goal.kind === "specific_part" ? goal.target?.trim().toLowerCase() : undefined;
+      const candidateModule = journey?.modules.find((module) => {
+        const stages = journey.stages.filter((stage) => stage.moduleId === module.id);
+        if (!stages.length || !target) return false;
+        if (module.id === "m2" && isModule2Goal(target)) return true;
+        return stages.some((stage) => stage.originalCodeRefs.some((ref) => ref.symbol.toLowerCase() === target || ref.path.toLowerCase() === target) ||
+          stage.referenceCode.some((file) => file.path.toLowerCase() === target || file.content.toLowerCase().includes(`class ${target} `)));
+      });
+      const canGenerateTarget = Boolean(target && candidateModule && deps.generation && deps.targeted);
       const learnerId = LearnerId.safeParse(req.headers.get("x-learner-id"));
       repository.recordJourneyRequest({ learnerId: learnerId.success ? learnerId.data : null, owner: repo.owner, name: repo.name, goal, served: Boolean(match || canGenerateTarget) });
       logger.info("journey_requested", { repo: `${repo.owner}/${repo.name}`, goal: goal.kind, served: Boolean(match || canGenerateTarget) });
-      if (match) return json({ id: match.id, status: match.status });
-      if (canGenerateTarget && candidateModule && sameRepo[0] && goal.target) {
-        const journey = sameRepo[0];
-        if (candidateModule.stageIds.length > 1) return json({ id: journey.id, status: journey.status });
+      if (match) return json({ id: match.id, status: match.status, ...(match.goal.kind === "specific_part" ? { startOrder: 1 } : {}) });
+      if (canGenerateTarget && candidateModule && journey && goal.target) {
         try {
-          await publishModule(journey, "m2", goal.target);
-          return json({ id: journey.id, status: journey.status });
+          if (candidateModule.stageIds.length === 1) await publishModule(journey, candidateModule.id, goal.target);
+          const targeted = deps.targeted!.save(journey, candidateModule.id, goal.target);
+          journeys.push(targeted);
+          journeyById.set(targeted.id, targeted);
+          for (const stage of targeted.stages) stageById.set(stage.id, { journey: targeted, stage });
+          const index = deps.codeIndexes.get(journey.id);
+          if (index) deps.codeIndexes.set(targeted.id, index);
+          return json({ id: targeted.id, status: targeted.status, startOrder: 1 });
         } catch (error) {
           return json({ error: { code: "GENERATION_FAILED", message: error instanceof Error ? error.message : "Falha ao gerar o módulo." }, fallback: { id: journey.id } }, 422);
         }

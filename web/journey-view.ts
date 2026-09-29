@@ -334,8 +334,8 @@ export function renderHome(journeys: JourneyCard[], resume: { journey: JourneyCa
     message.replaceChildren(h("p", { class: "muted" }, "Verificando…"));
     api
       .createJourney(url.value, goal)
-      .then(({ id }) => {
-        location.hash = `#/j/${id}`;
+      .then(({ id, startOrder }) => {
+        location.hash = startOrder ? stageHref(id, startOrder) : `#/j/${id}`;
       })
       .catch((error: unknown) => {
         if (!(error instanceof ApiError)) return message.replaceChildren(h("p", { class: "fail" }, "Falha ao criar a jornada."));

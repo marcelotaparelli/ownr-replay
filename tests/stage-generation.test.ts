@@ -6,6 +6,7 @@ import { golden, testApp } from "./helpers.ts";
 import { indexRepository, originalDir } from "../src/services/code-map.ts";
 import { TypeChecker, locateTsc } from "../src/sandbox/typecheck.ts";
 import { ModuleGenerationService, StageGenerator, StagePlanner, StageValidator } from "../src/services/stage-generation.ts";
+import { TargetedJourneyStore } from "../src/services/targeted-journey.ts";
 import { noveltyReport } from "../src/services/curriculum-check.ts";
 import { stageCodeHighlights } from "../src/domain/line-diff.ts";
 
@@ -96,8 +97,59 @@ test("objetivo específico solicitado pela home publica Module 2 sem editar jour
   const app = testApp({ generation: service, typeChecker: checker });
   const response = await app.call("POST", "/api/journeys", { repoUrl: "https://github.com/marcelotaparelli/ops-triage-ai", goal: { kind: "specific_part", target: "TriageClassifier" } });
   expect(response.status).toBe(200);
-  expect((await response.json()).id).toBe("ops-triage-ai");
+  const requested = await response.json();
+  expect(requested.id.startsWith("ops-triage-ai--triageclassifier-")).toBe(true);
+  const scoped = await (await app.call("GET", `/api/journeys/${requested.id}`)).json();
+  expect(scoped.modules).toHaveLength(1);
+  expect(scoped.goal).toEqual({ kind: "specific_part", target: "TriageClassifier" });
   const journey = await (await app.call("GET", "/api/journeys/ops-triage-ai")).json();
   expect(journey.modules.find((m: { id: string }) => m.id === "m2").stageIds.length).toBe(8);
   app.repository.close();
+});
+
+test("solicitação específica do adapter remoto gera Module 4 e abre sua primeira etapa", async () => {
+  const root = mkdtempSync(join(tmpdir(), "replay-remote-generation-"));
+  const service = new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker));
+  const app = testApp({ generation: service, typeChecker: checker });
+  const response = await app.call("POST", "/api/journeys", { repoUrl: "https://github.com/marcelotaparelli/ops-triage-ai", goal: { kind: "specific_part", target: "OllamaTriageClassifier" } });
+  expect(response.status).toBe(200);
+  const requested = await response.json();
+  const journey = await (await app.call("GET", "/api/journeys/ops-triage-ai")).json();
+  const stages = journey.stages.filter((stage: { moduleId: string }) => stage.moduleId === "m4");
+  expect(requested.id.startsWith("ops-triage-ai--ollamatriageclassifier-")).toBe(true);
+  expect(requested.startOrder).toBe(1);
+  expect(stages).toHaveLength(11);
+  expect(stages.at(-1)?.kind).toBe("checkpoint");
+  const scoped = await (await app.call("GET", `/api/journeys/${requested.id}`)).json();
+  expect(scoped.modules).toHaveLength(1);
+  expect(scoped.stages).toHaveLength(11);
+  const first = await (await app.call("GET", `/api/stages/${scoped.stages[0].id}`)).json();
+  expect(first.originalCodeRefs[0].url).toContain(journey.repo.sha);
+  expect(service.restore(golden()).modules.find((module) => module.id === "m4")?.stageIds).toEqual(stages.map((stage: { id: string }) => stage.id));
+  app.repository.close();
+});
+
+test("estrutura não suportada mantém capítulo e comunica a limitação", async () => {
+  const root = mkdtempSync(join(tmpdir(), "replay-unsupported-generation-"));
+  const service = new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker));
+  const app = testApp({ generation: service, typeChecker: checker });
+  const response = await app.call("POST", "/api/journeys", { repoUrl: "https://github.com/marcelotaparelli/ops-triage-ai", goal: { kind: "specific_part", target: "PersistedTriageService" } });
+  expect(response.status).toBeGreaterThanOrEqual(400);
+  const journey = await (await app.call("GET", "/api/journeys/ops-triage-ai")).json();
+  expect(journey.modules.find((module: { id: string }) => module.id === "m6").stageIds).toEqual(["ops-triage-ai.06"]);
+  app.repository.close();
+});
+
+test("jornada específica restaurada conserva objetivo e etapas próprias", async () => {
+  const root = mkdtempSync(join(tmpdir(), "replay-target-restore-"));
+  const service = new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker));
+  const generated = await service.generate(golden(), "m4", "OllamaTriageClassifier", index);
+  const store = new TargetedJourneyStore(root);
+  const saved = store.save(generated, "m4", "OllamaTriageClassifier");
+  const restored = store.restore([service.restore(golden())]);
+  expect(restored).toHaveLength(1);
+  expect(restored[0]?.id).toBe(saved.id);
+  expect(restored[0]?.goal).toEqual({ kind: "specific_part", target: "OllamaTriageClassifier" });
+  expect(restored[0]?.stages[0]?.order).toBe(1);
+  expect(restored[0]?.stages.at(-1)?.kind).toBe("checkpoint");
 });
