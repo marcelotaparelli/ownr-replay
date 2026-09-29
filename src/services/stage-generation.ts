@@ -13,7 +13,8 @@ import { shownSnippets, snippetProblems } from "./curriculum-check.ts";
 import { stageNarrative } from "./stage-narrative.ts";
 import { generateStructuredDecision, planStructuredDecision, type StructuredDecisionPlan } from "./structured-decision-generation.ts";
 import { generateRemoteClassifier, planRemoteClassifier, type RemoteClassifierPlan } from "./remote-classifier-generation.ts";
-import { generateRequestTrace, planRequestTrace, type RequestTracePlan } from "./request-trace-generation.ts";
+import { generateRequestTrace, looksLikeTicketFlowGoal, planRequestTrace, type RequestTracePlan } from "./request-trace-generation.ts";
+import { generateDiscoveredFlow, planDiscoveredFlow, type DiscoveredFlowPlan } from "./discovered-flow-generation.ts";
 
 /** One narrow provider contract. Other generators can replace this without entering the API or core. */
 export interface StageGenerationProvider {
@@ -21,7 +22,7 @@ export interface StageGenerationProvider {
 }
 
 type Binding = { contract: string; method: string; input: string; output: string; useCase: string; execute: string; adapter: string; rule: string };
-export type StagePlan = { kind: "contract"; moduleId: string; goal: string; evidence: { path: string; symbol: string }[]; binding: Binding; steps: { idea: Idea; title: string; limitation: string }[] } | StructuredDecisionPlan | RemoteClassifierPlan | RequestTracePlan;
+export type StagePlan = { kind: "contract"; moduleId: string; goal: string; evidence: { path: string; symbol: string }[]; binding: Binding; steps: { idea: Idea; title: string; limitation: string }[] } | StructuredDecisionPlan | RemoteClassifierPlan | RequestTracePlan | DiscoveredFlowPlan;
 type Idea = "direct-call" | "inject-function" | "interface" | "async" | "use-case" | "adapter" | "test-double" | "checkpoint";
 const IDEAS: Idea[] = ["direct-call", "inject-function", "interface", "async", "use-case", "adapter", "test-double", "checkpoint"];
 const TITLES = ["Chamar a regra", "Trocar a função", "Nomear o contrato", "Aceitar espera", "Criar o caso de uso", "Conectar a implementação", "Testar com uma substituta", "Checkpoint: reconstruir o contrato"];
@@ -85,8 +86,16 @@ function contractNarrative(idea: Idea, binding: Binding, previous: string, limit
 
 /** Planner reads declarations from the pinned source and returns pedagogy only, never stages. */
 export class StagePlanner {
-  planRequest(goal: string, journey: Journey, index: RepositoryIndex): RequestTracePlan {
-    return planRequestTrace(goal, journey, index);
+  /**
+   * Ticket triage keeps its own hand-authored trace (looksLikeTicketFlowGoal): it predates
+   * discovery and spans a business flow no static analysis can reconstruct from code alone
+   * (DB writes, an LLM call). Any other technical goal about a request flow is planned instead
+   * by discovering a minimal, verified call chain from a real HTTP entry point — no per-goal
+   * recipe, no manual mapping of the goal to the code.
+   */
+  planRequest(goal: string, journey: Journey, index: RepositoryIndex): RequestTracePlan | DiscoveredFlowPlan {
+    if (looksLikeTicketFlowGoal(goal)) return planRequestTrace(goal, journey, index);
+    return planDiscoveredFlow(goal, journey, index);
   }
   plan(goal: string, journey: Journey, moduleId: string, index: RepositoryIndex): StagePlan {
     if (journey.repo.owner !== "marcelotaparelli" || journey.repo.name !== "ops-triage-ai") throw new Error("Este gerador atende somente o repositório acompanhado nesta jornada.");
@@ -189,6 +198,7 @@ const architecture = (idea: Idea) => {
 export class StageGenerator implements StageGenerationProvider {
   generate(plan: StagePlan, journey: Journey, index: RepositoryIndex): Stage[] {
     if (plan.kind === "request-trace") return generateRequestTrace(plan, journey, index);
+    if (plan.kind === "discovered-flow") return generateDiscoveredFlow(plan, journey, index);
     if (plan.kind === "remote-classifier") return generateRemoteClassifier(plan, journey, index);
     if (plan.kind === "structured-decision") return generateStructuredDecision(plan, journey, index);
     const chapter = journey.stages.find((s) => s.moduleId === plan.moduleId && s.kind === "chapter");

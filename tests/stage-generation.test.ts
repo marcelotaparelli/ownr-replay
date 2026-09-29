@@ -189,13 +189,25 @@ test("pedido pela API abre a jornada do fluxo e sua primeira microetapa", async 
   app.repository.close();
 });
 
-test("rota HTTP sem percurso comprovado informa a limitação", async () => {
+test("rota HTTP sem percurso comprovado no gerador do ticket informa a limitação", async () => {
   const service = new ModuleGenerationService(mkdtempSync(join(tmpdir(), "replay-other-route-")), new StagePlanner(), new StageGenerator(), new StageValidator(checker));
-  await expect(service.generateRequestJourney(golden(), "GET /triage/123", index)).rejects.toThrow("ainda não tem um percurso validado");
+  // "ticket" keeps this goal routed to the hand-authored ticket-flow trace (looksLikeTicketFlowGoal),
+  // which only ever proved one route; anything else it should still refuse instead of guessing.
+  await expect(service.generateRequestJourney(golden(), "GET /ticket/123", index)).rejects.toThrow("ainda não tem um percurso validado");
+});
+
+test("rota antes sem percurso comprovado agora é descoberta genericamente (GET /triage/:id)", async () => {
+  // "GET /triage/123" no longer contains the word "ticket", so it reaches generic discovery
+  // instead of the hand-authored ticket trace — and discovery finds the real handler for this
+  // route (PersistedTriageService.getDecisionAudit), which the old hardcoded generator never knew.
+  const service = new ModuleGenerationService(mkdtempSync(join(tmpdir(), "replay-generic-route-")), new StagePlanner(), new StageGenerator(), new StageValidator(checker));
+  const route = await service.generateRequestJourney(golden(), "GET /triage/123", index);
+  expect(route.stages.flatMap((stage) => stage.originalCodeRefs).some((ref) => ref.symbol === "getDecisionAudit")).toBe(true);
 });
 
 test("planejador aceita outra formulação do mesmo objetivo técnico", () => {
   const plan = new StagePlanner().planRequest("Como POST /tickets/triage chega à decisão persistida?", golden(), index);
+  if (plan.kind !== "request-trace") throw new Error("expected a request-trace plan");
   expect(plan.steps.map((step) => step.symbol)).toEqual([
     "parseTicketInput", "PersistedTriageService", "PrismaTriageRunRepository", "TriageTicket",
     "HybridPolicy", "PrismaTriageRunRepository", "handleRequest",

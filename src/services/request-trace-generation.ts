@@ -9,7 +9,11 @@ export type RequestTracePlan = { kind: "request-trace"; goal: string; moduleId: 
 
 /** Cheap, reusable pre-check: does this free text plausibly describe the ticket flow? Lets a caller
  *  decide whether to attempt the (expensive) generator before planRequestTrace's own deeper checks run. */
-export const looksLikeTicketFlowGoal = (goal: string): boolean => /ticket|triage|triagem|\/tickets\/triage/i.test(goal);
+// Deliberately narrow: "ticket" (or the literal route) is what this hand-authored trace is
+// actually about. It used to also trigger on the bare word "triage"/"triagem", which collides
+// with any goal about the triage DOMAIN in general (e.g. "how is a triage decision persisted?") —
+// those are exactly the goals the generic discovery path (flow-discovery.ts) should get instead.
+export const looksLikeTicketFlowGoal = (goal: string): boolean => /ticket|\/tickets\/triage/i.test(goal);
 
 // These are candidate links, not claims: the planner checks every link against the pinned source.
 const candidates: TraceStep[] = [
