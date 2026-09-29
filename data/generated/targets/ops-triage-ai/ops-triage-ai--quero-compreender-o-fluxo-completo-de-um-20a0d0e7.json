@@ -1,0 +1,2016 @@
+{
+  "kind": "route",
+  "sha": "840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67",
+  "journey": {
+    "id": "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7",
+    "title": "ops-triage-ai: Quero compreender o fluxo completo de um ticket no ops-triage-ai, desde a entrada HTTP até a decisão e a persistência.",
+    "description": "Da entrada HTTP à decisão e persistência, com referências ao código fixado.",
+    "repo": {
+      "owner": "marcelotaparelli",
+      "name": "ops-triage-ai",
+      "url": "https://github.com/marcelotaparelli/ops-triage-ai",
+      "sha": "840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67"
+    },
+    "goal": {
+      "kind": "trace_request",
+      "target": "Quero compreender o fluxo completo de um ticket no ops-triage-ai, desde a entrada HTTP até a decisão e a persistência."
+    },
+    "codeMap": {
+      "ticket": [
+        {
+          "path": "src/domain/triage.ts",
+          "symbol": "TicketInput"
+        }
+      ],
+      "category": [
+        {
+          "path": "src/domain/triage.ts",
+          "symbol": "Category"
+        }
+      ],
+      "tie": [
+        {
+          "path": "src/application/classifiers/deterministic-triage-classifier.ts",
+          "symbol": "CATEGORY_TIE_BREAK"
+        }
+      ],
+      "team": [
+        {
+          "path": "src/domain/suggested-team.ts",
+          "symbol": "suggestedTeamForCategory"
+        }
+      ],
+      "llm": [
+        {
+          "path": "src/infrastructure/ollama/ollama-triage-classifier.ts",
+          "symbol": "OllamaTriageClassifier"
+        }
+      ],
+      "validator": [
+        {
+          "path": "src/infrastructure/ollama/ollama-result-schema.ts",
+          "symbol": "OllamaClassifierResultSchema"
+        }
+      ],
+      "service": [
+        {
+          "path": "src/application/persisted-triage-service.ts",
+          "symbol": "PersistedTriageService"
+        }
+      ],
+      "logger": [
+        {
+          "path": "src/observability.ts",
+          "symbol": "stdoutLogger"
+        }
+      ]
+    },
+    "status": "ready",
+    "concepts": [
+      {
+        "id": "function-io",
+        "name": "Função: entra, sai",
+        "group": "Linguagem",
+        "aliases": [
+          "função",
+          "function",
+          "return",
+          "classify",
+          "parâmetro",
+          "text"
+        ],
+        "quick": "Uma função recebe um valor (o texto) e devolve outro (a categoria).",
+        "why": "Sem uma função, não há um lugar único onde a decisão acontece."
+      },
+      {
+        "id": "keyword-match",
+        "name": "Detectar uma palavra",
+        "group": "Domínio",
+        "aliases": [
+          "includes",
+          "palavra",
+          "pista",
+          "contém"
+        ],
+        "quick": "Se o texto contém uma pista (\"down\"), escolhemos a categoria dela.",
+        "why": "Sem olhar o texto, todo ticket recebe a mesma resposta."
+      },
+      {
+        "id": "default-category",
+        "name": "Resposta padrão",
+        "group": "Domínio",
+        "aliases": [
+          "other",
+          "padrão",
+          "default",
+          "fallback"
+        ],
+        "quick": "Nenhuma pista encontrada → OTHER.",
+        "why": "Sem um padrão, a função ficaria sem resposta para tickets desconhecidos."
+      },
+      {
+        "id": "text-normalization",
+        "name": "Normalizar o texto",
+        "group": "Linguagem",
+        "aliases": [
+          "tolowercase",
+          "minúsculas",
+          "maiúsculas",
+          "normalize",
+          "lower"
+        ],
+        "quick": "Tudo em minúsculas antes de procurar, para \"DOWN\" e \"down\" valerem o mesmo.",
+        "why": "Sem normalizar, cada variação de caixa exigiria uma regra própria."
+      },
+      {
+        "id": "ordered-checks",
+        "name": "Perguntas em ordem",
+        "group": "Domínio",
+        "aliases": [
+          "ordem",
+          "if",
+          "primeira",
+          "várias categorias"
+        ],
+        "quick": "Várias verificações em sequência; a primeira que casa decide.",
+        "why": "Sem ordem definida, dois sinais no mesmo ticket gerariam respostas imprevisíveis."
+      },
+      {
+        "id": "rules-as-data",
+        "name": "Regras como dados",
+        "group": "Domínio",
+        "aliases": [
+          "rules",
+          "tabela",
+          "lista",
+          "for",
+          "dados"
+        ],
+        "quick": "As regras viram uma lista; a função só a percorre.",
+        "why": "Sem a tabela, cada regra nova é mais um if espalhado no código."
+      },
+      {
+        "id": "evidence-score",
+        "name": "Placar de evidências",
+        "group": "Domínio",
+        "aliases": [
+          "score",
+          "scorecategory",
+          "placar",
+          "contar",
+          "pontos"
+        ],
+        "quick": "Cada categoria soma pontos pelas pistas que aparecem.",
+        "why": "Sem placar, a primeira pista encontrada vence mesmo quando outra categoria tem mais evidência."
+      },
+      {
+        "id": "compare-scores",
+        "name": "Comparar placares",
+        "group": "Domínio",
+        "aliases": [
+          "comparar",
+          "compare",
+          ">",
+          "maior que"
+        ],
+        "quick": "Duas categorias, dois placares: vence a que tem mais pistas.",
+        "why": "Sem comparar placares, a primeira regra que casa decide mesmo quando outra categoria tem mais evidência."
+      },
+      {
+        "id": "highest-score",
+        "name": "Maior placar vence",
+        "group": "Domínio",
+        "aliases": [
+          "best",
+          "bestscore",
+          "maior",
+          "vencedor",
+          "máximo"
+        ],
+        "quick": "Percorre as categorias guardando a de maior placar; zero pontos → OTHER.",
+        "why": "Sem escolher pelo placar, contar evidências não mudaria a decisão."
+      },
+      {
+        "id": "title-weight",
+        "name": "Título pesa o dobro",
+        "group": "Domínio",
+        "aliases": [
+          "título",
+          "title",
+          "dobro",
+          "descrição",
+          "description"
+        ],
+        "quick": "Uma pista no título vale o dobro da mesma pista na descrição.",
+        "why": "Sem isso, um detalhe perdido na descrição valeria tanto quanto o resumo do problema."
+      },
+      {
+        "id": "ticket-input",
+        "name": "TicketInput",
+        "group": "Domínio",
+        "aliases": [
+          "ticket",
+          "input",
+          "title",
+          "description"
+        ],
+        "quick": "O dado de entrada do sistema: título + descrição de um ticket.",
+        "why": "Sem um tipo explícito de entrada, cada parte do código assumiria um formato diferente de ticket."
+      },
+      {
+        "id": "string-enum",
+        "name": "Enum de strings",
+        "group": "Linguagem",
+        "aliases": [
+          "enum",
+          "category",
+          "categoria"
+        ],
+        "quick": "Conjunto fechado de valores nomeados; em runtime cada valor é a própria string.",
+        "why": "Sem ele, qualquer string seria uma categoria válida e erros de digitação só apareceriam em produção."
+      },
+      {
+        "id": "weighted-signals",
+        "name": "Sinais com peso",
+        "group": "Domínio",
+        "aliases": [
+          "signal",
+          "signals",
+          "sinal",
+          "sinais",
+          "weight",
+          "peso",
+          "score",
+          "scorecategory"
+        ],
+        "quick": "Regras como dados: cada regex contribui com um peso para o score de uma categoria.",
+        "why": "Sem pesos, 'error' valeria tanto quanto 'production is down' e o classificador não teria como preferir evidência forte."
+      },
+      {
+        "id": "regex-word-boundary",
+        "name": "RegExp e \\b",
+        "group": "Linguagem",
+        "aliases": [
+          "regex",
+          "regexp",
+          "pattern",
+          "\\b",
+          "normalize",
+          "test"
+        ],
+        "quick": "`\\b` casa apenas em fronteiras de palavra: /\\bbug\\b/ casa 'bug', não 'debug'.",
+        "why": "Sem fronteiras de palavra, substrings geram falsos positivos ('debug' viraria BUG)."
+      },
+      {
+        "id": "tie-break",
+        "name": "Desempate explícito",
+        "group": "Domínio",
+        "aliases": [
+          "tie",
+          "tie_break",
+          "empate",
+          "desempate",
+          "ordem"
+        ],
+        "quick": "Uma lista ordenada decide empates: categorias operacionais sensíveis vencem.",
+        "why": "Sem ordem explícita, o resultado de um empate dependeria de detalhes acidentais de iteração."
+      },
+      {
+        "id": "record-type",
+        "name": "Record<K, V>",
+        "group": "Linguagem",
+        "aliases": [
+          "record",
+          "mapa",
+          "map",
+          "objeto"
+        ],
+        "quick": "Objeto cujas chaves são exatamente os valores de K — faltar uma chave é erro de compilação.",
+        "why": "Sem Record, esquecer uma categoria nova na tabela só seria percebido em runtime."
+      },
+      {
+        "id": "interface-contract",
+        "name": "Interface como contrato",
+        "group": "Arquitetura",
+        "aliases": [
+          "interface",
+          "implements",
+          "contrato",
+          "port",
+          "porta",
+          "triageclassifier"
+        ],
+        "quick": "TriageClassifier define o que qualquer classificador precisa oferecer: classify(input).",
+        "why": "Sem o contrato, o caso de uso conheceria uma implementação concreta e trocar de classificador exigiria reescrevê-lo."
+      },
+      {
+        "id": "dependency-inversion",
+        "name": "Inversão de dependência",
+        "group": "Arquitetura",
+        "aliases": [
+          "dependency",
+          "inversion",
+          "injeção",
+          "injection",
+          "constructor",
+          "construtor",
+          "di"
+        ],
+        "quick": "O caso de uso depende da abstração e recebe a implementação pelo construtor.",
+        "why": "Sem isso, TriageTicket criaria o próprio classificador e não daria para testá-lo com um fake nem plugar um LLM."
+      },
+      {
+        "id": "use-case",
+        "name": "Caso de uso",
+        "group": "Arquitetura",
+        "aliases": [
+          "use case",
+          "triageticket",
+          "execute",
+          "application"
+        ],
+        "quick": "TriageTicket orquestra a regra de negócio 'triar um ticket', independente de HTTP ou banco.",
+        "why": "Sem um caso de uso, a orquestração acabaria dentro da rota HTTP, misturando protocolo e regra."
+      },
+      {
+        "id": "async-contract",
+        "name": "Contrato assíncrono",
+        "group": "Linguagem",
+        "aliases": [
+          "async",
+          "await",
+          "promise"
+        ],
+        "quick": "classify devolve Promise para que implementações lentas (rede, disco) caibam no mesmo contrato.",
+        "why": "Um contrato síncrono excluiria qualquer classificador que dependa de I/O."
+      },
+      {
+        "id": "test-double",
+        "name": "Fake em teste",
+        "group": "Arquitetura",
+        "aliases": [
+          "fake",
+          "mock",
+          "stub",
+          "double",
+          "teste"
+        ],
+        "quick": "Uma implementação mínima da interface usada só no teste, para isolar o caso de uso.",
+        "why": "Sem fakes, testar o caso de uso exigiria o classificador real (e depois um LLM real)."
+      },
+      {
+        "id": "structured-result",
+        "name": "Resultado estruturado",
+        "group": "Domínio",
+        "aliases": [
+          "classifierresult",
+          "result",
+          "priority",
+          "risk",
+          "summary",
+          "rationale"
+        ],
+        "quick": "Além da categoria: prioridade, risco, time sugerido, confiança, resumo e justificativa.",
+        "why": "Só uma categoria não diz quão urgente é, quem deve atender nem por que a decisão foi tomada."
+      },
+      {
+        "id": "confidence",
+        "name": "Confiança discreta",
+        "group": "IA",
+        "aliases": [
+          "confidence",
+          "confiança",
+          "0.5",
+          "0.7",
+          "0.9"
+        ],
+        "quick": "Confiança em três degraus (0.5, 0.7, 0.9), não um float arbitrário.",
+        "why": "Um float contínuo sugere uma precisão que uma heurística não tem e é difícil de usar em regras."
+      },
+      {
+        "id": "human-review",
+        "name": "Revisão humana",
+        "group": "Domínio",
+        "aliases": [
+          "review",
+          "revisão",
+          "requireshumanreview",
+          "humanreviewreason",
+          "triagedecision",
+          "decision",
+          "decisão"
+        ],
+        "quick": "A decisão final carrega se precisa de revisão humana e os motivos.",
+        "why": "Sem isso, um classificador incerto decidiria sozinho em casos de alto risco."
+      },
+      {
+        "id": "adapter",
+        "name": "Adapter de infraestrutura",
+        "group": "Arquitetura",
+        "aliases": [
+          "adapter",
+          "ollama",
+          "llm",
+          "infra",
+          "infrastructure"
+        ],
+        "quick": "OllamaTriageClassifier implementa a mesma interface falando HTTP com um LLM.",
+        "why": "Sem o adapter, detalhes de HTTP e JSON do LLM vazariam para o caso de uso."
+      },
+      {
+        "id": "injected-fetch",
+        "name": "fetch injetado",
+        "group": "Arquitetura",
+        "aliases": [
+          "fetch",
+          "fetchimpl",
+          "httpfetch"
+        ],
+        "quick": "O adapter recebe fetch pelo construtor; testes passam um fetch falso.",
+        "why": "Sem injeção, testar timeout e respostas inválidas exigiria um servidor LLM real."
+      },
+      {
+        "id": "abort-timeout",
+        "name": "AbortController + timeout",
+        "group": "Linguagem",
+        "aliases": [
+          "abort",
+          "abortcontroller",
+          "signal",
+          "timeout",
+          "settimeout"
+        ],
+        "quick": "Um timer chama controller.abort(), que cancela o fetch em andamento.",
+        "why": "Sem timeout, um LLM travado prenderia a requisição indefinidamente."
+      },
+      {
+        "id": "typed-errors",
+        "name": "Erros tipados",
+        "group": "Arquitetura",
+        "aliases": [
+          "error",
+          "erro",
+          "throw",
+          "instanceof",
+          "classifiertimeouterror",
+          "classifierunavailableerror",
+          "classifierinvalidresponseerror"
+        ],
+        "quick": "Três classes de erro distinguem timeout, indisponível e resposta inválida.",
+        "why": "Sem tipos distintos, quem chama não saberia se deve tentar de novo, cair para outro classificador ou falhar."
+      },
+      {
+        "id": "structured-output",
+        "name": "Saída estruturada validada",
+        "group": "IA",
+        "aliases": [
+          "zod",
+          "schema",
+          "safeparse",
+          "json",
+          "structured output",
+          "validação"
+        ],
+        "quick": "A resposta do LLM é JSON validado contra um schema antes de virar ClassifierResult.",
+        "why": "Sem validação, um LLM que inventa uma categoria corromperia decisões silenciosamente."
+      },
+      {
+        "id": "discriminated-union",
+        "name": "União discriminada",
+        "group": "Linguagem",
+        "aliases": [
+          "union",
+          "união",
+          "status",
+          "llmoutcome",
+          "discriminated"
+        ],
+        "quick": "LlmOutcome é { status: 'available', result } ou { status: 'failed', reason }.",
+        "why": "Sem a união, 'LLM falhou' seria um null ambíguo e o compilador não forçaria tratar os dois casos."
+      },
+      {
+        "id": "hybrid-policy",
+        "name": "Política híbrida",
+        "group": "IA",
+        "aliases": [
+          "hybrid",
+          "híbrido",
+          "hybridpolicy",
+          "policy",
+          "política",
+          "decide",
+          "disagreement",
+          "discordância"
+        ],
+        "quick": "Combina baseline determinístico e LLM: usa o LLM, mas pede revisão quando eles discordam.",
+        "why": "Sem a política, seria preciso escolher entre um baseline previsível e um LLM mais flexível — em vez de usar um para vigiar o outro."
+      },
+      {
+        "id": "graceful-fallback",
+        "name": "Fallback gracioso",
+        "group": "IA",
+        "aliases": [
+          "fallback",
+          "deterministic_fallback",
+          "indisponível",
+          "unavailable"
+        ],
+        "quick": "Se o LLM falha, a decisão cai para o determinístico e marca LLM_UNAVAILABLE.",
+        "why": "Sem fallback, uma queda do LLM derrubaria toda a triagem."
+      },
+      {
+        "id": "repository-port",
+        "name": "Porta de repositório",
+        "group": "Arquitetura",
+        "aliases": [
+          "repository",
+          "repositório",
+          "triagerunrepository",
+          "prisma",
+          "persistence",
+          "persistência"
+        ],
+        "quick": "A aplicação define a interface de persistência; Prisma é só uma implementação.",
+        "why": "Sem a porta, o caso de uso importaria Prisma e não daria para testar sem PostgreSQL."
+      },
+      {
+        "id": "run-lifecycle",
+        "name": "Ciclo de vida da execução",
+        "group": "Infraestrutura",
+        "aliases": [
+          "run",
+          "start",
+          "complete",
+          "fail",
+          "running",
+          "succeeded",
+          "failed",
+          "markfailed"
+        ],
+        "quick": "Cada triagem é um run: start → complete ou fail, gravado antes e depois da classificação.",
+        "why": "Sem o registro de início, uma execução que morre no meio desapareceria sem rastro."
+      },
+      {
+        "id": "audit-trail",
+        "name": "Trilha de auditoria",
+        "group": "Infraestrutura",
+        "aliases": [
+          "audit",
+          "auditoria",
+          "feedback",
+          "append-only"
+        ],
+        "quick": "Tickets, runs, decisões e feedback humano ficam gravados e nunca são sobrescritos.",
+        "why": "Sem auditoria, não há como explicar uma decisão passada nem medir o classificador contra correções humanas."
+      },
+      {
+        "id": "boundary-validation",
+        "name": "Validação na fronteira",
+        "group": "Arquitetura",
+        "aliases": [
+          "parse",
+          "parseticketinput",
+          "validation",
+          "validação",
+          "422",
+          "body",
+          "request"
+        ],
+        "quick": "O corpo HTTP é validado e convertido em TicketInput antes de chegar ao caso de uso.",
+        "why": "Sem validar na borda, dados inválidos chegariam ao domínio e cada camada teria que se defender."
+      },
+      {
+        "id": "error-status-mapping",
+        "name": "Erro → status HTTP",
+        "group": "Infraestrutura",
+        "aliases": [
+          "status",
+          "504",
+          "503",
+          "502",
+          "500",
+          "classifierresponse",
+          "http"
+        ],
+        "quick": "Cada erro tipado vira um status: timeout 504, indisponível 503, resposta inválida 502.",
+        "why": "Sem o mapeamento, todo erro viraria 500 e clientes não saberiam se vale tentar de novo."
+      },
+      {
+        "id": "composition-root",
+        "name": "Composition root",
+        "group": "Arquitetura",
+        "aliases": [
+          "index",
+          "index.ts",
+          "main",
+          "wiring",
+          "config"
+        ],
+        "quick": "index.ts é o único lugar que escolhe implementações concretas e conecta tudo.",
+        "why": "Sem um ponto único de montagem, decisões de configuração se espalhariam por todo o código."
+      },
+      {
+        "id": "structured-logging",
+        "name": "Log estruturado",
+        "group": "Infraestrutura",
+        "aliases": [
+          "log",
+          "logger",
+          "stdoutlogger",
+          "json log"
+        ],
+        "quick": "Cada evento é uma linha JSON com campos fixos (requestId, durationMs, code).",
+        "why": "Sem estrutura, logs não podem ser filtrados nem agregados por ferramenta."
+      },
+      {
+        "id": "metrics",
+        "name": "Métricas em memória",
+        "group": "Infraestrutura",
+        "aliases": [
+          "metrics",
+          "métricas",
+          "counter",
+          "increment",
+          "observe",
+          "labels"
+        ],
+        "quick": "Contadores e durações com labels, expostos em /metrics.",
+        "why": "Sem métricas, não dá para ver taxa de fallback, latência ou revisões humanas em produção."
+      },
+      {
+        "id": "concurrency-limit",
+        "name": "Limite de concorrência",
+        "group": "Infraestrutura",
+        "aliases": [
+          "concurrency",
+          "concorrência",
+          "limiter",
+          "429",
+          "tryacquire",
+          "release"
+        ],
+        "quick": "No máximo N triagens simultâneas; a próxima recebe 429 imediatamente.",
+        "why": "Sem limite, um pico de requisições enfileiraria chamadas ao LLM até esgotar memória e tempo."
+      },
+      {
+        "id": "promise-race-timeout",
+        "name": "Timeout com Promise.race",
+        "group": "Linguagem",
+        "aliases": [
+          "race",
+          "promise.race",
+          "withtimeout",
+          "cleartimeout"
+        ],
+        "quick": "Promise.race entre o trabalho e um timer que rejeita: vence quem terminar primeiro.",
+        "why": "Sem um teto de tempo por requisição, o cliente não teria garantia de resposta."
+      }
+    ],
+    "modules": [
+      {
+        "id": "flow",
+        "title": "Fluxo do ticket",
+        "stageIds": [
+          "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-01",
+          "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-02",
+          "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-03",
+          "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-04",
+          "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-05",
+          "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-06",
+          "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-07",
+          "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-99"
+        ]
+      }
+    ],
+    "stages": [
+      {
+        "id": "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-01",
+        "order": 1,
+        "moduleId": "flow",
+        "kind": "micro",
+        "title": "Validar a entrada",
+        "goal": "O corpo HTTP é desconhecido até passar pela validação.",
+        "context": "A requisição entra por POST /tickets/triage. O corpo HTTP é desconhecido até passar pela validação.",
+        "problem": "O corpo recebido ainda não é um ticket confiável. Nesta etapa, ligue parseTicketInput ao fluxo. Assim, o percurso chega a validar a entrada.",
+        "examples": [],
+        "requirements": [],
+        "estimatedMinutes": 2,
+        "introduces": [],
+        "prerequisites": [],
+        "architecture": {
+          "nodes": [
+            {
+              "id": "flow-0",
+              "label": "parseTicketInput",
+              "kind": "function",
+              "col": 0,
+              "row": 0
+            }
+          ],
+          "edges": []
+        },
+        "referenceCode": [
+          {
+            "path": "trace.ts",
+            "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  return ticket;\n}\n"
+          }
+        ],
+        "lineNotes": [
+          {
+            "match": "const ticket = parseTicketInput(input);",
+            "note": "A chamada const ticket = parseTicketInput(input); passa o valor adiante; a versão real está em src/http/triage-request.ts."
+          }
+        ],
+        "explanation": [
+          {
+            "id": "flow-0",
+            "title": "Validar a entrada",
+            "quick": "A chamada const ticket = parseTicketInput(input); passa o valor adiante; a versão real está em src/http/triage-request.ts.",
+            "normal": "No SHA fixado, handleRequest validates parseTicketInput em src/server.ts."
+          }
+        ],
+        "originalCodeRefs": [
+          {
+            "path": "src/http/triage-request.ts",
+            "startLine": 20,
+            "endLine": 30,
+            "symbol": "parseTicketInput",
+            "replayFile": "trace.ts",
+            "note": "O Replay reduz este componente a uma chamada observável; veja as regras e efeitos reais no trecho do repositório.",
+            "snippet": "export function parseTicketInput(payload: unknown): TicketInputParseResult {\n  const parsed = TicketInputSchema.safeParse(payload);\n  if (parsed.success) return { success: true, data: parsed.data };\n  return {\n    success: false,\n    issues: parsed.error.issues.map((issue) => ({\n      field: issue.path.join(\".\") || \"body\",\n      code: issue.code,\n    })),\n  };\n}",
+            "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/http/triage-request.ts#L20-L30"
+          }
+        ],
+        "exercise": {
+          "instructions": "Faça o Replay avançar até validar a entrada usando o componente disponível.",
+          "starterFiles": [
+            {
+              "path": "trace.ts",
+              "content": ""
+            }
+          ],
+          "solutionFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  return ticket;\n}\n"
+            }
+          ],
+          "supportFiles": [
+            {
+              "path": "flow.ts",
+              "content": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function parseTicketInput(input: Ticket): Flow { calls.push(\"parseTicketInput\"); if (!input.title.trim() || !input.description.trim()) throw new Error(\"invalid_request\"); return { ticket: input }; }\nexport async function enterService(flow: Flow): Promise<Flow> { calls.push(\"enterService\"); return { ...flow, serviceEntered: true }; }\nexport async function startRun(flow: Flow): Promise<Flow> { calls.push(\"startRun\"); return { ...flow, runId: \"run-1\" }; }\nexport async function classifyTicket(flow: Flow): Promise<Flow> { calls.push(\"classifyTicket\"); return { ...flow, result: flow.ticket.title.includes(\"down\") ? \"INCIDENT\" : \"OTHER\" }; }\nexport function decide(flow: Flow): Flow { calls.push(\"decide\"); return { ...flow, decision: flow.result }; }\nexport async function completeRun(flow: Flow): Promise<Flow> { calls.push(\"completeRun\"); return { ...flow, decisionId: \"decision-1\" }; }\nexport function respond(flow: Flow) { calls.push(\"respond\"); return { status: 201, id: flow.decisionId, decision: flow.decision }; }\n"
+            }
+          ],
+          "expose": [],
+          "testFile": {
+            "path": "tests.ts",
+            "content": "import { test, expect } from \"ownr:test\";\nimport { trace } from \"./trace.ts\";\nimport { calls } from \"./flow.ts\";\ntest(\"fluxo até parseTicketInput\", async () => { calls.length = 0; const value = await trace({ title: \"site down\", description: \"indisponível\" }); expect(value).toEqual({\"ticket\":{\"title\":\"site down\",\"description\":\"indisponível\"}}); expect(calls).toEqual([\"parseTicketInput\"]); });"
+          }
+        },
+        "toolbox": [
+          {
+            "id": "flow-0",
+            "name": "Replay: parseTicketInput",
+            "summary": "O corpo HTTP é desconhecido até passar pela validação.",
+            "example": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function parseTicketInput(input: Ticket): Flow { calls.push(\"parseTicketInput\"); if (!input.title.trim() || !input.description.trim()) throw new Error(\"invalid_request\"); return { ticket: input }; }\nvoid parseTicketInput({ title: \"site down\", description: \"indisponível\" });"
+          }
+        ],
+        "tutorContext": {
+          "relevantFiles": [
+            "trace.ts",
+            "src/http/triage-request.ts"
+          ],
+          "concepts": [],
+          "previousStages": []
+        },
+        "completionCriteria": [
+          {
+            "kind": "tests_pass"
+          }
+        ],
+        "limitation": "Um ticket válido ainda não iniciou a triagem.",
+        "summary": {
+          "added": [
+            "Validar a entrada"
+          ],
+          "why": "O corpo HTTP é desconhecido até passar pela validação.",
+          "flow": [
+            "parseTicketInput"
+          ]
+        }
+      },
+      {
+        "id": "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-02",
+        "order": 2,
+        "moduleId": "flow",
+        "kind": "micro",
+        "title": "Entrar no serviço",
+        "goal": "A rota entrega o ticket validado ao serviço de aplicação.",
+        "context": "Na etapa anterior, O corpo HTTP é desconhecido até passar pela validação. A rota entrega o ticket validado ao serviço de aplicação.",
+        "problem": "Um ticket válido ainda não iniciou a triagem. Nesta etapa, ligue PersistedTriageService ao fluxo. Assim, o percurso chega a entrar no serviço.",
+        "examples": [],
+        "requirements": [],
+        "estimatedMinutes": 2,
+        "introduces": [],
+        "prerequisites": [],
+        "architecture": {
+          "nodes": [
+            {
+              "id": "flow-0",
+              "label": "parseTicketInput",
+              "kind": "function",
+              "col": 0,
+              "row": 0
+            },
+            {
+              "id": "flow-1",
+              "label": "PersistedTriageService",
+              "kind": "class",
+              "col": 1,
+              "row": 0
+            }
+          ],
+          "edges": [
+            {
+              "from": "flow-0",
+              "to": "flow-1",
+              "rel": "flows_to"
+            }
+          ]
+        },
+        "referenceCode": [
+          {
+            "path": "trace.ts",
+            "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  return service;\n}\n"
+          }
+        ],
+        "lineNotes": [
+          {
+            "match": "const service = await enterService(ticket);",
+            "note": "A chamada const service = await enterService(ticket); passa o valor adiante; a versão real está em src/application/persisted-triage-service.ts."
+          }
+        ],
+        "explanation": [
+          {
+            "id": "flow-1",
+            "title": "Entrar no serviço",
+            "quick": "A chamada const service = await enterService(ticket); passa o valor adiante; a versão real está em src/application/persisted-triage-service.ts.",
+            "normal": "No SHA fixado, handleRequest routes_to PersistedTriageService em src/server.ts; handleRequest depends_on PersistedTriageService em src/index.ts."
+          }
+        ],
+        "originalCodeRefs": [
+          {
+            "path": "src/application/persisted-triage-service.ts",
+            "startLine": 22,
+            "endLine": 86,
+            "symbol": "PersistedTriageService",
+            "replayFile": "trace.ts",
+            "note": "O Replay reduz este componente a uma chamada observável; veja as regras e efeitos reais no trecho do repositório.",
+            "snippet": "export class PersistedTriageService implements TriageService {\n  constructor(\n    private readonly triageTicket: TriageTicket,\n    private readonly mode: TriageMode,\n    private readonly triageRunRepository: TriageRunRepository,\n    private readonly feedbackRepository: FeedbackRepository,\n  ) {}\n\n  async execute(input: TicketInput): Promise<TriageExecution> {\n    const ticketId = crypto.randomUUID();\n    const runId = crypto.randomUUID();\n\n    await this.triageRunRepository.start({\n      ticketId,\n      runId,\n      mode: this.mode,\n      ticket: input,\n    });\n\n    try {\n      const decision = await this.triageTicket.execute(input);\n      const decisionId = crypto.randomUUID();\n      await this.triageRunRepository.complete({\n        runId,\n        decisionId,\n        decision,\n        completedAt: new Date(),\n      });\n      return { decisionId, decision };\n    } catch (error) {\n      await this.markFailed(runId, failureCode(error));\n      throw error;\n    }\n  }\n\n  getDecisionAudit(decisionId: string) {\n    return this.triageRunRepository.findDecisionAudit(decisionId);\n  }\n\n  async addFeedback(decisionId: string, input: FeedbackInput) {\n    const feedback: CreateFeedback = {\n      id: crypto.randomUUID(),\n      decisionId,\n      reviewedBy: input.reviewedBy,\n      correctedCategory: input.correctedCategory,\n      correctedPriority: input.correctedPriority,\n      correctedRisk: input.correctedRisk,\n      correctedSuggestedTeam: suggestedTeamForCategory(input.correctedCategory),\n      ...(input.comment === undefined ? {} : { comment: input.comment }),\n    };\n    return this.feedbackRepository.create(feedback);\n  }\n\n  private async markFailed(runId: string, code: TriageFailureCode): Promise<void> {\n    try {\n      await this.triageRunRepository.fail({\n        runId,\n        failureCode: code,\n        completedAt: new Date(),\n      });\n    } catch {\n      // Preserve the original classifier or persistence error.\n    }\n  }\n}",
+            "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/persisted-triage-service.ts#L22-L86"
+          }
+        ],
+        "exercise": {
+          "instructions": "Faça o Replay avançar até entrar no serviço usando o componente disponível.",
+          "starterFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  return ticket;\n}\n"
+            }
+          ],
+          "solutionFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  return service;\n}\n"
+            }
+          ],
+          "supportFiles": [
+            {
+              "path": "flow.ts",
+              "content": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function parseTicketInput(input: Ticket): Flow { calls.push(\"parseTicketInput\"); if (!input.title.trim() || !input.description.trim()) throw new Error(\"invalid_request\"); return { ticket: input }; }\nexport async function enterService(flow: Flow): Promise<Flow> { calls.push(\"enterService\"); return { ...flow, serviceEntered: true }; }\nexport async function startRun(flow: Flow): Promise<Flow> { calls.push(\"startRun\"); return { ...flow, runId: \"run-1\" }; }\nexport async function classifyTicket(flow: Flow): Promise<Flow> { calls.push(\"classifyTicket\"); return { ...flow, result: flow.ticket.title.includes(\"down\") ? \"INCIDENT\" : \"OTHER\" }; }\nexport function decide(flow: Flow): Flow { calls.push(\"decide\"); return { ...flow, decision: flow.result }; }\nexport async function completeRun(flow: Flow): Promise<Flow> { calls.push(\"completeRun\"); return { ...flow, decisionId: \"decision-1\" }; }\nexport function respond(flow: Flow) { calls.push(\"respond\"); return { status: 201, id: flow.decisionId, decision: flow.decision }; }\n"
+            }
+          ],
+          "expose": [],
+          "testFile": {
+            "path": "tests.ts",
+            "content": "import { test, expect } from \"ownr:test\";\nimport { trace } from \"./trace.ts\";\nimport { calls } from \"./flow.ts\";\ntest(\"fluxo até PersistedTriageService\", async () => { calls.length = 0; const value = await trace({ title: \"site down\", description: \"indisponível\" }); expect(value).toEqual({\"ticket\":{\"title\":\"site down\",\"description\":\"indisponível\"},\"serviceEntered\":true}); expect(calls).toEqual([\"parseTicketInput\",\"enterService\"]); });"
+          }
+        },
+        "toolbox": [
+          {
+            "id": "flow-1",
+            "name": "Replay: PersistedTriageService",
+            "summary": "A rota entrega o ticket validado ao serviço de aplicação.",
+            "example": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport async function enterService(flow: Flow): Promise<Flow> { calls.push(\"enterService\"); return { ...flow, serviceEntered: true }; }\nvoid enterService({ ticket: { title: \"site down\", description: \"indisponível\" } });"
+          }
+        ],
+        "tutorContext": {
+          "relevantFiles": [
+            "trace.ts",
+            "src/application/persisted-triage-service.ts"
+          ],
+          "concepts": [],
+          "previousStages": [
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-01"
+          ]
+        },
+        "completionCriteria": [
+          {
+            "kind": "tests_pass"
+          }
+        ],
+        "limitation": "O serviço ainda precisa registrar o início da execução.",
+        "summary": {
+          "added": [
+            "Entrar no serviço"
+          ],
+          "why": "A rota entrega o ticket validado ao serviço de aplicação.",
+          "flow": [
+            "parseTicketInput",
+            "PersistedTriageService"
+          ]
+        }
+      },
+      {
+        "id": "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-03",
+        "order": 3,
+        "moduleId": "flow",
+        "kind": "micro",
+        "title": "Registrar o início",
+        "goal": "O serviço grava ticket e execução antes de classificar.",
+        "context": "Na etapa anterior, A rota entrega o ticket validado ao serviço de aplicação. O serviço grava ticket e execução antes de classificar.",
+        "problem": "O serviço ainda precisa registrar o início da execução. Nesta etapa, ligue PrismaTriageRunRepository ao fluxo. Assim, o percurso chega a registrar o início.",
+        "examples": [],
+        "requirements": [],
+        "estimatedMinutes": 2,
+        "introduces": [],
+        "prerequisites": [],
+        "architecture": {
+          "nodes": [
+            {
+              "id": "flow-0",
+              "label": "parseTicketInput",
+              "kind": "function",
+              "col": 0,
+              "row": 0
+            },
+            {
+              "id": "flow-1",
+              "label": "PersistedTriageService",
+              "kind": "class",
+              "col": 1,
+              "row": 0
+            },
+            {
+              "id": "flow-2",
+              "label": "PrismaTriageRunRepository",
+              "kind": "class",
+              "col": 2,
+              "row": 0
+            }
+          ],
+          "edges": [
+            {
+              "from": "flow-0",
+              "to": "flow-1",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-1",
+              "to": "flow-2",
+              "rel": "flows_to"
+            }
+          ]
+        },
+        "referenceCode": [
+          {
+            "path": "trace.ts",
+            "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  return started;\n}\n"
+          }
+        ],
+        "lineNotes": [
+          {
+            "match": "const started = await startRun(service);",
+            "note": "A chamada const started = await startRun(service); passa o valor adiante; a versão real está em src/infrastructure/persistence/prisma-triage-repositories.ts."
+          }
+        ],
+        "explanation": [
+          {
+            "id": "flow-2",
+            "title": "Registrar o início",
+            "quick": "A chamada const started = await startRun(service); passa o valor adiante; a versão real está em src/infrastructure/persistence/prisma-triage-repositories.ts.",
+            "normal": "No SHA fixado, PersistedTriageService persists PrismaTriageRunRepository em src/application/persisted-triage-service.ts; PersistedTriageService depends_on PrismaTriageRunRepository em src/index.ts."
+          }
+        ],
+        "originalCodeRefs": [
+          {
+            "path": "src/infrastructure/persistence/prisma-triage-repositories.ts",
+            "startLine": 32,
+            "endLine": 114,
+            "symbol": "PrismaTriageRunRepository",
+            "replayFile": "trace.ts",
+            "note": "O Replay reduz este componente a uma chamada observável; veja as regras e efeitos reais no trecho do repositório.",
+            "snippet": "export class PrismaTriageRunRepository implements TriageRunRepository {\n  constructor(private readonly prisma: PrismaClient) {}\n\n  async start(input: StartTriageRun): Promise<void> {\n    await this.prisma.$transaction(async (tx) => {\n      await tx.ticket.create({\n        data: {\n          id: input.ticketId,\n          title: input.ticket.title,\n          description: input.ticket.description,\n        },\n      });\n      await tx.triageRun.create({\n        data: {\n          id: input.runId,\n          ticketId: input.ticketId,\n          mode: toPrismaTriageMode(input.mode),\n          status: \"RUNNING\",\n        },\n      });\n    });\n  }\n\n  async complete(input: CompleteTriageRun): Promise<void> {\n    await this.prisma.$transaction(async (tx) => {\n      await createDecision(tx, input);\n      await tx.triageRun.update({\n        where: { id: input.runId },\n        data: {\n          status: \"SUCCEEDED\",\n          failureCode: null,\n          completedAt: input.completedAt,\n        },\n      });\n    });\n  }\n\n  async fail(input: FailTriageRun): Promise<void> {\n    await this.prisma.triageRun.update({\n      where: { id: input.runId },\n      data: {\n        status: \"FAILED\",\n        failureCode: input.failureCode,\n        completedAt: input.completedAt,\n      },\n    });\n  }\n\n  async reconcileStaleRuns(cutoff: Date): Promise<number> {\n    const result = await this.prisma.triageRun.updateMany({\n      where: { status: \"RUNNING\", startedAt: { lt: cutoff } },\n      data: { status: \"ABANDONED\", failureCode: \"ABANDONED\", completedAt: new Date() },\n    });\n    return result.count;\n  }\n\n  async getStatusCounts(): Promise<Record<TriageRunStatus, number>> {\n    const statuses: TriageRunStatus[] = [\"RUNNING\", \"SUCCEEDED\", \"FAILED\", \"ABANDONED\"];\n    const entries = await Promise.all(statuses.map(async (status) => [\n      status,\n      await this.prisma.triageRun.count({ where: { status } }),\n    ] as const));\n    return Object.fromEntries(entries) as Record<TriageRunStatus, number>;\n  }\n\n  async findDecisionAudit(decisionId: string): Promise<TriageAuditRecord | null> {\n    const row = await this.prisma.triageDecision.findUnique({\n      where: { id: decisionId },\n      include: {\n        triageRun: { include: { ticket: true } },\n        feedback: { orderBy: { createdAt: \"asc\" } },\n      },\n    });\n    if (!row) return null;\n\n    return {\n      ticket: mapTicket(row.triageRun.ticket),\n      run: mapRun(row.triageRun),\n      decision: mapDecision(row),\n      feedback: row.feedback.map(mapFeedback),\n    };\n  }\n}",
+            "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/persistence/prisma-triage-repositories.ts#L32-L114"
+          }
+        ],
+        "exercise": {
+          "instructions": "Faça o Replay avançar até registrar o início usando o componente disponível.",
+          "starterFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  return service;\n}\n"
+            }
+          ],
+          "solutionFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  return started;\n}\n"
+            }
+          ],
+          "supportFiles": [
+            {
+              "path": "flow.ts",
+              "content": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function parseTicketInput(input: Ticket): Flow { calls.push(\"parseTicketInput\"); if (!input.title.trim() || !input.description.trim()) throw new Error(\"invalid_request\"); return { ticket: input }; }\nexport async function enterService(flow: Flow): Promise<Flow> { calls.push(\"enterService\"); return { ...flow, serviceEntered: true }; }\nexport async function startRun(flow: Flow): Promise<Flow> { calls.push(\"startRun\"); return { ...flow, runId: \"run-1\" }; }\nexport async function classifyTicket(flow: Flow): Promise<Flow> { calls.push(\"classifyTicket\"); return { ...flow, result: flow.ticket.title.includes(\"down\") ? \"INCIDENT\" : \"OTHER\" }; }\nexport function decide(flow: Flow): Flow { calls.push(\"decide\"); return { ...flow, decision: flow.result }; }\nexport async function completeRun(flow: Flow): Promise<Flow> { calls.push(\"completeRun\"); return { ...flow, decisionId: \"decision-1\" }; }\nexport function respond(flow: Flow) { calls.push(\"respond\"); return { status: 201, id: flow.decisionId, decision: flow.decision }; }\n"
+            }
+          ],
+          "expose": [],
+          "testFile": {
+            "path": "tests.ts",
+            "content": "import { test, expect } from \"ownr:test\";\nimport { trace } from \"./trace.ts\";\nimport { calls } from \"./flow.ts\";\ntest(\"fluxo até PrismaTriageRunRepository\", async () => { calls.length = 0; const value = await trace({ title: \"site down\", description: \"indisponível\" }); expect(value).toEqual({\"ticket\":{\"title\":\"site down\",\"description\":\"indisponível\"},\"serviceEntered\":true,\"runId\":\"run-1\"}); expect(calls).toEqual([\"parseTicketInput\",\"enterService\",\"startRun\"]); });"
+          }
+        },
+        "toolbox": [
+          {
+            "id": "flow-2",
+            "name": "Replay: PrismaTriageRunRepository",
+            "summary": "O serviço grava ticket e execução antes de classificar.",
+            "example": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport async function startRun(flow: Flow): Promise<Flow> { calls.push(\"startRun\"); return { ...flow, runId: \"run-1\" }; }\nvoid startRun({ ticket: { title: \"site down\", description: \"indisponível\" } });"
+          }
+        ],
+        "tutorContext": {
+          "relevantFiles": [
+            "trace.ts",
+            "src/infrastructure/persistence/prisma-triage-repositories.ts"
+          ],
+          "concepts": [],
+          "previousStages": [
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-01",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-02"
+          ]
+        },
+        "completionCriteria": [
+          {
+            "kind": "tests_pass"
+          }
+        ],
+        "limitation": "A execução existe, mas ainda não há classificação.",
+        "summary": {
+          "added": [
+            "Registrar o início"
+          ],
+          "why": "O serviço grava ticket e execução antes de classificar.",
+          "flow": [
+            "parseTicketInput",
+            "PersistedTriageService",
+            "PrismaTriageRunRepository"
+          ]
+        }
+      },
+      {
+        "id": "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-04",
+        "order": 4,
+        "moduleId": "flow",
+        "kind": "micro",
+        "title": "Classificar o ticket",
+        "goal": "O caso de uso escolhe o classificador conforme o modo configurado.",
+        "context": "Na etapa anterior, O serviço grava ticket e execução antes de classificar. O caso de uso escolhe o classificador conforme o modo configurado.",
+        "problem": "A execução existe, mas ainda não há classificação. Nesta etapa, ligue TriageTicket ao fluxo. Assim, o percurso chega a classificar o ticket.",
+        "examples": [],
+        "requirements": [],
+        "estimatedMinutes": 2,
+        "introduces": [],
+        "prerequisites": [],
+        "architecture": {
+          "nodes": [
+            {
+              "id": "flow-0",
+              "label": "parseTicketInput",
+              "kind": "function",
+              "col": 0,
+              "row": 0
+            },
+            {
+              "id": "flow-1",
+              "label": "PersistedTriageService",
+              "kind": "class",
+              "col": 1,
+              "row": 0
+            },
+            {
+              "id": "flow-2",
+              "label": "PrismaTriageRunRepository",
+              "kind": "class",
+              "col": 2,
+              "row": 0
+            },
+            {
+              "id": "flow-3",
+              "label": "TriageTicket",
+              "kind": "class",
+              "col": 0,
+              "row": 1
+            }
+          ],
+          "edges": [
+            {
+              "from": "flow-0",
+              "to": "flow-1",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-1",
+              "to": "flow-2",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-2",
+              "to": "flow-3",
+              "rel": "flows_to"
+            }
+          ]
+        },
+        "referenceCode": [
+          {
+            "path": "trace.ts",
+            "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  return classified;\n}\n"
+          }
+        ],
+        "lineNotes": [
+          {
+            "match": "const classified = await classifyTicket(started);",
+            "note": "A chamada const classified = await classifyTicket(started); passa o valor adiante; a versão real está em src/application/triage-ticket.ts."
+          }
+        ],
+        "explanation": [
+          {
+            "id": "flow-3",
+            "title": "Classificar o ticket",
+            "quick": "A chamada const classified = await classifyTicket(started); passa o valor adiante; a versão real está em src/application/triage-ticket.ts.",
+            "normal": "No SHA fixado, PersistedTriageService calls TriageTicket em src/application/persisted-triage-service.ts."
+          }
+        ],
+        "originalCodeRefs": [
+          {
+            "path": "src/application/triage-ticket.ts",
+            "startLine": 24,
+            "endLine": 45,
+            "symbol": "TriageTicket",
+            "replayFile": "trace.ts",
+            "note": "O Replay reduz este componente a uma chamada observável; veja as regras e efeitos reais no trecho do repositório.",
+            "snippet": "export class TriageTicket {\n  constructor(\n    private readonly configuration: TriageTicketMode,\n    private readonly policy = new HybridPolicy(),\n  ) {}\n\n  async execute(input: TicketInput): Promise<TriageDecision> {\n    if (this.configuration.mode === \"deterministic\") {\n      const result = await this.configuration.classifier.classify(input);\n      return this.policy.decideSingle(result, DecisionSource.DETERMINISTIC);\n    }\n\n    if (this.configuration.mode === \"ollama\") {\n      const result = await this.configuration.classifier.classify(input);\n      return this.policy.decideSingle(result, DecisionSource.LLM);\n    }\n\n    const deterministic = await this.configuration.deterministicClassifier.classify(input);\n    const llm = await classifyWithLlmFallback(this.configuration.llmClassifier, input);\n    return this.policy.decide({ deterministic, llm });\n  }\n}",
+            "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/triage-ticket.ts#L24-L45"
+          }
+        ],
+        "exercise": {
+          "instructions": "Faça o Replay avançar até classificar o ticket usando o componente disponível.",
+          "starterFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  return started;\n}\n"
+            }
+          ],
+          "solutionFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  return classified;\n}\n"
+            }
+          ],
+          "supportFiles": [
+            {
+              "path": "flow.ts",
+              "content": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function parseTicketInput(input: Ticket): Flow { calls.push(\"parseTicketInput\"); if (!input.title.trim() || !input.description.trim()) throw new Error(\"invalid_request\"); return { ticket: input }; }\nexport async function enterService(flow: Flow): Promise<Flow> { calls.push(\"enterService\"); return { ...flow, serviceEntered: true }; }\nexport async function startRun(flow: Flow): Promise<Flow> { calls.push(\"startRun\"); return { ...flow, runId: \"run-1\" }; }\nexport async function classifyTicket(flow: Flow): Promise<Flow> { calls.push(\"classifyTicket\"); return { ...flow, result: flow.ticket.title.includes(\"down\") ? \"INCIDENT\" : \"OTHER\" }; }\nexport function decide(flow: Flow): Flow { calls.push(\"decide\"); return { ...flow, decision: flow.result }; }\nexport async function completeRun(flow: Flow): Promise<Flow> { calls.push(\"completeRun\"); return { ...flow, decisionId: \"decision-1\" }; }\nexport function respond(flow: Flow) { calls.push(\"respond\"); return { status: 201, id: flow.decisionId, decision: flow.decision }; }\n"
+            }
+          ],
+          "expose": [],
+          "testFile": {
+            "path": "tests.ts",
+            "content": "import { test, expect } from \"ownr:test\";\nimport { trace } from \"./trace.ts\";\nimport { calls } from \"./flow.ts\";\ntest(\"fluxo até TriageTicket\", async () => { calls.length = 0; const value = await trace({ title: \"site down\", description: \"indisponível\" }); expect(value).toEqual({\"ticket\":{\"title\":\"site down\",\"description\":\"indisponível\"},\"serviceEntered\":true,\"runId\":\"run-1\",\"result\":\"INCIDENT\"}); expect(calls).toEqual([\"parseTicketInput\",\"enterService\",\"startRun\",\"classifyTicket\"]); });"
+          }
+        },
+        "toolbox": [
+          {
+            "id": "flow-3",
+            "name": "Replay: TriageTicket",
+            "summary": "O caso de uso escolhe o classificador conforme o modo configurado.",
+            "example": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport async function classifyTicket(flow: Flow): Promise<Flow> { calls.push(\"classifyTicket\"); return { ...flow, result: flow.ticket.title.includes(\"down\") ? \"INCIDENT\" : \"OTHER\" }; }\nvoid classifyTicket({ ticket: { title: \"site down\", description: \"indisponível\" } });"
+          }
+        ],
+        "tutorContext": {
+          "relevantFiles": [
+            "trace.ts",
+            "src/application/triage-ticket.ts"
+          ],
+          "concepts": [],
+          "previousStages": [
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-01",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-02",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-03"
+          ]
+        },
+        "completionCriteria": [
+          {
+            "kind": "tests_pass"
+          }
+        ],
+        "limitation": "O resultado do classificador ainda não é uma decisão de triagem.",
+        "summary": {
+          "added": [
+            "Classificar o ticket"
+          ],
+          "why": "O caso de uso escolhe o classificador conforme o modo configurado.",
+          "flow": [
+            "parseTicketInput",
+            "PersistedTriageService",
+            "PrismaTriageRunRepository",
+            "TriageTicket"
+          ]
+        }
+      },
+      {
+        "id": "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-05",
+        "order": 5,
+        "moduleId": "flow",
+        "kind": "micro",
+        "title": "Formar a decisão",
+        "goal": "A política acrescenta origem e motivos de revisão ao resultado.",
+        "context": "Na etapa anterior, O caso de uso escolhe o classificador conforme o modo configurado. A política acrescenta origem e motivos de revisão ao resultado.",
+        "problem": "O resultado do classificador ainda não é uma decisão de triagem. Nesta etapa, ligue HybridPolicy ao fluxo. Assim, o percurso chega a formar a decisão.",
+        "examples": [],
+        "requirements": [],
+        "estimatedMinutes": 2,
+        "introduces": [],
+        "prerequisites": [],
+        "architecture": {
+          "nodes": [
+            {
+              "id": "flow-0",
+              "label": "parseTicketInput",
+              "kind": "function",
+              "col": 0,
+              "row": 0
+            },
+            {
+              "id": "flow-1",
+              "label": "PersistedTriageService",
+              "kind": "class",
+              "col": 1,
+              "row": 0
+            },
+            {
+              "id": "flow-2",
+              "label": "PrismaTriageRunRepository",
+              "kind": "class",
+              "col": 2,
+              "row": 0
+            },
+            {
+              "id": "flow-3",
+              "label": "TriageTicket",
+              "kind": "class",
+              "col": 0,
+              "row": 1
+            },
+            {
+              "id": "flow-4",
+              "label": "HybridPolicy",
+              "kind": "class",
+              "col": 1,
+              "row": 1
+            }
+          ],
+          "edges": [
+            {
+              "from": "flow-0",
+              "to": "flow-1",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-1",
+              "to": "flow-2",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-2",
+              "to": "flow-3",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-3",
+              "to": "flow-4",
+              "rel": "flows_to"
+            }
+          ]
+        },
+        "referenceCode": [
+          {
+            "path": "trace.ts",
+            "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  const decided = decide(classified);\n  return decided;\n}\n"
+          }
+        ],
+        "lineNotes": [
+          {
+            "match": "const decided = decide(classified);",
+            "note": "A chamada const decided = decide(classified); passa o valor adiante; a versão real está em src/application/policies/hybrid-policy.ts."
+          }
+        ],
+        "explanation": [
+          {
+            "id": "flow-4",
+            "title": "Formar a decisão",
+            "quick": "A chamada const decided = decide(classified); passa o valor adiante; a versão real está em src/application/policies/hybrid-policy.ts.",
+            "normal": "No SHA fixado, TriageTicket calls HybridPolicy em src/application/triage-ticket.ts."
+          }
+        ],
+        "originalCodeRefs": [
+          {
+            "path": "src/application/policies/hybrid-policy.ts",
+            "startLine": 32,
+            "endLine": 57,
+            "symbol": "HybridPolicy",
+            "replayFile": "trace.ts",
+            "note": "O Replay reduz este componente a uma chamada observável; veja as regras e efeitos reais no trecho do repositório.",
+            "snippet": "export class HybridPolicy {\n  decide(input: HybridPolicyInput): TriageDecision {\n    if (input.llm.status === \"failed\") {\n      return decision(\n        input.deterministic,\n        DecisionSource.DETERMINISTIC_FALLBACK,\n        reviewReasons([input.deterministic], false, true),\n      );\n    }\n\n    const results = [input.deterministic, input.llm.result];\n    return decision(\n      input.llm.result,\n      DecisionSource.HYBRID,\n      reviewReasons(\n        results,\n        classifiersDisagree(input.deterministic, input.llm.result),\n        false,\n      ),\n    );\n  }\n\n  decideSingle(result: ClassifierResult, source: SingleDecisionSource): TriageDecision {\n    return decision(result, source, reviewReasons([result], false, false));\n  }\n}",
+            "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/application/policies/hybrid-policy.ts#L32-L57"
+          }
+        ],
+        "exercise": {
+          "instructions": "Faça o Replay avançar até formar a decisão usando o componente disponível.",
+          "starterFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  return classified;\n}\n"
+            }
+          ],
+          "solutionFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  const decided = decide(classified);\n  return decided;\n}\n"
+            }
+          ],
+          "supportFiles": [
+            {
+              "path": "flow.ts",
+              "content": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function parseTicketInput(input: Ticket): Flow { calls.push(\"parseTicketInput\"); if (!input.title.trim() || !input.description.trim()) throw new Error(\"invalid_request\"); return { ticket: input }; }\nexport async function enterService(flow: Flow): Promise<Flow> { calls.push(\"enterService\"); return { ...flow, serviceEntered: true }; }\nexport async function startRun(flow: Flow): Promise<Flow> { calls.push(\"startRun\"); return { ...flow, runId: \"run-1\" }; }\nexport async function classifyTicket(flow: Flow): Promise<Flow> { calls.push(\"classifyTicket\"); return { ...flow, result: flow.ticket.title.includes(\"down\") ? \"INCIDENT\" : \"OTHER\" }; }\nexport function decide(flow: Flow): Flow { calls.push(\"decide\"); return { ...flow, decision: flow.result }; }\nexport async function completeRun(flow: Flow): Promise<Flow> { calls.push(\"completeRun\"); return { ...flow, decisionId: \"decision-1\" }; }\nexport function respond(flow: Flow) { calls.push(\"respond\"); return { status: 201, id: flow.decisionId, decision: flow.decision }; }\n"
+            }
+          ],
+          "expose": [],
+          "testFile": {
+            "path": "tests.ts",
+            "content": "import { test, expect } from \"ownr:test\";\nimport { trace } from \"./trace.ts\";\nimport { calls } from \"./flow.ts\";\ntest(\"fluxo até HybridPolicy\", async () => { calls.length = 0; const value = await trace({ title: \"site down\", description: \"indisponível\" }); expect(value).toEqual({\"ticket\":{\"title\":\"site down\",\"description\":\"indisponível\"},\"serviceEntered\":true,\"runId\":\"run-1\",\"result\":\"INCIDENT\",\"decision\":\"INCIDENT\"}); expect(calls).toEqual([\"parseTicketInput\",\"enterService\",\"startRun\",\"classifyTicket\",\"decide\"]); });"
+          }
+        },
+        "toolbox": [
+          {
+            "id": "flow-4",
+            "name": "Replay: HybridPolicy",
+            "summary": "A política acrescenta origem e motivos de revisão ao resultado.",
+            "example": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function decide(flow: Flow): Flow { calls.push(\"decide\"); return { ...flow, decision: flow.result }; }\nvoid decide({ ticket: { title: \"site down\", description: \"indisponível\" } });"
+          }
+        ],
+        "tutorContext": {
+          "relevantFiles": [
+            "trace.ts",
+            "src/application/policies/hybrid-policy.ts"
+          ],
+          "concepts": [],
+          "previousStages": [
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-01",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-02",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-03",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-04"
+          ]
+        },
+        "completionCriteria": [
+          {
+            "kind": "tests_pass"
+          }
+        ],
+        "limitation": "A decisão ainda não foi gravada como conclusão da execução.",
+        "summary": {
+          "added": [
+            "Formar a decisão"
+          ],
+          "why": "A política acrescenta origem e motivos de revisão ao resultado.",
+          "flow": [
+            "parseTicketInput",
+            "PersistedTriageService",
+            "PrismaTriageRunRepository",
+            "TriageTicket",
+            "HybridPolicy"
+          ]
+        }
+      },
+      {
+        "id": "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-06",
+        "order": 6,
+        "moduleId": "flow",
+        "kind": "micro",
+        "title": "Persistir a decisão",
+        "goal": "O serviço conclui a execução e grava a decisão em transação.",
+        "context": "Na etapa anterior, A política acrescenta origem e motivos de revisão ao resultado. O serviço conclui a execução e grava a decisão em transação.",
+        "problem": "A decisão ainda não foi gravada como conclusão da execução. Nesta etapa, ligue PrismaTriageRunRepository ao fluxo. Assim, o percurso chega a persistir a decisão.",
+        "examples": [],
+        "requirements": [],
+        "estimatedMinutes": 2,
+        "introduces": [],
+        "prerequisites": [],
+        "architecture": {
+          "nodes": [
+            {
+              "id": "flow-0",
+              "label": "parseTicketInput",
+              "kind": "function",
+              "col": 0,
+              "row": 0
+            },
+            {
+              "id": "flow-1",
+              "label": "PersistedTriageService",
+              "kind": "class",
+              "col": 1,
+              "row": 0
+            },
+            {
+              "id": "flow-2",
+              "label": "PrismaTriageRunRepository",
+              "kind": "class",
+              "col": 2,
+              "row": 0
+            },
+            {
+              "id": "flow-3",
+              "label": "TriageTicket",
+              "kind": "class",
+              "col": 0,
+              "row": 1
+            },
+            {
+              "id": "flow-4",
+              "label": "HybridPolicy",
+              "kind": "class",
+              "col": 1,
+              "row": 1
+            },
+            {
+              "id": "flow-5",
+              "label": "PrismaTriageRunRepository",
+              "kind": "class",
+              "col": 2,
+              "row": 1
+            }
+          ],
+          "edges": [
+            {
+              "from": "flow-0",
+              "to": "flow-1",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-1",
+              "to": "flow-2",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-2",
+              "to": "flow-3",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-3",
+              "to": "flow-4",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-4",
+              "to": "flow-5",
+              "rel": "flows_to"
+            }
+          ]
+        },
+        "referenceCode": [
+          {
+            "path": "trace.ts",
+            "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  const decided = decide(classified);\n  const saved = await completeRun(decided);\n  return saved;\n}\n"
+          }
+        ],
+        "lineNotes": [
+          {
+            "match": "const saved = await completeRun(decided);",
+            "note": "A chamada const saved = await completeRun(decided); passa o valor adiante; a versão real está em src/infrastructure/persistence/prisma-triage-repositories.ts."
+          }
+        ],
+        "explanation": [
+          {
+            "id": "flow-5",
+            "title": "Persistir a decisão",
+            "quick": "A chamada const saved = await completeRun(decided); passa o valor adiante; a versão real está em src/infrastructure/persistence/prisma-triage-repositories.ts.",
+            "normal": "No SHA fixado, PersistedTriageService persists PrismaTriageRunRepository em src/application/persisted-triage-service.ts; PrismaTriageRunRepository writes PrismaTriageRunRepository em src/infrastructure/persistence/prisma-triage-repositories.ts."
+          }
+        ],
+        "originalCodeRefs": [
+          {
+            "path": "src/infrastructure/persistence/prisma-triage-repositories.ts",
+            "startLine": 32,
+            "endLine": 114,
+            "symbol": "PrismaTriageRunRepository",
+            "replayFile": "trace.ts",
+            "note": "O Replay reduz este componente a uma chamada observável; veja as regras e efeitos reais no trecho do repositório.",
+            "snippet": "export class PrismaTriageRunRepository implements TriageRunRepository {\n  constructor(private readonly prisma: PrismaClient) {}\n\n  async start(input: StartTriageRun): Promise<void> {\n    await this.prisma.$transaction(async (tx) => {\n      await tx.ticket.create({\n        data: {\n          id: input.ticketId,\n          title: input.ticket.title,\n          description: input.ticket.description,\n        },\n      });\n      await tx.triageRun.create({\n        data: {\n          id: input.runId,\n          ticketId: input.ticketId,\n          mode: toPrismaTriageMode(input.mode),\n          status: \"RUNNING\",\n        },\n      });\n    });\n  }\n\n  async complete(input: CompleteTriageRun): Promise<void> {\n    await this.prisma.$transaction(async (tx) => {\n      await createDecision(tx, input);\n      await tx.triageRun.update({\n        where: { id: input.runId },\n        data: {\n          status: \"SUCCEEDED\",\n          failureCode: null,\n          completedAt: input.completedAt,\n        },\n      });\n    });\n  }\n\n  async fail(input: FailTriageRun): Promise<void> {\n    await this.prisma.triageRun.update({\n      where: { id: input.runId },\n      data: {\n        status: \"FAILED\",\n        failureCode: input.failureCode,\n        completedAt: input.completedAt,\n      },\n    });\n  }\n\n  async reconcileStaleRuns(cutoff: Date): Promise<number> {\n    const result = await this.prisma.triageRun.updateMany({\n      where: { status: \"RUNNING\", startedAt: { lt: cutoff } },\n      data: { status: \"ABANDONED\", failureCode: \"ABANDONED\", completedAt: new Date() },\n    });\n    return result.count;\n  }\n\n  async getStatusCounts(): Promise<Record<TriageRunStatus, number>> {\n    const statuses: TriageRunStatus[] = [\"RUNNING\", \"SUCCEEDED\", \"FAILED\", \"ABANDONED\"];\n    const entries = await Promise.all(statuses.map(async (status) => [\n      status,\n      await this.prisma.triageRun.count({ where: { status } }),\n    ] as const));\n    return Object.fromEntries(entries) as Record<TriageRunStatus, number>;\n  }\n\n  async findDecisionAudit(decisionId: string): Promise<TriageAuditRecord | null> {\n    const row = await this.prisma.triageDecision.findUnique({\n      where: { id: decisionId },\n      include: {\n        triageRun: { include: { ticket: true } },\n        feedback: { orderBy: { createdAt: \"asc\" } },\n      },\n    });\n    if (!row) return null;\n\n    return {\n      ticket: mapTicket(row.triageRun.ticket),\n      run: mapRun(row.triageRun),\n      decision: mapDecision(row),\n      feedback: row.feedback.map(mapFeedback),\n    };\n  }\n}",
+            "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/infrastructure/persistence/prisma-triage-repositories.ts#L32-L114"
+          }
+        ],
+        "exercise": {
+          "instructions": "Faça o Replay avançar até persistir a decisão usando o componente disponível.",
+          "starterFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  const decided = decide(classified);\n  return decided;\n}\n"
+            }
+          ],
+          "solutionFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  const decided = decide(classified);\n  const saved = await completeRun(decided);\n  return saved;\n}\n"
+            }
+          ],
+          "supportFiles": [
+            {
+              "path": "flow.ts",
+              "content": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function parseTicketInput(input: Ticket): Flow { calls.push(\"parseTicketInput\"); if (!input.title.trim() || !input.description.trim()) throw new Error(\"invalid_request\"); return { ticket: input }; }\nexport async function enterService(flow: Flow): Promise<Flow> { calls.push(\"enterService\"); return { ...flow, serviceEntered: true }; }\nexport async function startRun(flow: Flow): Promise<Flow> { calls.push(\"startRun\"); return { ...flow, runId: \"run-1\" }; }\nexport async function classifyTicket(flow: Flow): Promise<Flow> { calls.push(\"classifyTicket\"); return { ...flow, result: flow.ticket.title.includes(\"down\") ? \"INCIDENT\" : \"OTHER\" }; }\nexport function decide(flow: Flow): Flow { calls.push(\"decide\"); return { ...flow, decision: flow.result }; }\nexport async function completeRun(flow: Flow): Promise<Flow> { calls.push(\"completeRun\"); return { ...flow, decisionId: \"decision-1\" }; }\nexport function respond(flow: Flow) { calls.push(\"respond\"); return { status: 201, id: flow.decisionId, decision: flow.decision }; }\n"
+            }
+          ],
+          "expose": [],
+          "testFile": {
+            "path": "tests.ts",
+            "content": "import { test, expect } from \"ownr:test\";\nimport { trace } from \"./trace.ts\";\nimport { calls } from \"./flow.ts\";\ntest(\"fluxo até PrismaTriageRunRepository\", async () => { calls.length = 0; const value = await trace({ title: \"site down\", description: \"indisponível\" }); expect(value).toEqual({\"ticket\":{\"title\":\"site down\",\"description\":\"indisponível\"},\"serviceEntered\":true,\"runId\":\"run-1\",\"result\":\"INCIDENT\",\"decision\":\"INCIDENT\",\"decisionId\":\"decision-1\"}); expect(calls).toEqual([\"parseTicketInput\",\"enterService\",\"startRun\",\"classifyTicket\",\"decide\",\"completeRun\"]); });"
+          }
+        },
+        "toolbox": [
+          {
+            "id": "flow-5",
+            "name": "Replay: PrismaTriageRunRepository",
+            "summary": "O serviço conclui a execução e grava a decisão em transação.",
+            "example": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport async function completeRun(flow: Flow): Promise<Flow> { calls.push(\"completeRun\"); return { ...flow, decisionId: \"decision-1\" }; }\nvoid completeRun({ ticket: { title: \"site down\", description: \"indisponível\" } });"
+          }
+        ],
+        "tutorContext": {
+          "relevantFiles": [
+            "trace.ts",
+            "src/infrastructure/persistence/prisma-triage-repositories.ts"
+          ],
+          "concepts": [],
+          "previousStages": [
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-01",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-02",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-03",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-04",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-05"
+          ]
+        },
+        "completionCriteria": [
+          {
+            "kind": "tests_pass"
+          }
+        ],
+        "limitation": "A decisão gravada ainda precisa voltar ao cliente HTTP.",
+        "summary": {
+          "added": [
+            "Persistir a decisão"
+          ],
+          "why": "O serviço conclui a execução e grava a decisão em transação.",
+          "flow": [
+            "parseTicketInput",
+            "PersistedTriageService",
+            "PrismaTriageRunRepository",
+            "TriageTicket",
+            "HybridPolicy",
+            "PrismaTriageRunRepository"
+          ]
+        }
+      },
+      {
+        "id": "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-07",
+        "order": 7,
+        "moduleId": "flow",
+        "kind": "micro",
+        "title": "Responder pela API",
+        "goal": "A rota devolve o identificador e a decisão persistida com status 201.",
+        "context": "Na etapa anterior, O serviço conclui a execução e grava a decisão em transação. A rota devolve o identificador e a decisão persistida com status 201.",
+        "problem": "A decisão gravada ainda precisa voltar ao cliente HTTP. Nesta etapa, ligue handleRequest ao fluxo. Assim, o percurso chega a responder pela api.",
+        "examples": [],
+        "requirements": [],
+        "estimatedMinutes": 2,
+        "introduces": [],
+        "prerequisites": [],
+        "architecture": {
+          "nodes": [
+            {
+              "id": "flow-0",
+              "label": "parseTicketInput",
+              "kind": "function",
+              "col": 0,
+              "row": 0
+            },
+            {
+              "id": "flow-1",
+              "label": "PersistedTriageService",
+              "kind": "class",
+              "col": 1,
+              "row": 0
+            },
+            {
+              "id": "flow-2",
+              "label": "PrismaTriageRunRepository",
+              "kind": "class",
+              "col": 2,
+              "row": 0
+            },
+            {
+              "id": "flow-3",
+              "label": "TriageTicket",
+              "kind": "class",
+              "col": 0,
+              "row": 1
+            },
+            {
+              "id": "flow-4",
+              "label": "HybridPolicy",
+              "kind": "class",
+              "col": 1,
+              "row": 1
+            },
+            {
+              "id": "flow-5",
+              "label": "PrismaTriageRunRepository",
+              "kind": "class",
+              "col": 2,
+              "row": 1
+            },
+            {
+              "id": "flow-6",
+              "label": "handleRequest",
+              "kind": "function",
+              "col": 0,
+              "row": 2
+            }
+          ],
+          "edges": [
+            {
+              "from": "flow-0",
+              "to": "flow-1",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-1",
+              "to": "flow-2",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-2",
+              "to": "flow-3",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-3",
+              "to": "flow-4",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-4",
+              "to": "flow-5",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-5",
+              "to": "flow-6",
+              "rel": "flows_to"
+            }
+          ]
+        },
+        "referenceCode": [
+          {
+            "path": "trace.ts",
+            "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  const decided = decide(classified);\n  const saved = await completeRun(decided);\n  const response = respond(saved);\n  return response;\n}\n"
+          }
+        ],
+        "lineNotes": [
+          {
+            "match": "const response = respond(saved);",
+            "note": "A chamada const response = respond(saved); passa o valor adiante; a versão real está em src/server.ts."
+          }
+        ],
+        "explanation": [
+          {
+            "id": "flow-6",
+            "title": "Responder pela API",
+            "quick": "A chamada const response = respond(saved); passa o valor adiante; a versão real está em src/server.ts.",
+            "normal": "No SHA fixado, PersistedTriageService flows_to handleRequest em src/server.ts."
+          }
+        ],
+        "originalCodeRefs": [
+          {
+            "path": "src/server.ts",
+            "startLine": 29,
+            "endLine": 47,
+            "symbol": "handleRequest",
+            "replayFile": "trace.ts",
+            "note": "O Replay reduz este componente a uma chamada observável; veja as regras e efeitos reais no trecho do repositório.",
+            "snippet": "export async function handleRequest(req: Request, dependencies: ServerDependencies): Promise<Response> {\n  const requestId = safeRequestId(req.headers.get(\"x-request-id\"));\n  const startedAt = performance.now();\n  const metrics = dependencies.metrics ?? metricsFor(dependencies);\n  const logger = dependencies.logger ?? stdoutLogger;\n  const route = routeName(req);\n  let response: Response;\n  try {\n    response = await routeRequest(req, requestId, dependencies, metrics, logger);\n  } catch {\n    metrics.increment(\"unexpected_errors_total\", { route });\n    logger.log(\"error\", \"unexpected_error\", { requestId, route, code: \"INTERNAL_ERROR\" });\n    response = json(500, { error: \"internal_error\" }, requestId);\n  }\n  metrics.increment(\"requests_total\", { route, status: String(response.status) });\n  metrics.observe(\"request_duration_ms\", performance.now() - startedAt, { route });\n  logger.log(\"info\", \"request_completed\", { requestId, route, status: response.status, durationMs: Math.round(performance.now() - startedAt) });\n  return response;\n}",
+            "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/server.ts#L29-L47"
+          }
+        ],
+        "exercise": {
+          "instructions": "Faça o Replay avançar até responder pela api usando o componente disponível.",
+          "starterFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  const decided = decide(classified);\n  const saved = await completeRun(decided);\n  return saved;\n}\n"
+            }
+          ],
+          "solutionFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  const decided = decide(classified);\n  const saved = await completeRun(decided);\n  const response = respond(saved);\n  return response;\n}\n"
+            }
+          ],
+          "supportFiles": [
+            {
+              "path": "flow.ts",
+              "content": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function parseTicketInput(input: Ticket): Flow { calls.push(\"parseTicketInput\"); if (!input.title.trim() || !input.description.trim()) throw new Error(\"invalid_request\"); return { ticket: input }; }\nexport async function enterService(flow: Flow): Promise<Flow> { calls.push(\"enterService\"); return { ...flow, serviceEntered: true }; }\nexport async function startRun(flow: Flow): Promise<Flow> { calls.push(\"startRun\"); return { ...flow, runId: \"run-1\" }; }\nexport async function classifyTicket(flow: Flow): Promise<Flow> { calls.push(\"classifyTicket\"); return { ...flow, result: flow.ticket.title.includes(\"down\") ? \"INCIDENT\" : \"OTHER\" }; }\nexport function decide(flow: Flow): Flow { calls.push(\"decide\"); return { ...flow, decision: flow.result }; }\nexport async function completeRun(flow: Flow): Promise<Flow> { calls.push(\"completeRun\"); return { ...flow, decisionId: \"decision-1\" }; }\nexport function respond(flow: Flow) { calls.push(\"respond\"); return { status: 201, id: flow.decisionId, decision: flow.decision }; }\n"
+            }
+          ],
+          "expose": [],
+          "testFile": {
+            "path": "tests.ts",
+            "content": "import { test, expect } from \"ownr:test\";\nimport { trace } from \"./trace.ts\";\nimport { calls } from \"./flow.ts\";\ntest(\"fluxo até handleRequest\", async () => { calls.length = 0; const value = await trace({ title: \"site down\", description: \"indisponível\" }); expect(value).toEqual({\"status\":201,\"id\":\"decision-1\",\"decision\":\"INCIDENT\"}); expect(calls).toEqual([\"parseTicketInput\",\"enterService\",\"startRun\",\"classifyTicket\",\"decide\",\"completeRun\",\"respond\"]); });"
+          }
+        },
+        "toolbox": [
+          {
+            "id": "flow-6",
+            "name": "Replay: handleRequest",
+            "summary": "A rota devolve o identificador e a decisão persistida com status 201.",
+            "example": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function respond(flow: Flow) { calls.push(\"respond\"); return { status: 201, id: flow.decisionId, decision: flow.decision }; }\nvoid respond({ ticket: { title: \"site down\", description: \"indisponível\" } });"
+          }
+        ],
+        "tutorContext": {
+          "relevantFiles": [
+            "trace.ts",
+            "src/server.ts"
+          ],
+          "concepts": [],
+          "previousStages": [
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-01",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-02",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-03",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-04",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-05",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-06"
+          ]
+        },
+        "completionCriteria": [
+          {
+            "kind": "tests_pass"
+          }
+        ],
+        "limitation": "Agora reconstruímos a ligação completa sem o código inicial.",
+        "summary": {
+          "added": [
+            "Responder pela API"
+          ],
+          "why": "A rota devolve o identificador e a decisão persistida com status 201.",
+          "flow": [
+            "parseTicketInput",
+            "PersistedTriageService",
+            "PrismaTriageRunRepository",
+            "TriageTicket",
+            "HybridPolicy",
+            "PrismaTriageRunRepository",
+            "handleRequest"
+          ]
+        }
+      },
+      {
+        "id": "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-99",
+        "order": 8,
+        "moduleId": "flow",
+        "kind": "checkpoint",
+        "title": "Checkpoint: conecte o percurso completo",
+        "goal": "Reconstruir da entrada HTTP à resposta após persistência.",
+        "context": "Todas as chamadas foram introduzidas uma a uma.",
+        "problem": "Agora reconstrua a sequência inteira e explique por que a decisão só volta após a conclusão persistida.",
+        "examples": [],
+        "requirements": [
+          "Valide o ticket antes de iniciar a execução.",
+          "Classifique e forme a decisão antes de gravá-la.",
+          "Responda com o identificador da decisão persistida."
+        ],
+        "estimatedMinutes": 2,
+        "introduces": [],
+        "prerequisites": [],
+        "architecture": {
+          "nodes": [
+            {
+              "id": "flow-0",
+              "label": "parseTicketInput",
+              "kind": "function",
+              "col": 0,
+              "row": 0
+            },
+            {
+              "id": "flow-1",
+              "label": "PersistedTriageService",
+              "kind": "class",
+              "col": 1,
+              "row": 0
+            },
+            {
+              "id": "flow-2",
+              "label": "PrismaTriageRunRepository",
+              "kind": "class",
+              "col": 2,
+              "row": 0
+            },
+            {
+              "id": "flow-3",
+              "label": "TriageTicket",
+              "kind": "class",
+              "col": 0,
+              "row": 1
+            },
+            {
+              "id": "flow-4",
+              "label": "HybridPolicy",
+              "kind": "class",
+              "col": 1,
+              "row": 1
+            },
+            {
+              "id": "flow-5",
+              "label": "PrismaTriageRunRepository",
+              "kind": "class",
+              "col": 2,
+              "row": 1
+            },
+            {
+              "id": "flow-6",
+              "label": "handleRequest",
+              "kind": "function",
+              "col": 0,
+              "row": 2
+            }
+          ],
+          "edges": [
+            {
+              "from": "flow-0",
+              "to": "flow-1",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-1",
+              "to": "flow-2",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-2",
+              "to": "flow-3",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-3",
+              "to": "flow-4",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-4",
+              "to": "flow-5",
+              "rel": "flows_to"
+            },
+            {
+              "from": "flow-5",
+              "to": "flow-6",
+              "rel": "flows_to"
+            }
+          ]
+        },
+        "referenceCode": [
+          {
+            "path": "trace.ts",
+            "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  const decided = decide(classified);\n  const saved = await completeRun(decided);\n  const response = respond(saved);\n  return response;\n}\n"
+          }
+        ],
+        "lineNotes": [
+          {
+            "match": "const response = respond(saved);",
+            "note": "A chamada const response = respond(saved); passa o valor adiante; a versão real está em src/server.ts."
+          }
+        ],
+        "explanation": [
+          {
+            "id": "flow-6",
+            "title": "Responder pela API",
+            "quick": "A chamada const response = respond(saved); passa o valor adiante; a versão real está em src/server.ts.",
+            "normal": "No SHA fixado, PersistedTriageService flows_to handleRequest em src/server.ts."
+          }
+        ],
+        "originalCodeRefs": [
+          {
+            "path": "src/server.ts",
+            "startLine": 29,
+            "endLine": 47,
+            "symbol": "handleRequest",
+            "replayFile": "trace.ts",
+            "note": "O Replay reduz este componente a uma chamada observável; veja as regras e efeitos reais no trecho do repositório.",
+            "snippet": "export async function handleRequest(req: Request, dependencies: ServerDependencies): Promise<Response> {\n  const requestId = safeRequestId(req.headers.get(\"x-request-id\"));\n  const startedAt = performance.now();\n  const metrics = dependencies.metrics ?? metricsFor(dependencies);\n  const logger = dependencies.logger ?? stdoutLogger;\n  const route = routeName(req);\n  let response: Response;\n  try {\n    response = await routeRequest(req, requestId, dependencies, metrics, logger);\n  } catch {\n    metrics.increment(\"unexpected_errors_total\", { route });\n    logger.log(\"error\", \"unexpected_error\", { requestId, route, code: \"INTERNAL_ERROR\" });\n    response = json(500, { error: \"internal_error\" }, requestId);\n  }\n  metrics.increment(\"requests_total\", { route, status: String(response.status) });\n  metrics.observe(\"request_duration_ms\", performance.now() - startedAt, { route });\n  logger.log(\"info\", \"request_completed\", { requestId, route, status: response.status, durationMs: Math.round(performance.now() - startedAt) });\n  return response;\n}",
+            "url": "https://github.com/marcelotaparelli/ops-triage-ai/blob/840b2bfb6ed2e6f866f078d3b5933bf8c0af6f67/src/server.ts#L29-L47"
+          }
+        ],
+        "exercise": {
+          "instructions": "Faça o Replay avançar até responder pela api usando o componente disponível.",
+          "starterFiles": [
+            {
+              "path": "trace.ts",
+              "content": ""
+            }
+          ],
+          "solutionFiles": [
+            {
+              "path": "trace.ts",
+              "content": "import { parseTicketInput, enterService, startRun, classifyTicket, decide, completeRun, respond, type Ticket } from \"./flow.ts\";\nexport async function trace(input: Ticket) {\n  const ticket = parseTicketInput(input);\n  const service = await enterService(ticket);\n  const started = await startRun(service);\n  const classified = await classifyTicket(started);\n  const decided = decide(classified);\n  const saved = await completeRun(decided);\n  const response = respond(saved);\n  return response;\n}\n"
+            }
+          ],
+          "supportFiles": [
+            {
+              "path": "flow.ts",
+              "content": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function parseTicketInput(input: Ticket): Flow { calls.push(\"parseTicketInput\"); if (!input.title.trim() || !input.description.trim()) throw new Error(\"invalid_request\"); return { ticket: input }; }\nexport async function enterService(flow: Flow): Promise<Flow> { calls.push(\"enterService\"); return { ...flow, serviceEntered: true }; }\nexport async function startRun(flow: Flow): Promise<Flow> { calls.push(\"startRun\"); return { ...flow, runId: \"run-1\" }; }\nexport async function classifyTicket(flow: Flow): Promise<Flow> { calls.push(\"classifyTicket\"); return { ...flow, result: flow.ticket.title.includes(\"down\") ? \"INCIDENT\" : \"OTHER\" }; }\nexport function decide(flow: Flow): Flow { calls.push(\"decide\"); return { ...flow, decision: flow.result }; }\nexport async function completeRun(flow: Flow): Promise<Flow> { calls.push(\"completeRun\"); return { ...flow, decisionId: \"decision-1\" }; }\nexport function respond(flow: Flow) { calls.push(\"respond\"); return { status: 201, id: flow.decisionId, decision: flow.decision }; }\n"
+            }
+          ],
+          "expose": [],
+          "testFile": {
+            "path": "tests.ts",
+            "content": "import { test, expect } from \"ownr:test\";\nimport { trace } from \"./trace.ts\";\nimport { calls } from \"./flow.ts\";\ntest(\"fluxo até handleRequest\", async () => { calls.length = 0; const value = await trace({ title: \"site down\", description: \"indisponível\" }); expect(value).toEqual({\"status\":201,\"id\":\"decision-1\",\"decision\":\"INCIDENT\"}); expect(calls).toEqual([\"parseTicketInput\",\"enterService\",\"startRun\",\"classifyTicket\",\"decide\",\"completeRun\",\"respond\"]); });"
+          }
+        },
+        "toolbox": [
+          {
+            "id": "flow-6",
+            "name": "Replay: handleRequest",
+            "summary": "A rota devolve o identificador e a decisão persistida com status 201.",
+            "example": "export type Ticket = { title: string; description: string };\nexport type Flow = { ticket: Ticket; serviceEntered?: boolean; runId?: string; result?: string; decision?: string; decisionId?: string };\nexport const calls: string[] = [];\nexport function respond(flow: Flow) { calls.push(\"respond\"); return { status: 201, id: flow.decisionId, decision: flow.decision }; }\nvoid respond({ ticket: { title: \"site down\", description: \"indisponível\" } });"
+          }
+        ],
+        "tutorContext": {
+          "relevantFiles": [
+            "trace.ts",
+            "src/server.ts"
+          ],
+          "concepts": [],
+          "previousStages": [
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-01",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-02",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-03",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-04",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-05",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-06",
+            "ops-triage-ai--quero-compreender-o-fluxo-completo-de-um-20a0d0e7.flow-07"
+          ]
+        },
+        "completionCriteria": [
+          {
+            "kind": "tests_pass"
+          }
+        ],
+        "checkpoint": {
+          "question": "Como a entrada HTTP chega à decisão persistida, e quando a API pode responder 201?",
+          "answer": "A rota valida o ticket e chama PersistedTriageService.execute. O serviço registra o início, chama TriageTicket, que classifica e usa HybridPolicy para formar a decisão. O serviço conclui a execução via PrismaTriageRunRepository e só então devolve decisionId e decisão à rota, que responde 201."
+        },
+        "summary": {
+          "added": [
+            "Responder pela API"
+          ],
+          "why": "A rota devolve o identificador e a decisão persistida com status 201.",
+          "flow": [
+            "parseTicketInput",
+            "PersistedTriageService",
+            "PrismaTriageRunRepository",
+            "TriageTicket",
+            "HybridPolicy",
+            "PrismaTriageRunRepository",
+            "handleRequest"
+          ]
+        }
+      }
+    ]
+  }
+}

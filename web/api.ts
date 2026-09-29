@@ -69,7 +69,7 @@ function isErrorBody(value: unknown): value is { error: { code: string; message:
 export const api = {
   journeys: () => request<JourneyCard[]>("GET", "/api/journeys"),
   journey: (id: string) => request<JourneyOutline>("GET", `/api/journeys/${encodeURIComponent(id)}`),
-  createJourney: (repoUrl: string, goal: LearningGoal) => request<{ id: string; startOrder?: number }>("POST", "/api/journeys", { repoUrl, goal }),
+  createJourney: (repoUrl: string, goal: LearningGoal) => request<{ id: string; startOrder?: number }>("POST", "/api/journeys", { repoUrl, goal }, 90_000),
   generateModule: (journeyId: string, moduleId: string, goal: string) =>
     request<JourneyOutline>("POST", `/api/journeys/${encodeURIComponent(journeyId)}/modules/${encodeURIComponent(moduleId)}/generate`, { goal }, 90_000),
   progress: (journeyId: string) =>

@@ -153,3 +153,51 @@ test("jornada específica restaurada conserva objetivo e etapas próprias", asyn
   expect(restored[0]?.stages[0]?.order).toBe(1);
   expect(restored[0]?.stages.at(-1)?.kind).toBe("checkpoint");
 });
+
+test("objetivo técnico gera fluxo HTTP até decisão persistida com referências verificáveis", async () => {
+  const root = mkdtempSync(join(tmpdir(), "replay-flow-generation-"));
+  const service = new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker));
+  const store = new TargetedJourneyStore(root);
+  const goal = "Quero compreender o fluxo completo de um ticket no ops-triage-ai, desde a entrada HTTP até a decisão e a persistência.";
+  const route = await service.generateRequestJourney(golden(), goal, index);
+  const stages = route.stages;
+  expect(route.goal).toEqual({ kind: "trace_request", target: goal });
+  expect(stages).toHaveLength(8);
+  expect(stages.slice(0, -1).every((stage) => stage.kind === "micro" && stage.introduces.length <= 1)).toBe(true);
+  expect(stages.at(-1)?.kind).toBe("checkpoint");
+  expect(stages.at(-1)?.checkpoint?.answer).toContain("PrismaTriageRunRepository");
+  expect(stages.flatMap((stage) => stage.originalCodeRefs).every((ref) => ref.url.includes(golden().repo.sha) && index.files.get(ref.path)?.includes(ref.snippet))).toBe(true);
+  expect(noveltyReport(stages).every((row) => row.newLines <= 5)).toBe(true);
+  store.saveRoute(golden(), route);
+  expect(store.restore([golden()])[0]?.id).toBe(route.id);
+});
+
+test("pedido pela API abre a jornada do fluxo e sua primeira microetapa", async () => {
+  const root = mkdtempSync(join(tmpdir(), "replay-flow-api-"));
+  const app = testApp({ generation: new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker)), typeChecker: checker });
+  const goal = "Quero compreender o fluxo completo de um ticket no ops-triage-ai, desde a entrada HTTP até a decisão e a persistência.";
+  const response = await app.call("POST", "/api/journeys", { repoUrl: "https://github.com/marcelotaparelli/ops-triage-ai", goal: { kind: "trace_request", target: goal } });
+  expect(response.status).toBe(200);
+  const requested = await response.json();
+  expect(requested.startOrder).toBe(1);
+  const outline = await (await app.call("GET", `/api/journeys/${requested.id}`)).json();
+  expect(outline.modules).toHaveLength(1);
+  expect(outline.stages).toHaveLength(8);
+  const first = await (await app.call("GET", `/api/stages/${outline.stages[0].id}`)).json();
+  expect(first.title).toBe("Validar a entrada");
+  expect(first.originalCodeRefs[0].path).toBe("src/http/triage-request.ts");
+  app.repository.close();
+});
+
+test("rota HTTP sem percurso comprovado informa a limitação", async () => {
+  const service = new ModuleGenerationService(mkdtempSync(join(tmpdir(), "replay-other-route-")), new StagePlanner(), new StageGenerator(), new StageValidator(checker));
+  await expect(service.generateRequestJourney(golden(), "GET /triage/123", index)).rejects.toThrow("ainda não tem um percurso validado");
+});
+
+test("planejador aceita outra formulação do mesmo objetivo técnico", () => {
+  const plan = new StagePlanner().planRequest("Como POST /tickets/triage chega à decisão persistida?", golden(), index);
+  expect(plan.steps.map((step) => step.symbol)).toEqual([
+    "parseTicketInput", "PersistedTriageService", "PrismaTriageRunRepository", "TriageTicket",
+    "HybridPolicy", "PrismaTriageRunRepository", "handleRequest",
+  ]);
+});

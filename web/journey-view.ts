@@ -290,7 +290,7 @@ const SAMPLE_REPO = "https://github.com/marcelotaparelli/ops-triage-ai";
 export function renderHome(journeys: JourneyCard[], resume: { journey: JourneyCard; label: string } | undefined): HTMLElement {
   const message = h("div", { class: "goal-message", "aria-live": "polite" });
   const url = h("input", { type: "url", name: "repoUrl", required: true, value: SAMPLE_REPO, placeholder: "https://github.com/owner/repo", "aria-label": "URL do repositório no GitHub" });
-  const target = h("input", { type: "text", name: "target", maxlength: 120, placeholder: "ex.: HybridPolicy, src/server.ts", "aria-label": "Qual parte" });
+  const target = h("input", { type: "text", name: "target", maxlength: 300, placeholder: "ex.: HybridPolicy, src/server.ts", "aria-label": "Qual parte" });
   const topic = h("select", { name: "topic", "aria-label": "Tema" }, ...TOPICS.map((t) => h("option", { value: t.value }, t.label)));
   const note = h("textarea", { name: "note", rows: 2, maxlength: 300, placeholder: "O que você quer entender?", "aria-label": "Objetivo" });
   const extras: Partial<Record<LearningGoalKind, HTMLElement>> = { specific_part: target, trace_request: target, topic, other: note };
@@ -319,7 +319,7 @@ export function renderHome(journeys: JourneyCard[], resume: { journey: JourneyCa
   form.addEventListener("change", () => {
     const extra = extras[selected()];
     extraSlot.replaceChildren(...(extra ? [extra] : []));
-    if (selected() === "trace_request") target.placeholder = "ex.: POST /tickets/triage";
+    if (selected() === "trace_request") target.placeholder = "ex.: Quero compreender o fluxo completo de um ticket, da entrada HTTP à persistência";
     else target.placeholder = "ex.: HybridPolicy, src/server.ts";
   });
   form.addEventListener("submit", (event) => {

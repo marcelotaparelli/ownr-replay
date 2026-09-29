@@ -99,7 +99,7 @@ export function createApi(deps: ApiDeps): Router {
       const sameRepo = journeys.filter(
         (j) => j.repo.owner.toLowerCase() === repo.owner.toLowerCase() && j.repo.name.toLowerCase() === repo.name.toLowerCase(),
       );
-      const match = sameRepo.find((j) => j.goal.kind === goal.kind && (goal.kind !== "specific_part" || j.goal.target?.toLowerCase() === goal.target?.toLowerCase()));
+      const match = sameRepo.find((j) => j.goal.kind === goal.kind && (goal.kind !== "specific_part" && goal.kind !== "trace_request" || j.goal.target?.toLowerCase() === goal.target?.toLowerCase()));
       const journey = sameRepo.find((item) => item.goal.kind === "from_scratch");
       const target = goal.kind === "specific_part" ? goal.target?.trim().toLowerCase() : undefined;
       const candidateModule = journey?.modules.find((module) => {
@@ -110,10 +110,24 @@ export function createApi(deps: ApiDeps): Router {
           stage.referenceCode.some((file) => file.path.toLowerCase() === target || file.content.toLowerCase().includes(`class ${target} `)));
       });
       const canGenerateTarget = Boolean(target && candidateModule && deps.generation && deps.targeted);
+      const canTraceRequest = Boolean(goal.kind === "trace_request" && goal.target && journey && deps.generation && deps.targeted && deps.codeIndexes.get(journey.id));
       const learnerId = LearnerId.safeParse(req.headers.get("x-learner-id"));
-      repository.recordJourneyRequest({ learnerId: learnerId.success ? learnerId.data : null, owner: repo.owner, name: repo.name, goal, served: Boolean(match || canGenerateTarget) });
-      logger.info("journey_requested", { repo: `${repo.owner}/${repo.name}`, goal: goal.kind, served: Boolean(match || canGenerateTarget) });
-      if (match) return json({ id: match.id, status: match.status, ...(match.goal.kind === "specific_part" ? { startOrder: 1 } : {}) });
+      repository.recordJourneyRequest({ learnerId: learnerId.success ? learnerId.data : null, owner: repo.owner, name: repo.name, goal, served: Boolean(match || canGenerateTarget || canTraceRequest) });
+      logger.info("journey_requested", { repo: `${repo.owner}/${repo.name}`, goal: goal.kind, served: Boolean(match || canGenerateTarget || canTraceRequest) });
+      if (match) return json({ id: match.id, status: match.status, ...(match.goal.kind === "specific_part" || match.goal.kind === "trace_request" ? { startOrder: 1 } : {}) });
+      if (canTraceRequest && journey && goal.target && deps.generation && deps.targeted) {
+        try {
+          const index = deps.codeIndexes.get(journey.id)!;
+          const route = deps.targeted.saveRoute(journey, await deps.generation.generateRequestJourney(journey, goal.target, index));
+          journeys.push(route);
+          journeyById.set(route.id, route);
+          for (const stage of route.stages) stageById.set(stage.id, { journey: route, stage });
+          deps.codeIndexes.set(route.id, index);
+          return json({ id: route.id, status: route.status, startOrder: 1 });
+        } catch (error) {
+          return json({ error: { code: "GENERATION_FAILED", message: error instanceof Error ? error.message : "Falha ao gerar o fluxo." }, fallback: { id: journey.id } }, 422);
+        }
+      }
       if (canGenerateTarget && candidateModule && journey && goal.target) {
         try {
           if (candidateModule.stageIds.length === 1) await publishModule(journey, candidateModule.id, goal.target);

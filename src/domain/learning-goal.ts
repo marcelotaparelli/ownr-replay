@@ -23,7 +23,7 @@ export const LearningGoal = z
   .strictObject({
     kind: LearningGoalKind,
     /** A file, class or function (specific_part) — or the request to trace. */
-    target: z.string().trim().min(1).max(120).optional(),
+    target: z.string().trim().min(1).max(300).optional(),
     topic: LearningTopic.optional(),
     /** Free text for "other". */
     note: z.string().trim().min(1).max(300).optional(),
