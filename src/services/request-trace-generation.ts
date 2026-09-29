@@ -7,6 +7,10 @@ type Link = { from: string; to: string; relation: string; path: string; proof: R
 type TraceStep = { symbol: string; path: string; title: string; need: string; call: string; expected: string; limitation: string; links: Link[] };
 export type RequestTracePlan = { kind: "request-trace"; goal: string; moduleId: string; steps: TraceStep[] };
 
+/** Cheap, reusable pre-check: does this free text plausibly describe the ticket flow? Lets a caller
+ *  decide whether to attempt the (expensive) generator before planRequestTrace's own deeper checks run. */
+export const looksLikeTicketFlowGoal = (goal: string): boolean => /ticket|triage|triagem|\/tickets\/triage/i.test(goal);
+
 // These are candidate links, not claims: the planner checks every link against the pinned source.
 const candidates: TraceStep[] = [
   { symbol: "parseTicketInput", path: "src/http/triage-request.ts", title: "Validar a entrada", need: "O corpo HTTP é desconhecido até passar pela validação.", call: "const ticket = parseTicketInput(input);", expected: "ticket", limitation: "Um ticket válido ainda não iniciou a triagem.", links: [{ from: "handleRequest", to: "parseTicketInput", relation: "validates", path: "src/server.ts", proof: /parseTicketInput\(payload\.value\)/ }] },
@@ -47,7 +51,7 @@ function toolboxExample(step: TraceStep): string {
 
 export function planRequestTrace(goal: string, journey: Journey, index: RepositoryIndex): RequestTracePlan {
   if (journey.repo.name !== "ops-triage-ai" || journey.repo.owner !== "marcelotaparelli") throw new Error("Fluxo HTTP ainda não suportado para este repositório.");
-  if (!/ticket|triage|triagem|\/tickets\/triage/i.test(goal)) throw new Error("O objetivo não identifica o fluxo de tickets disponível.");
+  if (!looksLikeTicketFlowGoal(goal)) throw new Error("O objetivo não identifica o fluxo de tickets disponível.");
   const explicitRoute = /\b(GET|POST|PUT|PATCH|DELETE)\s+(\/\S+)/i.exec(goal);
   if (explicitRoute && (explicitRoute[1]?.toUpperCase() !== "POST" || explicitRoute[2]?.replace(/[.,;!?]+$/, "") !== "/tickets/triage")) throw new Error("Esta rota ainda não tem um percurso validado.");
   const server = index.files.get("src/server.ts") ?? "";

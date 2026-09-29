@@ -201,3 +201,32 @@ test("planejador aceita outra formulação do mesmo objetivo técnico", () => {
     "HybridPolicy", "PrismaTriageRunRepository", "handleRequest",
   ]);
 });
+
+test("objetivo do fluxo descrito como 'outro' pela home ainda abre a jornada do fluxo", async () => {
+  const root = mkdtempSync(join(tmpdir(), "replay-flow-other-"));
+  const app = testApp({ generation: new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker)), typeChecker: checker });
+  const goal = "Quero compreender o fluxo completo de um ticket no ops-triage-ai, desde a entrada HTTP até a decisão e a persistência.";
+  const response = await app.call("POST", "/api/journeys", { repoUrl: "https://github.com/marcelotaparelli/ops-triage-ai", goal: { kind: "other", note: goal } });
+  expect(response.status).toBe(200);
+  const requested = await response.json();
+  expect(requested.startOrder).toBe(1);
+  const outline = await (await app.call("GET", `/api/journeys/${requested.id}`)).json();
+  expect(outline.goal).toEqual({ kind: "trace_request", target: goal });
+  expect(outline.stages).toHaveLength(8);
+  // Repeating the same objective — as trace_request or again as "other" — reuses the saved journey.
+  const repeatAsTrace = await app.call("POST", "/api/journeys", { repoUrl: "https://github.com/marcelotaparelli/ops-triage-ai", goal: { kind: "trace_request", target: goal } });
+  expect((await repeatAsTrace.json()).id).toBe(requested.id);
+  const repeatAsOther = await app.call("POST", "/api/journeys", { repoUrl: "https://github.com/marcelotaparelli/ops-triage-ai", goal: { kind: "other", note: goal } });
+  expect((await repeatAsOther.json()).id).toBe(requested.id);
+  app.repository.close();
+});
+
+test("objetivo 'outro' não relacionado ao fluxo mantém o fallback atual", async () => {
+  const app = testApp({});
+  const response = await app.call("POST", "/api/journeys", { repoUrl: "https://github.com/marcelotaparelli/ops-triage-ai", goal: { kind: "other", note: "Quero entender como o projeto lida com autenticação." } });
+  expect(response.status).toBe(501);
+  const body = await response.json();
+  expect(body.error.code).toBe("GOAL_NOT_AVAILABLE");
+  expect(body.fallback.id).toBe("ops-triage-ai");
+  app.repository.close();
+});

@@ -13,6 +13,7 @@ import { ModuleError, completeExercise, prepareExercise } from "../sandbox/modul
 import { TypecheckBusyError, type TypeChecker, type TypeDiagnostic } from "../sandbox/typecheck.ts";
 import type { SandboxRunner } from "../sandbox/runner.ts";
 import { parseGithubRepoUrl } from "../services/repo-url.ts";
+import { looksLikeTicketFlowGoal } from "../services/request-trace-generation.ts";
 import { isModule2Goal, type ModuleGenerationService } from "../services/stage-generation.ts";
 import type { TargetedJourneyStore } from "../services/targeted-journey.ts";
 import type { TutorService } from "../services/tutor.ts";
@@ -99,7 +100,14 @@ export function createApi(deps: ApiDeps): Router {
       const sameRepo = journeys.filter(
         (j) => j.repo.owner.toLowerCase() === repo.owner.toLowerCase() && j.repo.name.toLowerCase() === repo.name.toLowerCase(),
       );
-      const match = sameRepo.find((j) => j.goal.kind === goal.kind && (goal.kind !== "specific_part" && goal.kind !== "trace_request" || j.goal.target?.toLowerCase() === goal.target?.toLowerCase()));
+      // "other" is free text too: when it reads like the supported ticket-flow trace, treat it as one
+      // instead of forcing the learner to know which radio button maps to the generator that already exists.
+      const traceGoalText = goal.kind === "trace_request" ? goal.target : goal.kind === "other" && goal.note && looksLikeTicketFlowGoal(goal.note) ? goal.note : undefined;
+      const match = sameRepo.find((j) =>
+        traceGoalText !== undefined
+          ? j.goal.kind === "trace_request" && j.goal.target?.toLowerCase() === traceGoalText.toLowerCase()
+          : j.goal.kind === goal.kind && (goal.kind !== "specific_part" || j.goal.target?.toLowerCase() === goal.target?.toLowerCase()),
+      );
       const journey = sameRepo.find((item) => item.goal.kind === "from_scratch");
       const target = goal.kind === "specific_part" ? goal.target?.trim().toLowerCase() : undefined;
       const candidateModule = journey?.modules.find((module) => {
@@ -110,15 +118,15 @@ export function createApi(deps: ApiDeps): Router {
           stage.referenceCode.some((file) => file.path.toLowerCase() === target || file.content.toLowerCase().includes(`class ${target} `)));
       });
       const canGenerateTarget = Boolean(target && candidateModule && deps.generation && deps.targeted);
-      const canTraceRequest = Boolean(goal.kind === "trace_request" && goal.target && journey && deps.generation && deps.targeted && deps.codeIndexes.get(journey.id));
+      const canTraceRequest = Boolean(traceGoalText && journey && deps.generation && deps.targeted && deps.codeIndexes.get(journey.id));
       const learnerId = LearnerId.safeParse(req.headers.get("x-learner-id"));
       repository.recordJourneyRequest({ learnerId: learnerId.success ? learnerId.data : null, owner: repo.owner, name: repo.name, goal, served: Boolean(match || canGenerateTarget || canTraceRequest) });
       logger.info("journey_requested", { repo: `${repo.owner}/${repo.name}`, goal: goal.kind, served: Boolean(match || canGenerateTarget || canTraceRequest) });
       if (match) return json({ id: match.id, status: match.status, ...(match.goal.kind === "specific_part" || match.goal.kind === "trace_request" ? { startOrder: 1 } : {}) });
-      if (canTraceRequest && journey && goal.target && deps.generation && deps.targeted) {
+      if (canTraceRequest && journey && traceGoalText && deps.generation && deps.targeted) {
         try {
           const index = deps.codeIndexes.get(journey.id)!;
-          const route = deps.targeted.saveRoute(journey, await deps.generation.generateRequestJourney(journey, goal.target, index));
+          const route = deps.targeted.saveRoute(journey, await deps.generation.generateRequestJourney(journey, traceGoalText, index));
           journeys.push(route);
           journeyById.set(route.id, route);
           for (const stage of route.stages) stageById.set(stage.id, { journey: route, stage });
