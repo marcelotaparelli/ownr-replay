@@ -1,0 +1,44 @@
+frozen at: 2026-10-03T08:19:19Z
+HEAD: 214d0de12aeeac33e8a153e2e242d0619bbdf776
+--- git status --short
+ M scripts/benchmark-flow-discovery.ts
+ M src/http/api.ts
+ M src/index.ts
+ M src/services/discovered-flow-generation.ts
+ M src/services/flow-discovery.ts
+ M src/services/stage-generation.ts
+ M tests/flow-discovery.test.ts
+ M tests/helpers.ts
+ M tests/stage-generation.test.ts
+ M web/app.ts
+ M web/journey-view.ts
+ M web/store.ts
+?? benchmarks/confidence/
+?? benchmarks/holdout/
+?? data/generated/targets/horizonbridgelabs-stellarremit-backend-9b4d9ca/
+?? data/generated/targets/resilient-transaction-api/
+?? data/repositories/
+?? scripts/benchmark-ast-spike.ts
+?? scripts/explore-ast-confidence.ts
+?? src/experiments/
+?? src/services/flow-replay.ts
+?? src/services/repository-ingest.ts
+?? src/services/repository-snapshot.ts
+?? tests/ast-abstain.test.ts
+?? tests/ast-flow-discovery.test.ts
+?? tests/external-boundary.test.ts
+?? tests/flow-discovery-limits.test.ts
+?? tests/flow-intent.test.ts
+?? tests/replay-fidelity.test.ts
+?? tests/repo-memory.test.ts
+?? tests/repository-ingest.test.ts
+?? tests/second-repository.test.ts
+--- sha256 (BEFORE the holdout)
+45568bf09bb856e998298f797feddb65d82c3b62caa9604fb05bf5bae6eda78b  src/experiments/ast-abstain.ts
+c201ee1bbd4448c922fa0cb539280b7a9a6a127bc73de8de42531079cbecae06  src/experiments/ast-confidence.ts
+d5c14f6c28d8e1902ec888d28528b2efeeeb142dcb860fd1acd6f559b9bc377c  src/experiments/ast-facts.ts
+ac2c6c9ed9d60ce47efab2e92bcbb8a109db53493082441995ad2dbb37e435d7  src/experiments/ast-flow-discovery.ts
+c3b8f33cf01634112d870a3c5c32c481ec862d8cfca34623d883cdae5fe1dcbb  src/services/flow-discovery.ts
+fc02e67da567346bda19496525a2a7b66d56895273cfe1bb98f32b1befcef6ba  src/services/code-map.ts
+b2436f4a1a02fafd9447702fc31a6aaae7411f9452d4dc3edf62d57bd019199b  scripts/explore-ast-confidence.ts
+733cc74aa8fcec018dca45dae0446abcf86fa2fdd91d149dfe54f5062303cf56  benchmarks/confidence/labels.json

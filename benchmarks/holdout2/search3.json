@@ -1,0 +1,152 @@
+{
+ "Q1 topic:nestjs topic:graphql": [
+  "dzzzzzy/Nestjs-Learning 922KB 1115*",
+  "kelvin-mai/nest-ideas-api 1071KB 541*",
+  "EricKit/nest-user-auth 803KB 293*",
+  "WonderPanda/nestjs-microservice-architecture 207KB 198*",
+  "kimjbstar/prisma-class-generator 1076KB 192*",
+  "fernandohenriques/nestjs-graphql-boilerplate 217KB 176*",
+  "MichalLytek/typegraphql-nestjs 868KB 147*",
+  "overnested/nestjs-prisma-monorepo 1069KB 132*"
+ ],
+ "Q2 topic:nestjs topic:mongodb": [
+  "mikemajesty/nestjs-monorepo 724KB 387*",
+  "EricKit/nest-user-auth 803KB 293*",
+  "chnirt/nestjs-restful-best-practice 906KB 266*",
+  "DenzelCode/nest-auth 450KB 221*",
+  "ngaxavi/nest-cqrs 958KB 117*",
+  "v-checha/nestjs-prisma-mongodb 817KB 104*",
+  "HelTi/daily-hot-api 655KB 95*",
+  "alibghz/nestjs-microservices-docker 202KB 84*"
+ ],
+ "Q3 topic:express topic:postgresql": [
+  "antonio-lazaro/prisma-express-typescript-boilerplate 227KB 298*",
+  "nmanikiran/rest-api-node-typescript 447KB 199*",
+  "KryptXBSA/t3-twitter-clone 765KB 190*",
+  "dotnize/chessu 728KB 105*",
+  "gx0r/connect-session-knex 576KB 95*",
+  "sushantrahate/express-typescript-prisma-postgresql 373KB 47*",
+  "FawzyMokhtar/TypeScript-in-Nodejs-Starter 703KB 38*",
+  "JDIZM/supabase-express-api 960KB 24*"
+ ],
+ "Q4 topic:express topic:typeorm": [
+  "tgmarinho/gobarber-api-gostack11 1027KB 44*",
+  "amin-abbasi/typescript-boilerplate 1097KB 42*",
+  "fadilnatakusumah/nevernote 426KB 23*",
+  "PW486/express-ts-starter 678KB 22*",
+  "LauraBeatris/typeorm-relations 364KB 21*",
+  "princejoogie/pern-boilerplate 310KB 18*",
+  "bonizario/happy 588KB 16*",
+  "Mrtenz/typeorm-store 417KB 15*"
+ ],
+ "Q5 topic:koa topic:typescript": [
+  "xiong35/werewolf 585KB 177*",
+  "swimlane/trafficlight 619KB 73*",
+  "JakeFenley/koa-zod-router 431KB 66*",
+  "AngelMunoz/monosample 619KB 49*",
+  "oldmanfleming/koa-boilerplate 1091KB 42*",
+  "axetroy/kost 338KB 38*",
+  "nusr/ComicHub 724KB 30*",
+  "supervons/ExploreKoa 341KB 28*"
+ ],
+ "Q6 topic:clean-architecture topic:nodejs": [
+  "talyssonoc/node-api-boilerplate 674KB 3356*",
+  "otaviolemos/thewisedev-mailing 807KB 491*",
+  "medevorg/nodetskeleton 953KB 306*",
+  "otaviolemos/thewisepad-core 735KB 262*",
+  "JamieLivingstone/node-clean-architecture 406KB 182*",
+  "v-checha/nestjs-template 921KB 182*",
+  "zhuravlevma/typescript-ddd-architecture 1016KB 172*",
+  "FilipeMata/clean_architecture_typescript_example 775KB 158*"
+ ],
+ "Q7 topic:domain-driven-design": [
+  "stemmlerjs/white-label 606KB 1510*",
+  "CodelyTV/typescript-ddd-skeleton 251KB 472*",
+  "Baroshem/microservice-template 694KB 291*",
+  "zhuravlevma/typescript-ddd-architecture 1016KB 172*",
+  "CodelyTV/typescript-ddd-course 926KB 138*",
+  "dyarleniber/simple-blog-application-backend-challenge 625KB 134*",
+  "shreyasmanolkar/notion-api 750KB 85*",
+  "CollatzConjecture/nestjs-clean-architecture 715KB 84*"
+ ],
+ "Q8 topic:event-sourcing": [
+  "Baroshem/microservice-template 694KB 291*",
+  "devalpha-io/devalpha-node 1127KB 242*",
+  "juicycleff/nestjs-event-store 563KB 205*",
+  "yerinadler/typescript-event-sourcing-sample-app 471KB 98*",
+  "Seikho/evtstore 660KB 70*",
+  "dlydiard/ddd-cqrs-es-aws-sam 432KB 56*",
+  "aulasoftwarelibre/nx-boilerplate 862KB 38*",
+  "sgomez/iam-ddd-cqrs-es-nestjs 1183KB 37*"
+ ],
+ "Q9 topic:microservices topic:typescript": [
+  "jsynowiec/node-typescript-boilerplate 1111KB 2957*",
+  "saalikmubeen/microservices-architectured-app 305KB 569*",
+  "itsmebhavin/nestjs-microservice-example 341KB 113*",
+  "p-fedyukovich/nestjs-google-pubsub-microservice 465KB 104*",
+  "creditkarma/thrift-parser 417KB 103*",
+  "alibghz/nestjs-microservices-docker 202KB 84*",
+  "FurlanLuka/microservice-stack 909KB 79*",
+  "creditkarma/feature-flags 377KB 65*"
+ ],
+ "Q10 topic:aws-lambda": [
+  "komodorio/validkube 720KB 837*",
+  "serverless/serverless-plugin-typescript 388KB 793*",
+  "Albert-Gao/micro-aws-lambda 1007KB 186*",
+  "arabold/serverless-sentry-plugin 801KB 152*",
+  "shamsup/remix-starter-serverless 293KB 121*",
+  "aws-samples/prisma-lambda-cdk 668KB 109*",
+  "spring-media/aws-lambda-router 376KB 96*",
+  "rnag/rust.aws-cdk-lambda 505KB 87*"
+ ],
+ "Q11 topic:discord-bot": [
+  "owengombas/discord.ts 1053KB 324*",
+  "RiskyMH/honeypot 478KB 301*",
+  "ysdragon/StreamBot 387KB 299*",
+  "SpikeHD/AmazonMonitor 555KB 293*",
+  "milktoastlab/SolanaNFTBot 343KB 254*",
+  "zebbern/claude-code-discord 623KB 233*",
+  "mrbbot/slshx 833KB 209*",
+  "peterthehan/create-discord-bot 505KB 165*"
+ ],
+ "Q12 topic:trpc": [
+  "stepci/stepci 508KB 1868*",
+  "stepci/garph 360KB 1312*",
+  "trpc/examples-next-prisma-starter 415KB 789*",
+  "trpc/zart 476KB 694*",
+  "OrJDev/create-jd-app 853KB 669*",
+  "saasykits/nextjs-sessionauth-template 830KB 536*",
+  "jsonnull/electron-trpc 809KB 402*",
+  "Sairyss/fullstack-starter-template 1035KB 337*"
+ ],
+ "Q13 topic:cli": [
+  "mifi/editly 729KB 5513*",
+  "niklashigi/apk-mitm 250KB 5114*",
+  "vercel/kirimase 587KB 2785*",
+  "Everduin94/better-commits 1185KB 2289*",
+  "jamubc/gemini-mcp-tool 1122KB 2286*",
+  "afar1/fieldtheory-cli 896KB 2033*",
+  "MicrosoftDocs/mcp 210KB 1927*",
+  "zonemeen/musicn 1049KB 1767*"
+ ],
+ "Q14 topic:websocket": [
+  "socketio/socket.io-redis-adapter 598KB 2768*",
+  "AlexAnys/openclaw-feishu 341KB 690*",
+  "tinyhttp/tinyws 413KB 417*",
+  "simon300000/bilibili-live-ws 379KB 331*",
+  "hoppscotch/hoppscotch-extension 1032KB 296*",
+  "bropat/eufy-security-ws 885KB 292*",
+  "deepgram-devs/nextjs-live-transcription 993KB 271*",
+  "insidewhy/rxjs-websockets 364KB 269*"
+ ],
+ "Q15 topic:solid-principles": [
+  "juanm4/hexagonal-architecture-frontend 963KB 508*",
+  "devbootstrap/SOLID-Principles-Examples-using-Typescript 239KB 150*",
+  "ParallelTask/dinoloop 340KB 134*",
+  "dyarleniber/simple-blog-application-backend-challenge 625KB 134*",
+  "shreyasmanolkar/notion-api 750KB 85*",
+  "bespoyasov/treees 1164KB 51*",
+  "itsdheerajbudhiraja/express-boilerplate-ts 741KB 29*",
+  "LivioAlvarenga/auth-portfolio-platform 1006KB 25*"
+ ]
+}

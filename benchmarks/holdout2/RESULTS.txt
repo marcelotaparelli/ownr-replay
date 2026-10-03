@@ -1,0 +1,27 @@
+frozen modules verified: ast-abstain.ts, ast-confidence.ts, ast-facts.ts, ast-flow-discovery.ts
+
+id    produced  winner  runner  ratio  related  decision  label       gold  chain
+P1    none        0.00    0.00   0.00      0%  ABSTAIN   no-chain    -     (no chain)   <no chain>
+P2    none        0.00    0.00   0.00      0%  ABSTAIN   no-chain    -     (no chain)   <no chain>
+P3    chain       9.00    9.00   1.00    100%  ABSTAIN   correct     Y     CoursesCtrl.getAllCourses -> CourseRepo.getAllCourses   <a competing chain scores 100% of the winner>
+P4    none        0.00    0.00   0.00      0%  ABSTAIN   no-chain    -     (no chain)   <no chain>
+P5    chain       4.50    4.50   1.00    100%  ABSTAIN   wrong       -     validationMiddleware -> assertValidation   <a competing chain scores 100% of the winner>
+P6    chain      18.00   15.00   0.83    100%  ACCEPT    incomplete  -     RegisterUserController.handle -> RegisterUser.registerUserOnMailingList -> RegisterUserOnMailingList.registerU
+P7    chain       9.00    8.50   0.94    100%  ABSTAIN   incomplete  -     CreateUserController.executeImpl -> CreateUserUseCase.execute   <a competing chain scores 94% of the winner>
+P8    chain       9.00    0.00   0.00    100%  ACCEPT    correct     Y     createOrderCreator -> createOrder
+P9    none        0.00    0.00   0.00      0%  ABSTAIN   no-chain    -     (no chain)   <no chain>
+P11   none        0.00    0.00   0.00      0%  ABSTAIN   no-chain    -     (no chain)   <no chain>
+P12   chain       3.00    3.00   1.00    100%  ABSTAIN   wrong       -     GarphSchema.type -> GarphSchema.registerType   <a competing chain scores 100% of the winner>
+P13   none        0.00    0.00   0.00      0%  ABSTAIN   no-chain    -     (no chain)   <no chain>
+P14   chain       4.50    4.50   1.00    100%  ABSTAIN   wrong       -     handleIncomingMessage -> MessageHandlerContext.statusSink   <a competing chain scores 100% of the winner>
+P15   chain       2.50    2.50   1.00     50%  ABSTAIN   correct     Y     MessageStore.save -> IStoreWriter.save   <a competing chain scores 100% of the winner; 50% of the chain's nodes carry no concept of the goal>
+
+requests 14; AST produced a chain for 8; no chain 6
+human labels among produced chains: correct 3, wrong 3, incomplete 2, unlabelled 0
+
+B. frozen rule : ACCEPT 2, ABSTAIN 12; TP 1, FP 1, FN 2
+   precision of accepted 50% (95% exact CI 1%..99%)
+   coverage 2/14 = 14%   recall of correct chains 1/3
+A. accept every chain: 8 accepted; precision 38% (95% exact CI 9%..76%); coverage 8/14
+!! FALSE POSITIVE P6: incomplete chain accepted -> RegisterUserController.handle -> RegisterUser.registerUserOnMailingList -> RegisterUserOnMailingList.registerUserOnMailingList
+time: 54 ms/request

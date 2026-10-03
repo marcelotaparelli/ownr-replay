@@ -1,0 +1,10 @@
+{
+  "about": "Strict labels of the chain the AST spike (FULL_AST, frozen checksum 219df349…) produces, from the calibration benchmark (benchmarks/flow-discovery.json) and the holdout (benchmarks/holdout/PREREGISTRATION.json). correct = answers the goal, edges proven, no evident false positive. wrong = a chain that does not answer the goal. incomplete = true but stops before the goal's action. no-chain = the spike itself returns nothing (it abstains on its own). Labels are used ONLY to score a rule, never as input to it.",
+  "labels": {
+    "O1": "correct", "O2": "wrong", "O3": "wrong", "O4": "no-chain", "O5": "no-chain",
+    "R1": "correct", "R2": "correct", "R3": "no-chain", "R4": "wrong", "R5": "incomplete",
+    "R6": "correct", "R7": "correct", "R8": "no-chain", "R9": "wrong", "R10": "correct",
+    "H1": "correct", "H2": "no-chain", "H3": "wrong", "H4": "incomplete", "H5": "wrong",
+    "H6": "no-chain", "H7": "wrong", "H8": "no-chain", "H9": "wrong", "H10": "no-chain"
+  }
+}

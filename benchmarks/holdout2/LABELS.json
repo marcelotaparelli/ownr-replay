@@ -1,0 +1,11 @@
+{
+  "about": "Human labels, written after reading each chain against the PRE-REGISTERED gold (strict). correct = contains the whole gold chain, every edge a real call, nothing off-flow. incomplete = true prefix, stops before the gold's last step. wrong = does not answer the goal. no-chain = the AST returns nothing.",
+  "labels": {
+    "P1": "no-chain", "P2": "no-chain", "P3": "correct", "P4": "no-chain", "P5": "wrong", "P6": "incomplete", "P7": "incomplete",
+    "P8": "correct", "P9": "no-chain", "P11": "no-chain", "P12": "wrong", "P13": "no-chain", "P14": "wrong", "P15": "correct"
+  },
+  "notes": {
+    "P6": "RegisterUserController.handle -> RegisterUser.registerUserOnMailingList -> RegisterUserOnMailingList.registerUserOnMailingList: true prefix; the gold ends one step later, at UserRepository.add. A lenient reading would call it correct; the strict (pre-registered) reading calls it incomplete.",
+    "P15": "the repository repeats the same classes in 7 sibling folders; the pre-registration accepts any folder's MessageStore.save -> IStoreWriter.save"
+  }
+}

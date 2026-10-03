@@ -1,0 +1,25 @@
+{
+  "registeredBeforeRunningEngines": true,
+  "repos": [
+    { "id": "H1", "repo": "dzzzzzy/Nestjs-Learning", "sha": "9aba17601cccf4d7841f98c7f69212489005ffa1", "shape": "NestJS + TypeORM (3 demo apps in one repo, repeated names)", "intent": "other", "goal": "Quero entender como um post é criado.",
+      "humanGold": "PostController.createPost -> PostService.create (-> postRepo.save, typeorm)", "gold": ["PostController\\.createPost", "PostService\\.create"] },
+    { "id": "H2", "repo": "santiq/bulletproof-nodejs", "sha": "7ce1b4690c4e96659cb1ed0d367b08b3ab35a24b", "shape": "Express + Mongoose, typedi runtime DI, event dispatcher", "intent": "trace_request", "goal": "Quero rastrear a requisição que cadastra um usuário.",
+      "humanGold": "inline handler of POST /auth/signup (default export of routes/auth.ts) -> AuthService.SignUp; the service comes from Container.get(AuthService) (typedi runtime DI)", "gold": ["routes/auth\\.ts#default", "AuthService\\.SignUp"] },
+    { "id": "H3", "repo": "arugaz/whatsapp-bot", "sha": "764385dc0cb0dce6e34b445313c9fe88d7fb86d1", "shape": "bot, commands loaded dynamically, Map of handlers, aliases of imports", "intent": "other", "goal": "Quero entender como uma mensagem recebida é processada.",
+      "humanGold": "handlers/message.ts execute -> getUser (database); the command itself runs through a Map lookup + command.execute (dynamic, not provable)", "gold": ["handlers/message\\.ts#execute", "database/user\\.ts#getUser"] },
+    { "id": "H4", "repo": "juanm4/hexagonal-architecture-frontend", "sha": "3887be150fbab2916c3d28a9e5508d7e3ae7c34b", "shape": "hexagonal, functional factories returning object literals, interface-typed ports", "intent": "other", "goal": "Quero entender como a lista de produtos é carregada.",
+      "humanGold": "productService.getProducts -> ProductRepository.getProducts -> productRepository.getProducts (object-literal implementation) -> Http.get", "gold": ["productService\\.getProducts", "ProductRepository\\.getProducts", "productRepository\\.getProducts"] },
+    { "id": "H5", "repo": "talyssonoc/node-api-boilerplate", "sha": "7e6ae0e968e032b92baf262622d6075260332b28", "shape": "Express, DDD/clean, awilix functional DI, use cases as wrapped callbacks with generic Dependencies", "intent": "other", "goal": "Quero entender como um artigo é criado.",
+      "humanGold": "makeCreateArticle (use case) -> ArticleRepository.store (interface) -> makeMongoArticleRepository.store", "gold": ["makeCreateArticle", "ArticleRepository\\.store"] },
+    { "id": "H6", "repo": "xiong35/werewolf", "sha": "26a77c0f7e4b7244b2f1d94d357e002ac8ada5a3", "shape": "Koa handlers (ctx, next), models as classes", "intent": "trace_request", "goal": "Quero rastrear a requisição que cria uma sala.",
+      "humanGold": "roomCreate (Koa middleware) -> new Room(...) (the room is created in the Room constructor)", "gold": ["roomCreate", "models/RoomModel\\.ts#Room"] },
+    { "id": "H7", "repo": "shuaiplus/inkstone", "sha": "8e7fad1cfa519a1121d7b256e0776f750632d691", "shape": "Hono worker, inline route handlers on a top-level router, SPA client in the same repo", "intent": "other", "goal": "Quero entender como uma nota é criada.",
+      "humanGold": "inline handler of notesRoutes.post('/') (an anonymous callback, not a named symbol) -> buildNoteDerivedStatements", "gold": ["routes/notes\\.ts#", "buildNoteDerivedStatements"] },
+    { "id": "H8", "repo": "cristiammercado/ng-event-bus", "sha": "e875b454999afff0e684ae25826a6f8a599d52e1", "shape": "library without HTTP, class with overloads and rxjs callbacks", "intent": "other", "goal": "Quero entender como os eventos são filtrados pela chave.",
+      "humanGold": "NgEventBus.on -> NgEventBus.keyMatch (called inside the filter callback)", "gold": ["NgEventBus\\.on", "NgEventBus\\.keyMatch"] },
+    { "id": "H9", "repo": "microsoft/tsyringe", "sha": "78222334f49265ea2874fac2c73284345c1124d9", "shape": "DI library, class implementing an interface, mutually recursive methods, overloads", "intent": "other", "goal": "Quero entender como uma dependência é resolvida pelo container.",
+      "humanGold": "InternalDependencyContainer.resolve -> resolveRegistration (-> construct)", "gold": ["InternalDependencyContainer\\.resolve", "InternalDependencyContainer\\.resolveRegistration"] },
+    { "id": "H10", "repo": "kamilmysliwiec/nest-cqrs-example", "sha": "5e920b89fceb39f91c2c533e99a6cc27b6681ad4", "shape": "NestJS CQRS: buses, handlers registered by decorator", "intent": "other", "goal": "Quero entender como um dragão é morto.",
+      "humanGold": "KillDragonHandler.execute -> Hero.killEnemy (the controller reaches the handler only through CommandBus.execute: runtime wiring)", "gold": ["KillDragonHandler\\.execute", "Hero\\.killEnemy"] }
+  ]
+}

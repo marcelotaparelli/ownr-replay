@@ -1,0 +1,17 @@
+Holdout selection rule (written before any search result was read, before any engine ran on a holdout repo)
+- 10 structural queries on GitHub search (language:TypeScript, size:<1200 KB, sort=stars desc).
+- For each query take the highest-starred repository that (a) is not one of the 15 benchmark repos, (b) is not "used" in development
+  of the spike, (c) passes the product's own ingestion limits (SnapshotIngestor), (d) has >= 8 non-test .ts files. First one that passes wins.
+- Goal and gold chain are written by human inspection of the source only; engines are not run until PREREGISTRATION.json is saved.
+Queries:
+ Q1 topic:nestjs topic:typeorm                 (NestJS + TypeORM)
+ Q2 topic:express topic:mongodb                (Express + Mongo)
+ Q3 topic:fastify                              (Fastify)
+ Q4 topic:hexagonal-architecture               (ports and adapters)
+ Q5 topic:ddd                                  (domain-driven design)
+ Q6 topic:koa                                  (Koa)
+ Q7 topic:hono                                 (Hono / edge / Bun-style)
+ Q8 topic:event-bus                            (events / callbacks, library)
+ Q9 topic:dependency-injection                 (explicit DI, library)
+ Q10 topic:cqrs                                (CQRS / handlers)
+Excluded (benchmark): HorizonBridgeLabs/StellarRemit-Backend arkarmin-gg/nestjs-bank-backend-api hesbonangwenyi606/wallet-payments-api sultanfariz/bun-api-starter 3loop/decoder-api prisma/blog-backend-rest-api-nestjs-prisma TomDoesTech/fastify-prisma-rest-api JamieLivingstone/node-clean-architecture otaviolemos/thewisepad-core lau1944/bunrest antonio-lazaro/prisma-express-typescript-boilerplate code-forge-io/web-events zhuravlevma/typescript-ddd-architecture kelvin-mai/nest-ideas-api Z3r0J/nodejs-clean-architecture

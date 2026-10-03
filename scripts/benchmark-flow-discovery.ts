@@ -33,7 +33,7 @@ export const BenchmarkSchema = z.object({
 export type BenchmarkRepo = z.infer<typeof BenchmarkSchema>["repos"][number];
 
 /** The ingestor always asks for the default branch's head; the benchmark must read the recorded commit. */
-class PinnedSource extends GithubHttpSource {
+export class PinnedSource extends GithubHttpSource {
   constructor(private readonly pins: ReadonlyMap<string, string>) {
     super();
   }

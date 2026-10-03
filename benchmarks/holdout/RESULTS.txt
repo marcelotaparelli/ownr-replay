@@ -1,0 +1,69 @@
+spike checksum ok (219df349cb18…)
+
+### H1 dzzzzzy/Nestjs-Learning [other] Quero entender como um post é criado.
+    human gold: PostController.createPost -> PostService.create (-> postRepo.save, typeorm)
+  regex : miss  ERROR O objetivo "Quero entender como um post é criado." corresponde a Post, CatServic
+  ast   : GOLD  PostController.createPost -> PostService.create  [ext this.postRepo→save (typeorm)]
+  structural recall: regex=no ast=yes   | files 42, ast edges 41, regex edges 28 | time regex 18 ms, ast 92 ms (build 64+12)
+
+### H2 santiq/bulletproof-nodejs [trace_request] Quero rastrear a requisição que cadastra um usuário.
+    human gold: inline handler of POST /auth/signup (default export of routes/auth.ts) -> AuthService.SignUp; the service comes from Container.get(AuthService) (typedi runtime DI)
+  regex : miss  ERROR Nenhum ponto de entrada HTTP encontrado no SHA fixado (uma função exportada que 
+  ast   : miss  ERROR O objetivo "Quero rastrear a requisição que cadastra um usuário." corresponde a 
+  ast+inf: ERROR
+  structural recall: regex=no ast=no   | files 25, ast edges 12, regex edges 4 | time regex 2 ms, ast 47 ms (build 40+3)
+
+### H3 arugaz/whatsapp-bot [other] Quero entender como uma mensagem recebida é processada.
+    human gold: handlers/message.ts execute -> getUser (database); the command itself runs through a Map lookup + command.execute (dynamic, not provable)
+  regex : miss  ERROR O objetivo "Quero entender como uma mensagem recebida é processada." corresponde
+  ast   : miss  clearProcess -> WAClient.log
+  structural recall: regex=yes ast=no   | files 67, ast edges 42, regex edges 385 | time regex 227 ms, ast 107 ms (build 84+10)
+
+### H4 juanm4/hexagonal-architecture-frontend [other] Quero entender como a lista de produtos é carregada.
+    human gold: productService.getProducts -> ProductRepository.getProducts -> productRepository.getProducts (object-literal implementation) -> Http.get
+  regex : miss  addProductToCart -> hasProduct
+  ast   : miss  productService -> ProductRepository.getProducts
+  structural recall: regex=no ast=no   | files 15, ast edges 6, regex edges 4 | time regex 2 ms, ast 35 ms (build 32+1)
+
+### H5 talyssonoc/node-api-boilerplate [other] Quero entender como um artigo é criado.
+    human gold: makeCreateArticle (use case) -> ArticleRepository.store (interface) -> makeMongoArticleRepository.store
+  regex : miss  ERROR O objetivo "Quero entender como um artigo é criado." corresponde a createComment
+  ast   : miss  createArticleHandler -> handler
+  structural recall: regex=no ast=no   | files 72, ast edges 36, regex edges 35 | time regex 28 ms, ast 86 ms (build 62+15)
+
+### H6 xiong35/werewolf [trace_request] Quero rastrear a requisição que cria uma sala.
+    human gold: roomCreate (Koa middleware) -> new Room(...) (the room is created in the Room constructor)
+  regex : miss  ERROR Nenhum ponto de entrada HTTP encontrado no SHA fixado (uma função exportada que 
+  ast   : miss  ERROR Nenhum símbolo corresponde ao objetivo "Quero rastrear a requisição que cria uma
+  ast+inf: ERROR
+  structural recall: regex=yes ast=no   | files 85, ast edges 150, regex edges 118 | time regex 4 ms, ast 88 ms (build 71+9)
+
+### H7 shuaiplus/inkstone [other] Quero entender como uma nota é criada.
+    human gold: inline handler of notesRoutes.post('/') (an anonymous callback, not a named symbol) -> buildNoteDerivedStatements
+  regex : miss  createInkstoneMcpServer -> createMcpNote
+  ast   : miss  createDemoBackend -> createBackupTarget
+  structural recall: regex=no ast=yes   | files 136, ast edges 1968, regex edges 2828 | time regex 28407 ms, ast 450 ms (build 295+104)
+
+### H8 cristiammercado/ng-event-bus [other] Quero entender como os eventos são filtrados pela chave.
+    human gold: NgEventBus.on -> NgEventBus.keyMatch (called inside the filter callback)
+  regex : miss  ERROR O objetivo "Quero entender como os eventos são filtrados pela chave." correspond
+  ast   : miss  ERROR O objetivo "Quero entender como os eventos são filtrados pela chave." correspond
+  ast+inf: ERROR
+  structural recall: regex=yes ast=yes   | files 9, ast edges 3, regex edges 3 | time regex 2 ms, ast 28 ms (build 27+0)
+
+### H9 microsoft/tsyringe [other] Quero entender como uma dependência é resolvida pelo container.
+    human gold: InternalDependencyContainer.resolve -> resolveRegistration (-> construct)
+  regex : miss  ERROR O objetivo "Quero entender como uma dependência é resolvida pelo container." cor
+  ast   : miss  InternalDependencyContainer.resolve -> InternalDependencyContainer.executePreResolutionInterceptor
+  structural recall: regex=no ast=yes   | files 42, ast edges 101, regex edges 33 | time regex 7 ms, ast 48 ms (build 40+3)
+
+### H10 kamilmysliwiec/nest-cqrs-example [other] Quero entender como um dragão é morto.
+    human gold: KillDragonHandler.execute -> Hero.killEnemy (the controller reaches the handler only through CommandBus.execute: runtime wiring)
+  regex : miss  ERROR Nenhum símbolo do repositório no SHA fixado corresponde ao objetivo "Quero enten
+  ast   : miss  ERROR Nenhum símbolo corresponde ao objetivo "Quero entender como um dragão é morto.".
+  ast+inf: ERROR
+  structural recall: regex=no ast=no   | files 23, ast edges 3, regex edges 13 | time regex 1 ms, ast 31 ms (build 29+0)
+
+GOLD-match   regex 0/10   ast 1/10   (strict success needs a manual read of each chain)
+STRUCTURAL   regex 3/10   ast 4/10
+TIME total   regex 28697 ms   ast 1012 ms   per repo 2870 / 101 ms

@@ -1,0 +1,13 @@
+Holdout 2 selection rule (written before any search result of this round was read and before any engine ran on a holdout-2 repo)
+Goal: validate the FROZEN abstention rule (ast-abstain.ts, checksum recorded in FROZEN-STATE.txt) on ~15 new, independent repositories.
+- 15 structural queries; GitHub search, language:TypeScript, size:200..1200 KB (to avoid tiny libraries that fail ingestion), sort=stars desc.
+- Per query walk the candidate list in order; the first repository that (a) is not excluded, (b) was not picked for an earlier query,
+  (c) passes the product's own ingestion limits (SnapshotIngestor), (d) has >= 8 non-test .ts files, wins.
+- Repositories already used or even only ingested/looked at in any earlier round are excluded (list below).
+- Goal and gold chain are written from reading the source only; no engine runs until PREREGISTRATION.json is saved and checksummed.
+Queries: Q1 topic:nestjs topic:graphql | Q2 topic:nestjs topic:mongodb | Q3 topic:express topic:postgresql | Q4 topic:express topic:typeorm
+ Q5 topic:koa topic:typescript | Q6 topic:clean-architecture topic:nodejs | Q7 topic:domain-driven-design | Q8 topic:event-sourcing
+ Q9 topic:microservices topic:typescript | Q10 topic:aws-lambda | Q11 topic:discord-bot | Q12 topic:trpc | Q13 topic:cli | Q14 topic:websocket | Q15 topic:solid-principles
+EXCLUDED (calibration 15): HorizonBridgeLabs/StellarRemit-Backend arkarmin-gg/nestjs-bank-backend-api hesbonangwenyi606/wallet-payments-api sultanfariz/bun-api-starter 3loop/decoder-api prisma/blog-backend-rest-api-nestjs-prisma TomDoesTech/fastify-prisma-rest-api JamieLivingstone/node-clean-architecture otaviolemos/thewisepad-core lau1944/bunrest antonio-lazaro/prisma-express-typescript-boilerplate code-forge-io/web-events zhuravlevma/typescript-ddd-architecture kelvin-mai/nest-ideas-api Z3r0J/nodejs-clean-architecture
+EXCLUDED (holdout 1 + ingested-and-dropped): dzzzzzy/Nestjs-Learning santiq/bulletproof-nodejs arugaz/whatsapp-bot juanm4/hexagonal-architecture-frontend talyssonoc/node-api-boilerplate xiong35/werewolf shuaiplus/inkstone cristiammercado/ng-event-bus microsoft/tsyringe kamilmysliwiec/nest-cqrs-example developit/mitt koajs/session venables/koa-helmet vacationtracker/generic-webhook-to-eventbridge strapi/strapi-sdk-javascript valehasadli/emitrix xiong35/werewolf ivandotv/oktopod
+EXCLUDED (seen in search listings of earlier rounds, never run): fastify/demo CodelyTV/typescript-ddd-skeleton CodelyTV/typescript-ddd-course Baroshem/microservice-template chnirt/nestjs-restful-best-practice
