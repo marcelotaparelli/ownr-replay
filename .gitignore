@@ -3,3 +3,9 @@ node_modules/
 *.sqlite-*
 .env
 dist/
+
+# Runtime caches written by the running app: repositories pinned on demand (services/repository-ingest.ts)
+# and journeys generated from them. Third-party code never enters history. Files already tracked here
+# (the resilient-transaction-api test fixture, two ops-triage-ai targets) stay tracked until reorganised.
+/data/repositories/
+/data/generated/targets/

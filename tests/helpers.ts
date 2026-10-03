@@ -44,5 +44,3 @@ export function testApp(options: { model?: TutorModel; typeChecker?: TypeChecker
     );
   return { call, repository, metrics };
 }
-
-export const stellarSource = (): RepositorySource => loadRepositorySource(join(import.meta.dir, "../data/repositories/horizonbridgelabs-stellarremit-backend-9b4d9ca"));
