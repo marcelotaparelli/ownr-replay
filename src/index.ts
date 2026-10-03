@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { indexRepository, originalDir } from "./services/code-map.ts";
+import { indexRepository, originalDir, type RepositoryIndex } from "./services/code-map.ts";
+import { snapshotKey, type Journey } from "./domain/journey.ts";
 import { loadConfig } from "./config.ts";
 import { Repository } from "./db/repository.ts";
 import { createApi } from "./http/api.ts";
@@ -9,6 +10,8 @@ import { Metrics } from "./obs/metrics.ts";
 import { DockerSandboxRunner } from "./sandbox/docker-runner.ts";
 import { TypeChecker, locateTsc } from "./sandbox/typecheck.ts";
 import { loadAllJourneys } from "./services/curriculum.ts";
+import { GithubHttpSource, SnapshotIngestor } from "./services/repository-ingest.ts";
+import { loadRepositorySources } from "./services/repository-snapshot.ts";
 import { ModuleGenerationService, StageGenerator, StagePlanner, StageValidator } from "./services/stage-generation.ts";
 import { TargetedJourneyStore } from "./services/targeted-journey.ts";
 import { AnthropicTutorModel } from "./services/tutor-anthropic.ts";
@@ -28,12 +31,23 @@ const typeChecker = new TypeChecker(await locateTsc());
 const generation = new ModuleGenerationService(join(root, "data/generated"), new StagePlanner(), new StageGenerator(), new StageValidator(typeChecker));
 const targeted = new TargetedJourneyStore(join(root, "data/generated"));
 const bases = authored.map((journey) => generation.restore(journey));
-const journeys = [...bases, ...targeted.restore(bases)];
-const codeIndexes = new Map(journeys.map((j) => [j.id, indexRepository(originalDir(join(root, config.DATA_DIR, j.repo.name)))]));
-const api = createApi({ journeys, repository, tutor, sandbox, typeChecker, logger, metrics, codeIndexes, generation, targeted });
+const repositoriesRoot = join(root, "data/repositories");
+const sources = loadRepositorySources(repositoriesRoot);
+const generationBases = sources.map((source) => source.base);
+const journeys = [...bases, ...targeted.restore([...bases, ...generationBases])];
+const sourceIndexes = new Map(sources.map((source) => [snapshotKey(source.base.repo), source.index]));
+const indexOf = (journey: Journey): RepositoryIndex => sourceIndexes.get(snapshotKey(journey.repo)) ?? indexRepository(originalDir(join(root, config.DATA_DIR, journey.repo.name)));
+const codeIndexes = new Map([...journeys, ...generationBases].map((j) => [j.id, indexOf(j)]));
+const api = createApi({ journeys, repository, tutor, sandbox, typeChecker, logger, metrics, codeIndexes, generation, targeted, generationBases, ingest: new SnapshotIngestor(repositoriesRoot, new GithubHttpSource(), sources) });
 const assets = await buildWebAssets(join(root, "web"));
 
-const server = Bun.serve({ hostname: "0.0.0.0", port: config.PORT, fetch: createApp(api, assets, logger, metrics) });
+const server = Bun.serve({
+  hostname: "0.0.0.0",
+  port: config.PORT,
+  // Pinning a new repository (up to INGEST_LIMITS.totalTimeoutMs) and generating happen inside one request.
+  idleTimeout: 120,
+  fetch: createApp(api, assets, logger, metrics),
+});
 logger.info("server_started", {
   url: server.url.toString(),
   journeys: journeys.length,

@@ -1,5 +1,5 @@
 import type { JourneyOutline } from "../src/domain/journey.ts";
-import { api, type JourneyCard, type StageDetail } from "./api.ts";
+import { api, type StageDetail } from "./api.ts";
 import { selectionFromCodeView } from "./code-view.ts";
 import { $, h } from "./dom.ts";
 import { renderHome, renderKnowledgeMap, renderNav, renderOverview, stageHref } from "./journey-view.ts";
@@ -18,7 +18,6 @@ const tutor = mountTutor($("#tutor"));
 
 type Current = { journey: JourneyOutline; stage: StageDetail; mounted: MountedStage; store: ProgressStore; watch: Stopwatch };
 let current: Current | undefined;
-let journeyList: Promise<JourneyCard[]> | undefined;
 
 const outlines = new Map<string, Promise<JourneyOutline>>();
 const stages = new Map<string, Promise<StageDetail>>();
@@ -107,8 +106,8 @@ async function render(): Promise<void> {
 }
 
 async function showHome(): Promise<void> {
-  journeyList ??= api.journeys();
-  const journeys = await journeyList;
+  // Fresh on every visit: journeys generated since the page loaded must be listed, and resume must see them.
+  const journeys = await api.journeys();
   // Home always asks what the developer wants to understand; returning learners get a one-click resume.
   const started = journeys.find((j) => storeFor(j.id).snapshot.lastStageId);
   const resume = started ? { journey: started, label: "você já começou esta jornada" } : undefined;

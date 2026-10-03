@@ -12,7 +12,9 @@ import type { Metrics } from "../obs/metrics.ts";
 import { ModuleError, completeExercise, prepareExercise } from "../sandbox/modules.ts";
 import { TypecheckBusyError, type TypeChecker, type TypeDiagnostic } from "../sandbox/typecheck.ts";
 import type { SandboxRunner } from "../sandbox/runner.ts";
-import { parseGithubRepoUrl } from "../services/repo-url.ts";
+import { parseGithubRepoUrl, type GithubRepo } from "../services/repo-url.ts";
+import { IngestError, type IngestErrorCode, type SnapshotIngestor } from "../services/repository-ingest.ts";
+import type { FlowIntent } from "../services/flow-discovery.ts";
 import { looksLikeTicketFlowGoal } from "../services/request-trace-generation.ts";
 import { isModule2Goal, type ModuleGenerationService } from "../services/stage-generation.ts";
 import type { TargetedJourneyStore } from "../services/targeted-journey.ts";
@@ -33,7 +35,14 @@ export type ApiDeps = {
   codeIndexes: Map<string, RepositoryIndex>;
   generation?: ModuleGenerationService;
   targeted?: TargetedJourneyStore;
+  /** Repositories served only by generation: an empty journey carrying the repo identity (its index is in codeIndexes). */
+  generationBases?: Journey[];
+  /** Pins a GitHub repository at its current commit and indexes it; absent = only snapshots already on disk. */
+  ingest?: SnapshotIngestor;
 };
+
+const INGEST_STATUS: Record<IngestErrorCode, number> = { REPO_NOT_FOUND: 404, LIMIT_EXCEEDED: 422, NO_SUPPORTED_CODE: 422, UNSAFE_PATH: 422, DOWNLOAD_FAILED: 502 };
+const repoKey = (repo: GithubRepo): string => `${repo.owner}/${repo.name}`.toLowerCase();
 
 const RunRequest = z.strictObject({ files: z.array(CodeFile).min(1).max(10) });
 const KnowledgeRequest = z.strictObject({ conceptIds: z.array(z.string().max(64)).min(1).max(50), state: KnowledgeLevel });
@@ -49,6 +58,8 @@ export function createApi(deps: ApiDeps): Router {
   const stageById = new Map(
     journeys.flatMap((journey) => journey.stages.map((stage) => [stage.id, { journey, stage }] as const)),
   );
+  // Repositories curated by hand (data/golden): never replaced by an ingested snapshot.
+  const authoredRepos = new Set(journeys.filter((j) => !deps.generationBases?.some((base) => repoKey(base.repo) === repoKey(j.repo))).map((j) => repoKey(j.repo)));
   const tutorWindow = new Map<string, { windowStart: number; count: number }>();
   const publishModule = async (journey: Journey, moduleId: string, goal: string): Promise<Journey> => {
     const index = deps.codeIndexes.get(journey.id);
@@ -59,6 +70,26 @@ export function createApi(deps: ApiDeps): Router {
     for (const stage of journey.stages) stageById.set(stage.id, { journey, stage });
     logger.info("module_generated", { journeyId: journey.id, moduleId, stages: journey.modules.find((m) => m.id === moduleId)?.stageIds.length ?? 0 });
     return journey;
+  };
+
+  /** Pins the repository's current commit, serving it from disk when already there. Failures are explicit, never a fallback. */
+  const ensureSnapshot = async (repo: GithubRepo, goal: LearningGoal, learnerId: string | null): Promise<Journey> => {
+    const started = performance.now();
+    try {
+      const { source, cached } = await deps.ingest!.ensure(repo);
+      const { base, index } = source;
+      if (!deps.generationBases?.some((known) => known.id === base.id)) deps.generationBases?.push(base);
+      deps.codeIndexes.set(base.id, index);
+      const durationMs = Math.round(performance.now() - started);
+      if (!cached) metrics.observe("snapshot_ingest_duration", durationMs);
+      logger.info(cached ? "snapshot_reused" : "snapshot_ingested", { repo: `${repo.owner}/${repo.name}`, sha: base.repo.sha, files: index.files.size, durationMs });
+      return base;
+    } catch (error) {
+      if (!(error instanceof IngestError)) throw error;
+      repository.recordJourneyRequest({ learnerId, owner: repo.owner, name: repo.name, goal, served: false });
+      logger.error("snapshot_failed", { repo: `${repo.owner}/${repo.name}`, code: error.code });
+      throw new HttpError(INGEST_STATUS[error.code], error.code, error.message);
+    }
   };
 
   const findJourney = (id: string | undefined): Journey => {
@@ -97,18 +128,32 @@ export function createApi(deps: ApiDeps): Router {
       const { repoUrl, goal } = await readBody(req, CreateJourneyRequest);
       const repo = parseGithubRepoUrl(repoUrl);
       if (!repo) throw new HttpError(422, "INVALID_REPO_URL", "Use uma URL pública no formato https://github.com/owner/repo.");
-      const sameRepo = journeys.filter(
-        (j) => j.repo.owner.toLowerCase() === repo.owner.toLowerCase() && j.repo.name.toLowerCase() === repo.name.toLowerCase(),
-      );
+      const parsedLearner = LearnerId.safeParse(req.headers.get("x-learner-id"));
+      const learnerId = parsedLearner.success ? parsedLearner.data : null;
+      const isRepo = (j: Journey): boolean => repoKey(j.repo) === repoKey(repo);
+      // A repository without a hand-authored journey is pinned at its current commit on demand; one
+      // that has a snapshot (committed or ingested before) is reused when that commit is still current.
+      const wantsFlow = Boolean((goal.kind === "trace_request" && goal.target) || (goal.kind === "other" && goal.note));
+      const needsSnapshot = deps.ingest !== undefined && wantsFlow && !authoredRepos.has(repoKey(repo));
+      const generationBase = needsSnapshot ? await ensureSnapshot(repo, goal, learnerId) : deps.generationBases?.find(isRepo);
+      // Journeys of other commits of the same repository stay where they are, bound to their own sha.
+      const sameRepo = journeys.filter((j) => isRepo(j) && (!generationBase || j.repo.sha === generationBase.repo.sha));
       // "other" is free text too: when it reads like the supported ticket-flow trace, treat it as one
       // instead of forcing the learner to know which radio button maps to the generator that already exists.
-      const traceGoalText = goal.kind === "trace_request" ? goal.target : goal.kind === "other" && goal.note && looksLikeTicketFlowGoal(goal.note) ? goal.note : undefined;
+      // The intent travels with the text: a traced request and a free technical goal are planned differently.
+      // A generation-only repository has no ticket-flow trace to recognize, so its "other" stays a free goal;
+      // elsewhere an "other" that reads like the ticket flow is that trace (see above).
+      const flowGoal: { intent: FlowIntent; text: string } | undefined =
+        goal.kind === "trace_request" && goal.target ? { intent: "trace_request", text: goal.target }
+        : goal.kind === "other" && goal.note && generationBase ? { intent: "other", text: goal.note }
+        : goal.kind === "other" && goal.note && looksLikeTicketFlowGoal(goal.note) ? { intent: "trace_request", text: goal.note }
+        : undefined;
       const match = sameRepo.find((j) =>
-        traceGoalText !== undefined
-          ? j.goal.kind === "trace_request" && j.goal.target?.toLowerCase() === traceGoalText.toLowerCase()
+        flowGoal !== undefined
+          ? j.goal.kind === flowGoal.intent && (flowGoal.intent === "trace_request" ? j.goal.target : j.goal.note)?.toLowerCase() === flowGoal.text.toLowerCase()
           : j.goal.kind === goal.kind && (goal.kind !== "specific_part" || j.goal.target?.toLowerCase() === goal.target?.toLowerCase()),
       );
-      const journey = sameRepo.find((item) => item.goal.kind === "from_scratch");
+      const journey = sameRepo.find((item) => item.goal.kind === "from_scratch") ?? generationBase;
       const target = goal.kind === "specific_part" ? goal.target?.trim().toLowerCase() : undefined;
       const candidateModule = journey?.modules.find((module) => {
         const stages = journey.stages.filter((stage) => stage.moduleId === module.id);
@@ -118,22 +163,22 @@ export function createApi(deps: ApiDeps): Router {
           stage.referenceCode.some((file) => file.path.toLowerCase() === target || file.content.toLowerCase().includes(`class ${target} `)));
       });
       const canGenerateTarget = Boolean(target && candidateModule && deps.generation && deps.targeted);
-      const canTraceRequest = Boolean(traceGoalText && journey && deps.generation && deps.targeted && deps.codeIndexes.get(journey.id));
-      const learnerId = LearnerId.safeParse(req.headers.get("x-learner-id"));
-      repository.recordJourneyRequest({ learnerId: learnerId.success ? learnerId.data : null, owner: repo.owner, name: repo.name, goal, served: Boolean(match || canGenerateTarget || canTraceRequest) });
+      const canTraceRequest = Boolean(flowGoal && journey && deps.generation && deps.targeted && deps.codeIndexes.get(journey.id));
+      repository.recordJourneyRequest({ learnerId, owner: repo.owner, name: repo.name, goal, served: Boolean(match || canGenerateTarget || canTraceRequest) });
       logger.info("journey_requested", { repo: `${repo.owner}/${repo.name}`, goal: goal.kind, served: Boolean(match || canGenerateTarget || canTraceRequest) });
-      if (match) return json({ id: match.id, status: match.status, ...(match.goal.kind === "specific_part" || match.goal.kind === "trace_request" ? { startOrder: 1 } : {}) });
-      if (canTraceRequest && journey && traceGoalText && deps.generation && deps.targeted) {
+      if (match) return json({ id: match.id, status: match.status, ...(match.goal.kind === "specific_part" || flowGoal !== undefined ? { startOrder: 1 } : {}) });
+      if (canTraceRequest && journey && flowGoal && deps.generation && deps.targeted) {
         try {
           const index = deps.codeIndexes.get(journey.id)!;
-          const route = deps.targeted.saveRoute(journey, await deps.generation.generateRequestJourney(journey, traceGoalText, index));
+          const route = deps.targeted.saveRoute(journey, await deps.generation.generateRequestJourney(journey, flowGoal.text, index, flowGoal.intent));
           journeys.push(route);
           journeyById.set(route.id, route);
           for (const stage of route.stages) stageById.set(stage.id, { journey: route, stage });
           deps.codeIndexes.set(route.id, index);
           return json({ id: route.id, status: route.status, startOrder: 1 });
         } catch (error) {
-          return json({ error: { code: "GENERATION_FAILED", message: error instanceof Error ? error.message : "Falha ao gerar o fluxo." }, fallback: { id: journey.id } }, 422);
+          // A generation base is not a journey a learner can open, so it is never offered as a fallback.
+          return json({ error: { code: "GENERATION_FAILED", message: error instanceof Error ? error.message : "Falha ao gerar o fluxo." }, ...(journey === generationBase ? {} : { fallback: { id: journey.id } }) }, 422);
         }
       }
       if (canGenerateTarget && candidateModule && journey && goal.target) {
@@ -149,6 +194,9 @@ export function createApi(deps: ApiDeps): Router {
         } catch (error) {
           return json({ error: { code: "GENERATION_FAILED", message: error instanceof Error ? error.message : "Falha ao gerar o módulo." }, fallback: { id: journey.id } }, 422);
         }
+      }
+      if (generationBase) {
+        throw new HttpError(501, "GOAL_NOT_AVAILABLE", `Para ${repo.owner}/${repo.name}, descreva um fluxo ou objetivo técnico em “Rastrear uma requisição” ou “Outro”, por exemplo: “Quero entender como uma transação é persistida”.`);
       }
       // plan(repository, goal) → journey is a later phase (Planner). Be explicit about what exists today.
       const fallback = sameRepo[0];

@@ -9,6 +9,8 @@ import { createApp } from "../src/http/app.ts";
 import { silentLogger } from "../src/obs/logger.ts";
 import { Metrics } from "../src/obs/metrics.ts";
 import { loadAllJourneys } from "../src/services/curriculum.ts";
+import type { SnapshotIngestor } from "../src/services/repository-ingest.ts";
+import { loadRepositorySource, type RepositorySource } from "../src/services/repository-snapshot.ts";
 import { TutorService, type TutorModel } from "../src/services/tutor.ts";
 import type { TypeChecker } from "../src/sandbox/typecheck.ts";
 import type { ModuleGenerationService } from "../src/services/stage-generation.ts";
@@ -22,12 +24,15 @@ export function golden(): Journey {
   return journey;
 }
 
-export function testApp(options: { model?: TutorModel; typeChecker?: TypeChecker | null; generation?: ModuleGenerationService } = {}) {
+export const resilientSource = (): RepositorySource => loadRepositorySource(join(import.meta.dir, "../data/repositories/resilient-transaction-api"));
+
+export function testApp(options: { model?: TutorModel; typeChecker?: TypeChecker | null; generation?: ModuleGenerationService; sources?: RepositorySource[]; ingest?: SnapshotIngestor } = {}) {
   const repository = new Repository(":memory:");
   const metrics = new Metrics();
   const tutor = new TutorService(repository, options.model ?? null, silentLogger, metrics);
-  const codeIndexes = new Map([["ops-triage-ai", indexRepository(originalDir(join(import.meta.dir, "../data/golden/ops-triage-ai")))]]);
-  const api = createApi({ journeys: goldenJourneys(), repository, tutor, sandbox: null, typeChecker: options.typeChecker ?? null, logger: silentLogger, metrics, codeIndexes, ...(options.generation ? { generation: options.generation, targeted: new TargetedJourneyStore(mkdtempSync(join(tmpdir(), "replay-targeted-"))) } : {}) });
+  const sources = options.sources ?? [];
+  const codeIndexes = new Map([["ops-triage-ai", indexRepository(originalDir(join(import.meta.dir, "../data/golden/ops-triage-ai")))], ...sources.map((source) => [source.base.id, source.index] as const)]);
+  const api = createApi({ journeys: goldenJourneys(), repository, tutor, sandbox: null, typeChecker: options.typeChecker ?? null, logger: silentLogger, metrics, codeIndexes, generationBases: sources.map((source) => source.base), ...(options.ingest ? { ingest: options.ingest } : {}), ...(options.generation ? { generation: options.generation, targeted: new TargetedJourneyStore(mkdtempSync(join(tmpdir(), "replay-targeted-"))) } : {}) });
   const fetch = createApp(api, new Map(), silentLogger, metrics);
   const call = (method: string, path: string, body?: unknown, headers: Record<string, string> = { "x-learner-id": "learner-test-0001" }) =>
     fetch(
@@ -39,3 +44,5 @@ export function testApp(options: { model?: TutorModel; typeChecker?: TypeChecker
     );
   return { call, repository, metrics };
 }
+
+export const stellarSource = (): RepositorySource => loadRepositorySource(join(import.meta.dir, "../data/repositories/horizonbridgelabs-stellarremit-backend-9b4d9ca"));

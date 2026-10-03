@@ -1,69 +1,48 @@
 import type { Declaration, RepositoryIndex } from "./code-map.ts";
-import { discoverFlow, escapeRegExp, isInterfaceDeclaration, type CodeSymbol, type FlowEdge } from "./flow-discovery.ts";
+import { discoverFlow, entryShape, escapeRegExp, interfaceImplementations, type CodeSymbol, type ExternalCall, type FlowEdge, type FlowIntent } from "./flow-discovery.ts";
+import { buildModel, emitProgram, EXTERNAL_FILE, externalStandIn, guardTests, testFor, type Block, type Program, type ReplayModel, type ReplayNode } from "./flow-replay.ts";
 import type { Journey } from "../domain/journey.ts";
+import { noveltyLines } from "../domain/line-diff.ts";
 import { Stage, type CodeFile, type OriginalCodeReference } from "../domain/stage.ts";
 import type { ArchitectureGraph } from "../domain/architecture.ts";
 import { stageNarrative } from "./stage-narrative.ts";
 
 /**
  * Turns a flow discovered by static analysis (src/services/flow-discovery.ts) into a runnable
- * micro-journey — one micro stage per real, verified STEP, for a chain of WHATEVER length
- * discovery found (no fixed node count, no restriction to any single code shape). Nothing here
- * is a per-goal recipe: the same code path produced the authentication journey (a boolean guard
- * clause, two hops) and the persistence journey (five hops through a service, an interface
- * contract, its one real implementation, and the function that performs the write), and will
- * produce whatever else future goals resolve to.
+ * micro-journey — one micro stage per real, verified node of the chain, for a chain of WHATEVER
+ * length discovery found. Nothing here is a per-goal recipe.
  *
- * A discovered chain may pass through an INTERFACE on its way to a concrete implementation
- * (`TriageRunRepository.complete` -> `PrismaTriageRunRepository.complete`, joined by discovery's
- * "implements" edge). An interface has no body to run, so it is never turned into Replay code by
- * itself — it is folded into the SAME step as the concrete implementation that follows it, and
- * the step's narrative explicitly teaches the distinction: the caller depends on a contract, and
- * exactly one real class fulfils it in the pinned source.
+ * The Replay code of every stage comes from src/services/flow-replay.ts, which keeps the real
+ * STRUCTURE (interfaces stay interfaces, dependencies are received and called through, classes
+ * implement what they implement) and simplifies only data. A stage is one node of the chain, so
+ * "depend on a contract" and "implement that contract" are separate stages, each small.
  *
- * Two generic hop patterns are recognised for a step's own code:
- *  - a "guard" step: the final symbol returns `boolean` and the discovered edge into it is a real
- *    `if (!guard(...))` early return — its logic is reused verbatim (never simulated) so the
- *    exercise executes the exact real comparison.
- *  - a plain "relay" step (the default for everything else): the Replay reduces the callee to a
- *    marker string confirming the real call was reached; the callee's actual behaviour is cited,
- *    verified and unexecuted, via `originalCodeRefs` and the checkpoint's explanation. This keeps
- *    the exercise honest (no fabricated business behaviour) for symbols whose real logic needs
- *    infrastructure (a database, a network call) this sandbox cannot honestly run.
+ * A chain may END on an interface method when the pinned source has several classes (or none)
+ * implementing it: which one runs depends on runtime wiring a static reader cannot decide. That
+ * last stage is taught as the contract itself, naming the implementations found and saying plainly
+ * that the chain stops there — it never picks one. A contract whose own file is not in the indexed
+ * source is declared as an interface reduced to the method used, and the narrative says so.
+ *
+ * One code SHAPE is special-cased, and it is structural, not a domain: a "guard" — the final symbol
+ * returns `boolean` and the discovered call is a real `if (!guard(...))` early return. Its logic is
+ * reused verbatim from the real source (never simulated) so the exercise runs the exact comparison.
  */
 
-export type DiscoveredFlowPlan = { kind: "discovered-flow"; goal: string; moduleId: "flow"; chain: CodeSymbol[]; edges: FlowEdge[] };
+export type DiscoveredFlowPlan = { kind: "discovered-flow"; intent: FlowIntent; goal: string; moduleId: "flow"; chain: CodeSymbol[]; edges: FlowEdge[]; external: ExternalCall | null };
 
-export function planDiscoveredFlow(goal: string, journey: Journey, index: RepositoryIndex): DiscoveredFlowPlan {
-  if (journey.repo.owner !== "marcelotaparelli" || journey.repo.name !== "ops-triage-ai") {
-    throw new Error("Este gerador atende somente o repositório acompanhado nesta jornada.");
-  }
-  const found = discoverFlow(goal, index);
+export function planDiscoveredFlow(goal: string, intent: FlowIntent, index: RepositoryIndex): DiscoveredFlowPlan {
+  const found = discoverFlow(goal, index, intent);
   if (found.chain.length < 2) {
     throw new Error(`O grafo descoberto para "${goal}" não conecta o ponto de entrada a nenhum outro símbolo comprovado.`);
   }
-  return { kind: "discovered-flow", goal, moduleId: "flow", chain: found.chain, edges: found.edges };
-}
-
-function declarationOf(index: RepositoryIndex, s: CodeSymbol): Declaration {
-  const d = index.declarations.find((decl) => decl.path === s.path && decl.symbol === s.symbol && decl.container === s.container);
-  if (!d) throw new Error(`Declaração ${s.symbol} ausente no SHA fixado.`);
-  return d;
+  return { kind: "discovered-flow", intent, goal, moduleId: "flow", chain: found.chain, edges: found.edges, external: found.external };
 }
 
 function snippetOf(index: RepositoryIndex, d: Declaration): string {
   return (index.files.get(d.path) ?? "").split("\n").slice(d.startLine - 1, d.endLine).join("\n");
 }
 
-/** For narrative text only — architecture node labels and originalCodeRefs.symbol must stay the
- *  bare declared name (see below), since that is what the rest of the system resolves against. */
-function displayLabel(node: CodeSymbol): string {
-  return node.container ? `${node.container}.${node.symbol}` : node.symbol;
-}
-
-function isInterfaceNode(index: RepositoryIndex, node: CodeSymbol): boolean {
-  return node.container !== null && isInterfaceDeclaration(index, node.path, node.container);
-}
+const labelOf = (node: CodeSymbol): string => (node.container ? `${node.container}.${node.symbol}` : node.symbol);
 
 function reference(index: RepositoryIndex, journey: Journey, d: Declaration, note: string): OriginalCodeReference {
   return {
@@ -78,36 +57,23 @@ function reference(index: RepositoryIndex, journey: Journey, d: Declaration, not
   };
 }
 
-/** One taught step: reaching `to`, via one or more real edges. More than one edge means the call
- *  passed through an interface's contract before landing on its one real implementation. */
-type Step = { to: CodeSymbol; edges: FlowEdge[] };
-
-/** Interfaces have no body of their own to teach as a separate stage — a hop that lands on one is
- *  folded into the SAME step as whatever comes next, so every step ends on real, runnable code. */
-function collapseIntoSteps(index: RepositoryIndex, chain: CodeSymbol[], edges: FlowEdge[]): Step[] {
-  const steps: Step[] = [];
-  let pending: FlowEdge[] = [];
-  for (let i = 0; i < edges.length; i++) {
-    pending.push(edges[i]!);
-    const node = chain[i + 1]!;
-    if (!isInterfaceNode(index, node)) {
-      steps.push({ to: node, edges: pending });
-      pending = [];
-    }
-  }
-  return steps;
+/** What the analysis could not prove past a terminal contract, in words a learner can check. */
+function contractBoundary(index: RepositoryIndex, contract: CodeSymbol): string {
+  const implementations = interfaceImplementations(index, contract) ?? [];
+  const found = implementations.length ? `o SHA fixado tem ${implementations.length} implementações (${implementations.join(", ")})` : "o SHA fixado não tem nenhuma classe que a implemente";
+  return `${found}; qual delas roda depende de como o servidor é montado, algo que a análise estática não decide. Por isso a cadeia termina neste contrato, sem escolher uma implementação.`;
 }
+
+/** What the analysis could not prove past a call into an external package, in words a learner can check. */
+function externalBoundaryText(external: Pick<ExternalCall, "base" | "module" | "members">): string {
+  return `${external.members.join(".")} é um membro de ${external.base}, do pacote "${external.module}", que não faz parte do SHA fixado: a análise estática não vê o que ele faz. Por isso a cadeia termina nessa chamada, sem simular o que existe do outro lado.`;
+}
+
+const oneLine = (text: string): string => text.replace(/,(\s*[}\]])/g, "$1").replace(/\s+/g, " ").trim();
 
 type GuardInfo = { guardDecl: Declaration; edge: FlowEdge };
 
-/**
- * The only code SHAPE this generator special-cases, and it is a generic structural pattern
- * (boolean function gating an early return), not a domain: it happens to fire for authentication
- * because that is what the discovered symbol looks like in this repository, not because the
- * generator knows what "authentication" means.
- */
-function detectGuard(index: RepositoryIndex, lastStep: Step): GuardInfo | null {
-  const last = lastStep.edges.at(-1)!;
+function detectGuard(index: RepositoryIndex, last: FlowEdge): GuardInfo | null {
   const guardDecl = index.declarations.find((d) => d.path === last.to.path && d.symbol === last.to.symbol && d.container === last.to.container);
   if (!guardDecl) return null;
   const signature = (index.files.get(guardDecl.path) ?? "").split("\n")[guardDecl.startLine - 1] ?? "";
@@ -116,133 +82,253 @@ function detectGuard(index: RepositoryIndex, lastStep: Step): GuardInfo | null {
   return { guardDecl, edge: last };
 }
 
-function flowArchitecture(declarableChain: CodeSymbol[], uptoIndex: number): ArchitectureGraph {
-  // Node labels must be the bare declared symbol (never "Container.method"): that is the only
-  // form src/services/code-map.ts's resolveNode can match against real declarations.
-  const nodes = declarableChain.slice(0, uptoIndex + 1).map((node, i) => ({ id: `n${i}`, label: node.symbol, kind: node.container ? ("class" as const) : ("function" as const), col: i, row: 0 }));
-  const edges = nodes.slice(1).map((node, i) => ({ from: `n${i}`, to: node.id, rel: "calls" as const }));
+/** Real nodes only: a contract whose file is not indexed has nothing on the map to resolve to. Labels are
+ *  bare declared names (a class, an interface or a function), the only form resolveNode matches. */
+function architectureFor(model: ReplayModel, upto: number): ArchitectureGraph {
+  const ids = new Map<string, string>();
+  const nodes: ArchitectureGraph["nodes"] = [];
+  model.nodes.slice(0, upto + 1).forEach((node, i) => {
+    if (!node.decl) return;
+    const label = node.sym.container ?? node.sym.symbol;
+    if (ids.has(label)) return;
+    ids.set(label, `n${i}`);
+    nodes.push({ id: `n${i}`, label, kind: node.role === "contract" ? "interface" : node.role === "method" ? "class" : "function", col: Math.min(nodes.length, 8), row: 0 });
+  });
+  const idOf = (node: ReplayNode): string | undefined => (node.decl ? ids.get(node.sym.container ?? node.sym.symbol) : undefined);
+  const edges: ArchitectureGraph["edges"] = [];
+  model.links.slice(0, upto).forEach((link, i) => {
+    const from = model.nodes[i]!;
+    const to = model.nodes[i + 1]!;
+    // An edge joins two real symbols: a contract outside the indexed source is not on the map, so it links nothing.
+    const [a, b] = link.kind === "implements" ? [idOf(to), idOf(from)] : [idOf(from), idOf(to)];
+    const rel = link.kind === "implements" ? "implements" : "calls";
+    if (a && b && a !== b && !edges.some((e) => e.from === a && e.to === b && e.rel === rel)) edges.push({ from: a, to: b, rel });
+  });
   return { nodes, edges };
 }
 
+const SIMPLIFICATION = "Simplificações do Replay: os dados foram reduzidos (cada função devolve uma string; o real trafega objetos e Response) e só ficaram os parâmetros que carregam dependências.";
+
+function phrase(label: string): string {
+  const [kind, name] = label.split(" ") as [string, string];
+  return `${{ interface: "a interface", class: "a classe", type: "o tipo", function: "a função" }[kind] ?? kind} ${name}`;
+}
+
+type StepText = { title: string; need: string; task: string; outcome: string; code: string; detail: string; preserved: string; requirement: string };
+
+/** The narrative of one step, by the STRUCTURAL relation the real call site proves. */
+function describeStep(model: ReplayModel, i: number, program: Program, added: Block[], boundary: string, isGuardHop: boolean): StepText {
+  const caller = model.nodes[i - 1]!;
+  const node = model.nodes[i]!;
+  const link = model.links[i - 1]!;
+  const A = labelOf(caller.sym);
+  const B = labelOf(node.sym);
+  const container = caller.sym.container ?? "";
+  const expression = program.callStatement ?? B;
+  const declare = added.length ? `declare ${added.map((b) => phrase(b.label)).join(", ")} e ` : "";
+  const site = link.kind === "implements" ? "" : `No SHA fixado, ${A} chama ${B} em ${caller.sym.path}:${link.line}: \`${link.snippet}\`.`;
+  const virtual = node.role === "contract" && node.decl === null ? " O arquivo desse contrato não está entre os fontes indexados do SHA fixado; o Replay o declara como interface, reduzida ao método usado." : "";
+  const terminal = node.role === "contract" && i === model.nodes.length - 1;
+
+  if (link.kind === "implements") {
+    const I = caller.sym.container ?? "";
+    const Impl = node.sym.container ?? "";
+    return {
+      title: `Implementar ${I} em ${Impl}`,
+      need: `No código real, ${Impl} implementa o contrato ${I}: é a única classe do SHA fixado que o cumpre, e quem chama depende só do contrato.`,
+      task: `${declare}faça ${Impl} implementar ${I}.`,
+      outcome: `o contrato ${I} passa a ter uma implementação real: ${Impl}.`,
+      code: `${Impl} implements ${I} cumpre o contrato com o método ${node.sym.symbol}.`,
+      detail: `No SHA fixado, ${Impl} implementa ${I}: \`${link.snippet}\`.`,
+      preserved: "a classe que implementa a interface, separada dela",
+      requirement: `${Impl} deve implementar ${I}.`,
+    };
+  }
+  if (node.role === "external" && link.kind === "member") {
+    const ext = node.external!;
+    const receiver = [link.base.via === "field" ? "this" : "", link.base.name, ...link.path].filter(Boolean).join(".");
+    const call = `${receiver}.${ext.members.at(-1)}`;
+    const ownClass = ext.dependency !== ext.base;
+    const origin = ownClass ? `${ext.dependency}, uma classe do repositório que estende ${ext.base}, importado do pacote "${ext.module}"` : `${ext.base}, importado do pacote "${ext.module}"`;
+    const how = link.base.via === "field" ? `faça ${container} receber ${link.base.name} pelo construtor e ${A} chamar ${call} através dele` : `faça ${A} receber ${link.base.name} como parâmetro e chamar ${call} através dele`;
+    return {
+      title: `Chamar ${ext.members.join(".")} de ${ext.base}`,
+      need: `No código real, ${link.base.via === "field" ? `${container} recebe ${link.base.name} pelo construtor (injeção de dependência)` : `${A} recebe ${link.base.name} como parâmetro`}, do tipo ${origin}. ${A} chama ${call}(...): o membro ${ext.members.join(".")} não é declarado pelo repositório, vem de ${ext.base}.`,
+      task: `${declare}${how}.${ownClass ? ` ${ext.dependency} estende ${ext.base}, que o Replay recebe pronto em ${EXTERNAL_FILE}.` : ` ${ext.base} vem pronto em ${EXTERNAL_FILE}.`}`,
+      outcome: `a cadeia chega à chamada ${call}, onde termina o que o código do repositório prova.`,
+      code: `${A} chama ${expression} e devolve o resultado.`,
+      detail: `No SHA fixado, ${A} chama ${call} em ${caller.sym.path}:${link.line}: \`${link.snippet}\`, passando \`${oneLine(ext.argsText)}\`. A assinatura real é \`${ext.signature}\`. Neste ponto, ${externalBoundaryText(ext)}`,
+      preserved: `a dependência injetada pelo construtor e a classe que estende o tipo do pacote externo; o pacote em si não está no repositório`,
+      requirement: `${how.charAt(0).toUpperCase()}${how.slice(1)}.`,
+    };
+  }
+  if (isGuardHop) {
+    return {
+      title: `Verificar ${B} antes de continuar`,
+      need: `No código real, ${A} só continua se ${B} autorizar a requisição.`,
+      task: `chame ${B} dentro de ${A} e negue a continuação quando ele devolver falso.`,
+      outcome: `a requisição só é permitida quando ${B} confirma o acesso.`,
+      code: `if (!${expression}) return "denied"; do contrário, devolve "allowed".`,
+      detail: site,
+      preserved: "a função de guarda real, com a comparação idêntica à do código",
+      requirement: `${A} deve negar a continuação quando ${B} devolver falso.`,
+    };
+  }
+  if (link.kind === "call") {
+    return {
+      title: `Encaminhar para ${B}`,
+      need: `No código real, ${A} chama ${B} para continuar o fluxo.`,
+      task: `${declare}faça ${A} chamar ${B}.`,
+      outcome: `a cadeia chega a ${B}, o componente real relevante para o objetivo.`,
+      code: `${A} chama ${expression} e devolve o resultado.`,
+      detail: site,
+      preserved: "uma função chamando outra, como no código real",
+      requirement: `${A} deve chamar ${B}.`,
+    };
+  }
+  if (link.kind === "self") {
+    return {
+      title: `Encaminhar para ${B}`,
+      need: `No código real, ${A} chama outro método da mesma classe, ${B}, por this.`,
+      task: `${declare}faça ${A} chamar ${B} por this.`,
+      outcome: `a cadeia chega a ${B}, na mesma classe.`,
+      code: `${A} chama ${expression} e devolve o resultado.`,
+      detail: site,
+      preserved: "métodos da mesma classe, um chamando o outro por this",
+      requirement: `${A} deve chamar ${B} por this.`,
+    };
+  }
+  // A call through a dependency the caller RECEIVES: never constructed by the caller.
+  const receiver = [link.base.via === "field" ? "this" : "", link.base.name, ...link.path].filter(Boolean).join(".");
+  const received =
+    link.base.via === "field"
+      ? `${container} recebe ${link.base.name} pelo construtor (injeção de dependência) e ${A} chama ${receiver}.${node.sym.symbol}`
+      : `${A} não constrói o que usa: recebe ${link.base.name}, um objeto de dependências, e chama ${receiver}.${node.sym.symbol}`;
+  const how = link.base.via === "field" ? `faça ${container} receber ${link.base.name} pelo construtor e ${A} chamar ${B} através dele` : `faça ${A} receber ${link.base.name} como parâmetro e chamar ${B} através dele`;
+  const preserved = `${link.base.via === "field" ? "a dependência injetada pelo construtor e chamada por this" : "a dependência recebida como parâmetro e chamada através dele"}${node.role === "contract" ? "; a interface continua sendo uma interface" : ""}`;
+  const requirement = `${how.charAt(0).toUpperCase()}${how.slice(1)}.`;
+  if (node.role === "contract") {
+    return {
+      title: `Depender do contrato ${node.sym.container}`,
+      need: `No código real, ${received}: depende só do contrato ${node.sym.container}, uma interface, nunca de uma classe concreta.${virtual}`,
+      task: `${declare}${how}.`,
+      outcome: terminal ? `a cadeia chega ao contrato ${B}, onde a chamada é comprovada mas a implementação não.` : `${A} passa a depender do contrato ${node.sym.container}, não de uma implementação.`,
+      code: `${A} chama ${expression} e devolve o resultado.`,
+      detail: `${site}${terminal ? ` Neste ponto, ${boundary}` : ""}`,
+      preserved,
+      requirement,
+    };
+  }
+  return {
+    title: `Encaminhar para ${B}`,
+    need: `No código real, ${received}.`,
+    task: `${declare}${how}.`,
+    outcome: `a cadeia chega a ${B}, o componente real relevante para o objetivo.`,
+    code: `${A} chama ${expression} e devolve o resultado.`,
+    detail: site,
+    preserved,
+    requirement,
+  };
+}
+
 export function generateDiscoveredFlow(plan: DiscoveredFlowPlan, journey: Journey, index: RepositoryIndex): Stage[] {
-  const { chain } = plan;
-  const steps = collapseIntoSteps(index, chain, plan.edges);
-  if (!steps.length) throw new Error("O grafo descoberto não tem nenhum passo executável a ensinar.");
-  const declarableChain = [chain[0]!, ...steps.map((step) => step.to)];
-  const declarations = declarableChain.map((node) => declarationOf(index, node));
-  const guard = detectGuard(index, steps.at(-1)!);
-  const entrySymbol = chain[0]!.symbol;
+  const model = buildModel(index, plan.chain, plan.edges, plan.external);
+  const last = model.nodes.length - 1;
+  if (last < 1) throw new Error("O grafo descoberto não tem nenhum passo executável a ensinar.");
+  const guard = plan.external ? null : detectGuard(index, plan.edges.at(-1)!);
+  const programs: Program[] = [];
+  for (let i = 1; i <= last; i++) programs[i] = emitProgram(index, model, i, Boolean(guard) && i === last);
 
-  // A guarded chain keeps the (req, apiKey) shape the real guard needs; anything else uses a
-  // generic single string argument threaded through the chain — there is nothing left to teach
-  // about that argument itself, only about which real symbol gets reached.
-  const params = guard ? "req: Request, apiKey: string | undefined" : "input: string";
-  const args = guard ? "req, apiKey" : "input";
+  const entry = model.nodes[0]!;
+  const entryLabel = labelOf(entry.sym);
+  // What travels through the chain: a request entering the system (trace_request), or just a call (other).
+  const subject = plan.intent === "trace_request" ? "requisição" : "chamada";
+  const targetLabel = labelOf(model.nodes[last]!.sym);
+  const entryIntro =
+    plan.intent === "other"
+      ? `Este percurso começa em ${entryLabel}, o símbolo mais externo ligado ao objetivo: nenhum outro símbolo relacionado ao objetivo o chama nas chamadas comprovadas do código. Daí, só chamadas comprovadas levam até ${targetLabel}.`
+      : entryShape(index, plan.chain[0]!) === "handler-factory"
+        ? `${entry.sym.symbol} cria o handler HTTP deste servidor, a função que recebe cada requisição; o Replay reproduz a fábrica e o handler que ela devolve.`
+        : `A requisição chega em ${entry.sym.symbol}, o ponto de entrada HTTP deste servidor.`;
 
-  const callExpr = (node: CodeSymbol): string => (node.container === null ? `${node.symbol}(${args})` : `new ${node.container}().${node.symbol}(${args})`);
-  const declSnippet = (node: CodeSymbol, body: string): string =>
-    node.container === null
-      ? `export async function ${node.symbol}(${params}): Promise<string> {\n  ${body}\n}`
-      : `export class ${node.container} {\n  async ${node.symbol}(${params}): Promise<string> {\n    ${body}\n  }\n}`;
-  // The guard target itself is never re-declared in chain.ts: it lives in guard.ts and is only
-  // imported. What chain.ts declares, up to a given stage, is every OTHER node reached so far —
-  // and, once the guard stage arrives, the guard's caller gains the real `if (!guard(...))` body
-  // instead of gaining a new declaration.
-  const declaredNodesFor = (uptoIndex: number): CodeSymbol[] => (guard && uptoIndex === steps.length ? declarableChain.slice(0, declarableChain.length - 1) : declarableChain.slice(0, uptoIndex + 1));
-  const bodyForPosition = (p: number, declared: CodeSymbol[], isGuardFinal: boolean): string => {
-    if (p < declared.length - 1) return `return await ${callExpr(declared[p + 1]!)};`;
-    if (isGuardFinal) return `if (!${guard!.edge.to.symbol}(${args})) return "denied";\n    return "allowed";`;
-    return `return "reached:${displayLabel(declared[p]!)}";`;
-  };
-  const codeFor = (uptoIndex: number): string => {
-    const isGuardFinal = Boolean(guard) && uptoIndex === steps.length;
-    const declared = declaredNodesFor(uptoIndex);
-    const importLine = isGuardFinal ? `import { ${guard!.edge.to.symbol} } from "./guard.ts";\n\n` : "";
-    return importLine + declared.map((node, p) => declSnippet(node, bodyForPosition(p, declared, isGuardFinal))).join("\n\n") + "\n";
-  };
-
-  let guardSource = "";
   const support: CodeFile[] = [];
+  // The package a chain leaves the repository through is given to the learner, reduced to what the chain calls.
+  const leafNode = model.nodes[last]!;
+  if (leafNode.role === "external") support.push({ path: EXTERNAL_FILE, content: externalStandIn(leafNode) });
+  let guardSource = "";
   if (guard) {
     guardSource = snippetOf(index, guard.guardDecl).replace(/^(async\s+)?function\s+/, (match) => `export ${match}`);
     support.push({ path: "guard.ts", content: `${guardSource}\n` });
   }
 
-  const callArgsForTest = guard ? `new Request("http://x"), undefined` : `"x"`;
-  const testFor = (uptoIndex: number): string => {
-    if (guard && uptoIndex === steps.length) {
-      return [
-        `import { test, expect } from "ownr:test";`,
-        `import { ${entrySymbol} } from "./chain.ts";`,
-        `test("permite sem chave configurada", async () => { expect(await ${entrySymbol}(new Request("http://x"), undefined)).toBe("allowed"); });`,
-        `test("nega chave incorreta", async () => { const req = new Request("http://x", { headers: { "x-api-key": "wrong" } }); expect(await ${entrySymbol}(req, "secret")).toBe("denied"); });`,
-        `test("permite chave correta", async () => { const req = new Request("http://x", { headers: { "x-api-key": "secret" } }); expect(await ${entrySymbol}(req, "secret")).toBe("allowed"); });`,
-      ].join("\n");
-    }
-    return [
-      `import { test, expect } from "ownr:test";`,
-      `import { ${entrySymbol} } from "./chain.ts";`,
-      `test("alcança ${displayLabel(declarableChain[uptoIndex]!)}", async () => { expect(await ${entrySymbol}(${callArgsForTest})).toBe("reached:${displayLabel(declarableChain[uptoIndex]!)}"); });`,
-    ].join("\n");
-  };
-
   const stages: Stage[] = [];
-  let previousLimitation = `${entrySymbol} ainda não encaminha a requisição para ninguém.`;
+  let previousLimitation = `${entryLabel} ainda não encaminha a ${subject} para ninguém.`;
 
-  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
-    const uptoIndex = stepIndex + 1;
-    const step = steps[stepIndex]!;
-    const directEdge = step.edges[0]!;
-    const isFinal = stepIndex === steps.length - 1;
+  for (let i = 1; i <= last; i++) {
+    const node = model.nodes[i]!;
+    const caller = model.nodes[i - 1]!;
+    const link = model.links[i - 1]!;
+    const program = programs[i]!;
+    const before = i === 1 ? undefined : programs[i - 1]!;
+    const isFinal = i === last;
     const isGuardHop = Boolean(guard) && isFinal;
-    const targetLabel = displayLabel(step.to);
-    const callerSymbol = directEdge.from.symbol;
-    const solutionContent = codeFor(uptoIndex);
-    const starterContent = uptoIndex === 1 ? "" : codeFor(uptoIndex - 1);
-
-    // When a step passed through an interface, the narrative teaches that distinction explicitly:
-    // the caller depends on a contract, resolved (by discovery) to the one real class in the
-    // pinned source that implements it — never guessed, and never silently merged away.
-    const viaInterface = step.edges.length > 1 ? step.edges[0]!.to : null;
-    const contractNote = viaInterface
-      ? ` Essa chamada depende de injeção de dependência: ${callerSymbol} conhece apenas o contrato ${viaInterface.container}; ${targetLabel} é a única implementação real encontrada no SHA fixado.`
-      : "";
+    const solutionContent = program.code;
+    const starterContent = before?.code ?? "";
+    const added = program.blocks.filter((block) => !before?.blocks.some((b) => b.label === block.label));
+    const text = describeStep(model, i, program, added, node.role === "contract" ? contractBoundary(index, node.sym) : "", isGuardHop);
 
     const narrative = stageNarrative({
-      previous: uptoIndex === 1 ? `A requisição chega em ${entrySymbol}, o ponto de entrada HTTP deste servidor.` : `Na etapa anterior, a cadeia chegou a ${displayLabel(declarableChain[uptoIndex - 1]!)}.`,
-      need: isGuardHop ? `No código real, ${callerSymbol} só continua se ${targetLabel} autorizar a requisição.` : `No código real, ${callerSymbol} chama ${targetLabel} para continuar o fluxo.${contractNote}`,
+      previous: i === 1 ? entryIntro : `Na etapa anterior, a cadeia chegou a ${labelOf(caller.sym)}.`,
+      need: text.need,
       limitation: previousLimitation,
-      task: isGuardHop ? `chame ${targetLabel} dentro de ${callerSymbol} e negue a continuação quando ele devolver falso.` : `crie ${targetLabel} e faça ${callerSymbol} chamá-lo.`,
-      outcome: isGuardHop ? `a requisição só é permitida quando ${targetLabel} confirma o acesso.` : `a cadeia chega a ${targetLabel}, o componente real relevante para o objetivo.`,
-      code: isGuardHop ? `if (!${targetLabel}(${args})) return "denied"; do contrário, devolve "allowed".` : `${callerSymbol} chama ${callExpr(step.to)} e devolve o resultado.`,
-      detail: viaInterface
-        ? `No SHA fixado, ${directEdge.from.symbol} chama ${displayLabel(directEdge.to)} em ${directEdge.from.path}:${directEdge.line}: \`${directEdge.snippet}\`. \`${step.edges.at(-1)!.snippet}\` é a única classe do SHA fixado que implementa ${viaInterface.container}.`
-        : `No SHA fixado, ${directEdge.from.symbol} chama ${targetLabel} em ${directEdge.from.path}:${directEdge.line}: \`${directEdge.snippet}\`.`,
+      task: text.task,
+      outcome: text.outcome,
+      code: text.code,
+      detail: `${text.detail} ${SIMPLIFICATION} Preservado do real: ${text.preserved}.`,
     });
     const limitation = isFinal
       ? "Agora reconstrua o encadeamento inteiro sem o ponto de partida."
-      : `${targetLabel} ainda não encaminha a requisição para o próximo passo real.`;
+      : node.role === "contract"
+        ? `${node.sym.container} é só um contrato: ainda falta a classe que o cumpre.`
+        : `${labelOf(node.sym)} ainda não encaminha a ${subject} para o próximo passo real.`;
 
-    const targetRefNote = isGuardHop
-      ? `O Replay reexporta ${targetLabel} sem alterar a lógica: a comparação é idêntica à do código real.`
-      : `O Replay reduz ${targetLabel} a um marcador que confirma que esta chamada real foi alcançada; o comportamento completo está no trecho de código real citado aqui, não executado nesta etapa.`;
-    const originalRefs: OriginalCodeReference[] = [];
-    if (isGuardHop) originalRefs.push(reference(index, journey, declarations[uptoIndex - 1]!, `O Replay reduz ${callerSymbol} à decisão de acesso; o código real também roteia as demais operações da API.`));
-    if (viaInterface) {
-      const interfaceDecl = index.declarations.find((d) => d.path === viaInterface.path && d.symbol === viaInterface.symbol && d.container === viaInterface.container);
-      if (interfaceDecl) originalRefs.push(reference(index, journey, interfaceDecl, `${callerSymbol} depende apenas deste contrato, não da implementação concreta.`));
+    const refs: OriginalCodeReference[] = [];
+    if (isGuardHop && caller.decl) refs.push(reference(index, journey, caller.decl, `O Replay reduz ${labelOf(caller.sym)} à decisão de acesso; o código real também roteia as demais operações da API.`));
+    if (link.kind === "implements" && caller.decl) refs.push(reference(index, journey, caller.decl, `${caller.sym.container} é a interface que ${node.sym.container} implementa.`));
+    if (node.role === "external" && caller.decl) {
+      refs.push(reference(index, journey, caller.decl, `Corpo real de ${labelOf(caller.sym)}: a chamada ao pacote externo e os dados que ela recebe; o Replay a reduz à chamada.`));
+      const dependencyDecl = index.declarations.find((d) => d.container === null && d.symbol === node.external!.dependency);
+      if (dependencyDecl) refs.push(reference(index, journey, dependencyDecl, `${dependencyDecl.symbol} no código real: o Replay a reduz a \`extends ${node.external!.base}\`, que vem do pacote \`${node.external!.module}\`.`));
     }
-    originalRefs.push(reference(index, journey, declarations[uptoIndex]!, targetRefNote));
+    if (node.decl) {
+      const note = isGuardHop
+        ? `O Replay reexporta ${labelOf(node.sym)} sem alterar a lógica: a comparação é idêntica à do código real.`
+        : node.role === "contract"
+          ? "Assinatura do contrato, sem corpo: quem chama depende só dela, não de uma classe concreta."
+          : `O Replay preserva a estrutura e omite o corpo de ${labelOf(node.sym)}; o comportamento completo está neste trecho real, não executado nesta etapa.`;
+      refs.push(reference(index, journey, node.decl, note));
+    }
+    for (const name of program.needs.typeMembers.keys()) {
+      if (before?.needs.typeMembers.has(name)) continue;
+      const decl = index.declarations.find((d) => d.container === null && d.symbol === name);
+      if (decl) refs.push(reference(index, journey, decl, `O Replay reduz ${name} aos membros que a cadeia usa, com os mesmos tipos do código real.`));
+    }
+
+    const guardName = model.nodes[last]!.sym.symbol;
+    const lineMatch = isGuardHop ? `if (!${guardName}(` : link.kind === "implements" ? `implements ${caller.sym.container}` : program.callStatement && solutionContent.includes(program.callStatement) ? program.callStatement : undefined;
+    const novelty = noveltyLines(starterContent, solutionContent).length;
+    const changedPieces = added.map((b) => b.label).join(", ");
 
     const stage = Stage.parse({
-      id: `${journey.id}.flow-${String(uptoIndex).padStart(2, "0")}`,
-      order: uptoIndex,
+      id: `${journey.id}.flow-${String(i).padStart(2, "0")}`,
+      order: i,
       moduleId: plan.moduleId,
       kind: "micro",
-      title: isGuardHop ? `Verificar ${targetLabel} antes de continuar` : `Encaminhar para ${targetLabel}`,
-      goal: isGuardHop
-        ? "Aprender que uma função de guarda decide, com um booleano, se a ação protegida pode continuar."
-        : `Aprender que ${callerSymbol} encaminha a chamada para ${targetLabel}, o componente real ligado ao objetivo.`,
+      // The stage puts several real pieces of ONE relation together; splitting it would mean inventing an
+      // intermediate structure that does not exist in the code, so the justification is explicit.
+      ...(novelty > 5 ? { noveltyException: `Fidelidade à estrutura real: esta etapa reúne as peças de uma mesma relação (${changedPieces || "ajustes de assinatura"}, mais as assinaturas que passam a carregar a dependência); dividi-la exigiria inventar uma estrutura intermediária que o código real não tem.` } : {}),
+      title: text.title,
+      goal: isGuardHop ? "Aprender que uma função de guarda decide, com um booleano, se a ação protegida pode continuar." : `Aprender como ${labelOf(caller.sym)} alcança ${labelOf(node.sym)} na estrutura real: ${text.preserved}.`,
       context: narrative.context,
       problem: narrative.problem,
       examples: [],
@@ -250,63 +336,70 @@ export function generateDiscoveredFlow(plan: DiscoveredFlowPlan, journey: Journe
       estimatedMinutes: isFinal ? 3 : 2,
       introduces: [],
       prerequisites: [],
-      architecture: flowArchitecture(declarableChain, uptoIndex),
+      architecture: architectureFor(model, i),
       referenceCode: [{ path: "chain.ts", content: solutionContent }],
-      lineNotes: [{ match: isGuardHop ? `if (!${targetLabel}(${args})) return "denied";` : `return await ${callExpr(step.to)};`, note: narrative.quick }],
-      explanation: [{ id: `flow-${uptoIndex}`, title: targetLabel, quick: narrative.quick, normal: narrative.normal }],
-      originalCodeRefs: originalRefs,
+      lineNotes: lineMatch ? [{ match: lineMatch, note: narrative.quick }] : [],
+      explanation: [{ id: `flow-${i}`, title: labelOf(node.sym), quick: narrative.quick, normal: narrative.normal }],
+      originalCodeRefs: refs,
       exercise: {
         instructions: isGuardHop
-          ? `Importe ${targetLabel} de guard.ts. Dentro de ${callerSymbol}, devolva "denied" quando ${targetLabel}(${args}) for falso; senão devolva "allowed".`
-          : `Crie ${targetLabel} devolvendo "reached:${targetLabel}", e faça ${callerSymbol} chamá-lo e devolver o resultado.`,
+          ? `Importe ${guardName} de guard.ts. Dentro de ${labelOf(caller.sym)}, devolva "denied" quando ${program.callStatement ?? guardName} for falso; senão devolva "allowed".`
+          : `Reproduza a estrutura real: ${text.task.charAt(0).toUpperCase()}${text.task.slice(1)} Cada função devolve uma string; o corpo real fica omitido.`,
         starterFiles: [{ path: "chain.ts", content: starterContent }],
         solutionFiles: [{ path: "chain.ts", content: solutionContent }],
         supportFiles: isFinal ? support : [],
         expose: [],
-        testFile: { path: "tests.ts", content: testFor(uptoIndex) },
+        testFile: { path: "tests.ts", content: isGuardHop ? guardTests(model, program, i) : testFor(model, program, i) },
       },
-      toolbox: isGuardHop ? [{ id: "guard", name: targetLabel, summary: "Função real do repositório usada nesta etapa.", example: guardSource }] : [],
-      tutorContext: { relevantFiles: ["chain.ts", ...(isGuardHop ? ["guard.ts"] : []), declarations[uptoIndex]!.path], concepts: [], previousStages: stages.map((s) => s.id) },
+      toolbox: isGuardHop ? [{ id: "guard", name: labelOf(node.sym), summary: "Função real do repositório usada nesta etapa.", example: guardSource }] : [],
+      tutorContext: { relevantFiles: ["chain.ts", ...(isGuardHop ? ["guard.ts"] : []), ...(node.decl ? [node.decl.path] : [])], concepts: [], previousStages: stages.map((s) => s.id) },
       completionCriteria: [{ kind: "tests_pass" }],
       limitation,
-      summary: { added: [targetLabel], why: narrative.problem, flow: declarableChain.slice(0, uptoIndex + 1).map(displayLabel) },
+      summary: { added: added.length ? added.map((b) => b.label.split(" ")[1] ?? b.label) : [labelOf(node.sym)], why: narrative.problem, flow: model.nodes.slice(0, i + 1).map((n) => labelOf(n.sym)) },
     });
     stages.push(stage);
     previousLimitation = limitation;
   }
 
-  const stepsNarrative = steps
-    .map((step) => {
-      const direct = step.edges[0]!;
-      const base = `${direct.from.symbol} chama ${displayLabel(direct.to)} em ${direct.from.path}:${direct.line} (\`${direct.snippet}\`)`;
-      if (step.edges.length === 1) return base;
-      const impl = step.edges.at(-1)!;
-      return `${base}, resolvida por injeção de dependência à única implementação real: ${displayLabel(impl.to)} (\`${impl.snippet}\`)`;
+  const stepsNarrative = model.links
+    .map((link, i) => {
+      const from = model.nodes[i]!;
+      const to = model.nodes[i + 1]!;
+      if (link.kind === "implements") return `${to.sym.container} implementa ${from.sym.container} (\`${link.snippet}\`)`;
+      if (to.role === "external" && link.kind === "member") return `${labelOf(from.sym)} chama ${[link.base.via === "field" ? "this" : "", link.base.name, ...link.path].filter(Boolean).join(".")}.${to.sym.symbol.split(".").at(-1)} em ${from.sym.path}:${link.line} (\`${link.snippet}\`)`;
+      return `${labelOf(from.sym)} chama ${labelOf(to.sym)} em ${from.sym.path}:${link.line} (\`${link.snippet}\`)`;
     })
     .join("; depois, ");
-  const tail = guard
-    ? ` ${displayLabel(chain.at(-1)!)} compara o cabeçalho x-api-key com a chave configurada e só nega quando uma chave está configurada e não bate; sem chave configurada, tudo é permitido.`
-    : ` O comportamento completo de ${displayLabel(declarableChain.at(-1)!)} está no trecho de código real referenciado na etapa anterior (não executado aqui: depende de infraestrutura que este sandbox não provê).`;
+  const leaf = model.nodes[last]!;
+  const tail =
+    leaf.role === "external"
+      ? ` A chamada recebe \`${oneLine(leaf.external!.argsText)}\`, montado a partir dos parâmetros da assinatura real \`${leaf.external!.signature}\`. ${externalBoundaryText(leaf.external!)}`
+      : leaf.role === "contract"
+      ? ` ${labelOf(leaf.sym)} é um contrato sem corpo: ${contractBoundary(index, leaf.sym)}`
+      : guard
+        ? ` ${labelOf(leaf.sym)} compara o cabeçalho x-api-key com a chave configurada e só nega quando uma chave está configurada e não bate; sem chave configurada, tudo é permitido.`
+        : ` O comportamento completo de ${labelOf(leaf.sym)} está no trecho de código real referenciado na etapa anterior (não executado aqui: depende de infraestrutura que este sandbox não provê).`;
 
-  const finalStage = stages.at(-1)!;
+  const { noveltyException: _dropped, ...finalStage } = stages.at(-1)!;
+  void _dropped;
   const checkpoint = Stage.parse({
     ...finalStage,
     id: `${journey.id}.flow-99`,
     order: stages.length + 1,
     kind: "checkpoint",
     title: "Checkpoint: reconstrua a cadeia descoberta",
-    goal: `Reconstruir ${declarableChain.map(displayLabel).join(" -> ")} do editor vazio.`,
+    goal: `Reconstruir ${model.nodes.map((n) => labelOf(n.sym)).join(" -> ")} do editor vazio, com a mesma estrutura do código real.`,
     context: "Todas as peças foram introduzidas uma a uma.",
-    problem: `Agora reconstrua a cadeia inteira: ${declarableChain.map(displayLabel).join(" -> ")}.`,
-    requirements: steps.map((step) => `${step.edges[0]!.from.symbol} deve chamar ${displayLabel(step.to)}.`),
+    problem: `Agora reconstrua a cadeia inteira: ${model.nodes.map((n) => labelOf(n.sym)).join(" -> ")}. Preserve interfaces, dependências recebidas e implementações como no código real.`,
+    requirements: model.nodes.slice(1).map((_node, i) => describeStep(model, i + 1, programs[i + 1]!, [], "", Boolean(guard) && i + 1 === last).requirement),
     exercise: { ...finalStage.exercise!, starterFiles: [{ path: "chain.ts", content: "" }] },
     tutorContext: { ...finalStage.tutorContext, previousStages: stages.map((s) => s.id) },
     checkpoint: {
-      question: `Como a chamada chega de ${entrySymbol} até ${displayLabel(chain.at(-1)!)}, e o que o código real faz nesse ponto?`,
-      answer: `No SHA fixado: ${stepsNarrative}.${tail}`,
+      question: `Como a chamada chega de ${entryLabel} até ${targetLabel}, e o que o código real faz nesse ponto?`,
+      answer: `No SHA fixado: ${stepsNarrative}.${tail} O Replay preserva a estrutura real (interfaces, injeção de dependência e implementações) e reduz apenas os dados.`,
     },
     limitation: undefined,
-    summary: { added: declarableChain.map(displayLabel), why: "Conectar o ponto de entrada HTTP ao componente real relevante para o objetivo.", flow: declarableChain.map(displayLabel) },
+    summary: { added: model.nodes.map((n) => labelOf(n.sym)), why: plan.intent === "trace_request" ? "Conectar o ponto de entrada HTTP ao componente real relevante para o objetivo." : "Conectar o ponto de partida técnico ao componente real relevante para o objetivo.", flow: model.nodes.map((n) => labelOf(n.sym)) },
   });
 
   return [...stages, checkpoint];

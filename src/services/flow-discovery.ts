@@ -1,3 +1,4 @@
+import type { LearningGoalKind } from "../domain/learning-goal.ts";
 import type { Declaration, RepositoryIndex } from "./code-map.ts";
 
 /**
@@ -15,6 +16,18 @@ import type { Declaration, RepositoryIndex } from "./code-map.ts";
  *    reader cannot decide), so no edge is added — the chain simply cannot be proven past that
  *    point, and callers of discoverFlow surface that as the boundary of the analysis rather than
  *    guessing which implementation runs.
+ * Entry points are exported functions that receive a `Request` and return a `Response`, or that
+ * return a named handler type of that shape (a handler factory such as `createHttpHandler(deps):
+ * HttpHandler`, whose returned closure is what actually receives the request).
+ *
+ * WHERE a chain starts is decided by the learner's stated intent (FlowIntent), never by the goal
+ * text alone:
+ *  - "trace_request": follow a request entering the system — the chain must start at a real HTTP
+ *    entry point and every candidate must be reachable from one; without one, discovery fails.
+ *  - "other": a free technical goal — no HTTP entry is forced. The chain starts at the OUTERMOST
+ *    goal-related callable (function or method): one that no other goal-related symbol provably
+ *    reaches. HTTP only appears if a goal-related symbol lives there.
+ * Everything after the start is the same engine: verified edges, whole-chain relevance, honest stops.
  * This is not limited to any particular chain shape or length. Nothing that cannot be proven this
  * way is returned: when no entry point, no relevant symbol, or no connecting chain exists,
  * discovery fails loudly instead of guessing.
@@ -23,7 +36,32 @@ import type { Declaration, RepositoryIndex } from "./code-map.ts";
 export type CodeSymbol = { path: string; symbol: string; container: string | null; startLine: number; endLine: number };
 export type EdgeKind = "call" | "implements";
 export type FlowEdge = { from: CodeSymbol; to: CodeSymbol; line: number; snippet: string; kind: EdgeKind; argsText: string };
-export type FlowPath = { goal: string; keywords: string[]; entry: CodeSymbol; target: CodeSymbol; chain: CodeSymbol[]; edges: FlowEdge[] };
+export type FlowIntent = Extract<LearningGoalKind, "trace_request" | "other">;
+/**
+ * Where the provable chain leaves the repository: the chain's last node calls through a dependency whose
+ * declared type belongs to an external package (imported, or extended by a class of the repository), and
+ * the called member is not declared anywhere in the pinned source. The call site itself is real and
+ * verifiable; what is on the other side of it is not in the snapshot, so it is a boundary, never a node.
+ */
+export type ExternalCall = {
+  from: CodeSymbol;
+  line: number;
+  snippet: string;
+  argsText: string;
+  /** The calling declaration's own signature, as written (parameters and their defaults feed the call). */
+  signature: string;
+  /** The receiver as written at the call site, e.g. ["this", "prisma", "transaction"]. */
+  receiver: string[];
+  /** The type the receiver resolves to from declared types (the last resolvable prefix of `receiver`). */
+  dependency: string;
+  /** The external class: the dependency itself, or the imported class it extends. */
+  base: string;
+  /** The package specifier it is imported from. */
+  module: string;
+  /** What is asked of the external type, in order: the receiver's remaining segments, then the method. */
+  members: string[];
+};
+export type FlowPath = { goal: string; intent: FlowIntent; keywords: string[]; entry: CodeSymbol; target: CodeSymbol; chain: CodeSymbol[]; edges: FlowEdge[]; external: ExternalCall | null };
 
 const toSymbol = (d: Declaration): CodeSymbol => ({ path: d.path, symbol: d.symbol, container: d.container, startLine: d.startLine, endLine: d.endLine });
 const nodeKey = (d: { path: string; symbol: string; container: string | null }): string => `${d.path}#${d.container ?? ""}#${d.symbol}`;
@@ -94,6 +132,15 @@ const GOAL_GLOSSARY: Record<string, string[]> = {
   limite: ["limit", "rate"],
   metrica: ["metric"],
   registro: ["log", "logger"],
+  criar: ["create"],
+  criada: ["create"],
+  criado: ["create"],
+  criacao: ["create"],
+  pagamento: ["payment"],
+  provedor: ["provider"],
+  tentativa: ["retry", "attempt"],
+  disjuntor: ["circuit", "breaker"],
+  idempotente: ["idempotent", "idempotency"],
 };
 
 function singularize(word: string): string {
@@ -101,17 +148,20 @@ function singularize(word: string): string {
   return word.replace(/s$/, "");
 }
 
+/** One entry per meaningful word of the goal: the word, its singular and its glossary translations —
+ *  everything that counts as "that concept" when reading the code. */
+function goalConcepts(goal: string): Set<string>[] {
+  return wordsOf(goal)
+    .filter((word) => !STOPWORDS.has(word))
+    .map((word) => {
+      const singular = singularize(word);
+      return new Set([word, singular, ...(GOAL_GLOSSARY[word] ?? GOAL_GLOSSARY[singular] ?? [])]);
+    });
+}
+
 /** Free-text goal -> a set of normalized keywords, expanded through the small glossary above. */
 export function tokenizeGoal(goal: string): Set<string> {
-  const words = wordsOf(goal).filter((word) => !STOPWORDS.has(word));
-  const expanded = new Set<string>();
-  for (const word of words) {
-    const singular = singularize(word);
-    expanded.add(word);
-    expanded.add(singular);
-    for (const translation of GOAL_GLOSSARY[word] ?? GOAL_GLOSSARY[singular] ?? []) expanded.add(translation);
-  }
-  return expanded;
+  return new Set(goalConcepts(goal).flatMap((concept) => [...concept]));
 }
 
 /**
@@ -158,22 +208,54 @@ function scoreDeclaration(d: { symbol: string; container: string | null }, goalT
   return score;
 }
 
-/**
- * A generic HTTP entry point: an exported top-level function taking a `Request` and returning a
- * `Response` (or `Promise<Response>`). Internal helpers with the same shape (e.g. a private
- * router called only from the entry point) are excluded by requiring `export`.
- */
-export function findEntryPoints(index: RepositoryIndex): CodeSymbol[] {
-  const entries: CodeSymbol[] = [];
+/** A named function type taking a `Request` and returning a `Response` (or a Promise of one), e.g.
+ *  `export type HttpHandler = (request: Request) => Promise<Response>;`. */
+const HANDLER_TYPE = /^(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=\s*\(\s*[A-Za-z_$][\w$]*\s*:\s*Request\b[^)]*\)\s*=>\s*(?:Promise<\s*)?Response\b/;
+
+function handlerTypeNames(index: RepositoryIndex): Set<string> {
+  const names = new Set<string>();
   for (const d of index.declarations) {
     if (d.container !== null) continue;
-    const lines = (index.files.get(d.path) ?? "").split("\n");
-    const signature = lines.slice(d.startLine - 1, Math.min(d.endLine, d.startLine + 2)).join(" ");
-    if (/^export\s+(?:default\s+)?(?:async\s+)?function\b/.test(signature) && /:\s*Request\b/.test(signature) && /:\s*(?:Promise<)?Response\b/.test(signature)) {
-      entries.push(toSymbol(d));
-    }
+    const match = HANDLER_TYPE.exec(declarationText(index, d).replace(/\s+/g, " "));
+    if (match?.[1] === d.symbol) names.add(d.symbol);
   }
-  return entries;
+  return names;
+}
+
+/** A declaration's signature: its lines up to (and including) the one that opens its body. */
+export function signatureOf(index: RepositoryIndex, d: Declaration): string {
+  const lines = (index.files.get(d.path) ?? "").split("\n").slice(d.startLine - 1, d.endLine);
+  const openIndex = lines.findIndex((line) => /\{\s*$/.test(line));
+  return lines.slice(0, openIndex === -1 ? 1 : openIndex + 1).join(" ");
+}
+
+export type EntryShape = "handler" | "handler-factory";
+
+function entryShapeOf(index: RepositoryIndex, d: Declaration, handlerTypes: Set<string>): EntryShape | null {
+  if (d.container !== null) return null;
+  const signature = signatureOf(index, d);
+  if (!/^export\s+(?:default\s+)?(?:async\s+)?function\b/.test(signature)) return null;
+  if (/:\s*Request\b/.test(signature) && /:\s*(?:Promise<)?Response\b/.test(signature)) return "handler";
+  for (const name of handlerTypes) if (new RegExp(`\\)\\s*:\\s*${escapeRegExp(name)}\\s*\\{$`).test(signature.trim())) return "handler-factory";
+  return null;
+}
+
+/**
+ * A generic HTTP entry point: an exported top-level function taking a `Request` and returning a
+ * `Response` (or `Promise<Response>`), or one returning a named handler type of that shape (a
+ * handler factory: the closure it returns is what receives the request, and the factory's body is
+ * where that closure's calls live). Internal helpers with the same shape (e.g. a private router
+ * called only from the entry point) are excluded by requiring `export`.
+ */
+export function findEntryPoints(index: RepositoryIndex): CodeSymbol[] {
+  const handlerTypes = handlerTypeNames(index);
+  return index.declarations.filter((d) => entryShapeOf(index, d, handlerTypes) !== null).map(toSymbol);
+}
+
+/** How the chain's first node receives requests, so a narrative can describe it truthfully. */
+export function entryShape(index: RepositoryIndex, entry: CodeSymbol): EntryShape {
+  const d = index.declarations.find((decl) => decl.path === entry.path && decl.symbol === entry.symbol && decl.container === entry.container);
+  return (d && entryShapeOf(index, d, handlerTypeNames(index))) || "handler";
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -209,10 +291,14 @@ function parenSpan(text: string, openIndex: number): string {
 
 /** `identifier: TypeIdentifier` pairs at declaration positions (after `(`, `,`, `{`, `;`, or the
  *  start of the text) — covers constructor parameter properties, interface/type fields, and plain
- *  function parameters, all of which share this same TypeScript syntax shape. */
+ *  function parameters, all of which share this same TypeScript syntax shape. A type written
+ *  `Pick<X, "m">` (likewise Omit/Readonly/Required/Partial/NonNullable) resolves to X: those
+ *  utility types only narrow which of X's members are visible, so a call through them still
+ *  lands on X's own declaration of that member. */
 function typedFieldsIn(text: string): Map<string, string> {
   const map = new Map<string, string>();
-  const pattern = /(?:^|[(,{;]\s*)(?:private\s+|public\s+|protected\s+|readonly\s+)*([A-Za-z_$][\w$]*)\??\s*:\s*([A-Za-z_$][\w$]*)/g;
+  // `\s*` after the alternation, not inside it: the first parameter may start on its own line.
+  const pattern = /(?:^|[(,{;])\s*(?:private\s+|public\s+|protected\s+|readonly\s+)*([A-Za-z_$][\w$]*)\??\s*:\s*(?:(?:Pick|Omit|Readonly|Required|Partial|NonNullable)<\s*)?([A-Za-z_$][\w$]*)/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text))) {
     const [, name, type] = match;
@@ -230,12 +316,18 @@ export function parameterTypesOf(index: RepositoryIndex, d: Declaration): Map<st
   return typedFieldsIn(parenSpan(text, openIndex));
 }
 
-/** A type's own property types: for an interface, every declared field (a plain, declarative
- *  body with no executable code, so scanning it whole is safe); for a class, only its
- *  constructor-injected properties (scanning a class's whole body risks matching object-literal
- *  keys inside method bodies, so we deliberately do not). */
+/** `type Name = { ... }`: as declarative as an interface, so its fields can be read whole. */
+function isObjectTypeAlias(index: RepositoryIndex, d: Declaration): boolean {
+  const line = (index.files.get(d.path) ?? "").split("\n")[d.startLine - 1] ?? "";
+  return d.container === null && /^(?:export\s+)?type\s+[A-Za-z_$][\w$]*\s*=\s*\{/.test(line);
+}
+
+/** A type's own property types: for an interface or an object type alias, every declared field (a
+ *  plain, declarative body with no executable code, so scanning it whole is safe); for a class,
+ *  only its constructor-injected properties (scanning a class's whole body risks matching
+ *  object-literal keys inside method bodies, so we deliberately do not). */
 export function propertyTypesOf(index: RepositoryIndex, d: Declaration): Map<string, string> {
-  if (isInterfaceDeclaration(index, d.path, d.symbol)) return typedFieldsIn(declarationText(index, d));
+  if (isInterfaceDeclaration(index, d.path, d.symbol) || isObjectTypeAlias(index, d)) return typedFieldsIn(declarationText(index, d));
   return parameterTypesOf(index, d);
 }
 
@@ -324,7 +416,8 @@ function buildCallGraph(index: RepositoryIndex, declarations: Declaration[]): Ma
     // Bare top-level calls / constructions.
     for (const callee of declarations) {
       if (callee.container !== null || callee === caller) continue;
-      const pattern = new RegExp(`\\b${escapeRegExp(callee.symbol)}\\s*\\(`);
+      // Never a member call: `Response.json(` is not a call to a top-level `json`.
+      const pattern = new RegExp(`(?<![.\\w$])${escapeRegExp(callee.symbol)}\\s*\\(`);
       const match = pattern.exec(body);
       if (!match) continue;
       const openIndex = match.index + match[0].length - 1;
@@ -406,6 +499,52 @@ function shortestPath(entries: CodeSymbol[], targetKey: string, edgesFrom: Map<s
   return null;
 }
 
+/** Every node reachable from `startKey` through verified edges, within the same hop cap. */
+function reachableFrom(startKey: string, edgesFrom: Map<string, FlowEdge[]>): Set<string> {
+  const seen = new Set<string>();
+  let frontier = [startKey];
+  for (let depth = 0; depth < MAX_HOPS && frontier.length; depth++) {
+    frontier = frontier.flatMap((key) => (edgesFrom.get(key) ?? []).map((edge) => nodeKey(edge.to))).filter((key) => !seen.has(key) && seen.add(key));
+  }
+  return seen;
+}
+
+const FUNCTION_LIKE = /^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\b|^(?:export\s+)?const\s+[A-Za-z_$][\w$]*\s*(?::[^=]+)?=\s*(?:async\s+)?(?:function\b|\([^)]*\)\s*(?::[^=]+)?=>|[A-Za-z_$][\w$]*\s*=>)/;
+
+/** Behaviour a learner can start reading at: a function, an arrow-function const, or a method of a
+ *  class. Not a class or interface (whose "body" is every method it holds), not an interface member
+ *  (no body), and not a value (`const repo = new PostgresRepo(sql)` is wiring, not behaviour). */
+function hasCallableBody(index: RepositoryIndex, d: Declaration): boolean {
+  if (d.container !== null) {
+    const container = index.declarations.find((c) => c.container === null && c.path === d.path && c.symbol === d.container);
+    return container !== undefined && isClassDeclaration(index, container);
+  }
+  return FUNCTION_LIKE.test((index.files.get(d.path) ?? "").split("\n")[d.startLine - 1] ?? "");
+}
+
+/** How many of the goal's concepts a declaration's own identity (name + container) carries. */
+function conceptsCarried(d: Declaration, concepts: Set<string>[]): number {
+  const nameTokens = new Set([...wordsOf(d.symbol), ...(d.container ? wordsOf(d.container) : [])]);
+  return concepts.filter((concept) => [...concept].some((token) => anyRelated(nameTokens, token))).length;
+}
+
+/**
+ * Start points for a free technical goal: callables (see hasCallableBody) that are about the goal
+ * and that no OTHER such callable provably reaches (mutual reachability, i.e. a cycle, dominates
+ * neither side). "About the goal" means carrying at least two of its concepts whenever the code has
+ * two — one concept alone is often just a generic verb the glossary expanded (`create`, `write`),
+ * which would make an HTTP factory named `createHttpHandler` look like it is "about persistence".
+ */
+function outermostRelevant(index: RepositoryIndex, relevant: Declaration[], concepts: Set<string>[], edgesFrom: Map<string, FlowEdge[]>): CodeSymbol[] {
+  const carried = new Map(relevant.map((d) => [d, conceptsCarried(d, concepts)] as const));
+  const required = Math.min(2, Math.max(0, ...carried.values()));
+  const callable = relevant.filter((d) => hasCallableBody(index, d) && (carried.get(d) ?? 0) >= required);
+  const reach = new Map(callable.map((d) => [nodeKey(d), reachableFrom(nodeKey(d), edgesFrom)]));
+  return callable
+    .filter((d) => !callable.some((other) => other !== d && reach.get(nodeKey(other))!.has(nodeKey(d)) && !reach.get(nodeKey(d))!.has(nodeKey(other))))
+    .map(toSymbol);
+}
+
 /** Minimal graph: a path longer than this is refused rather than returned, so a stage generator
  *  downstream never has to teach an unbounded number of hops in one journey. */
 const MAX_HOPS = 6;
@@ -467,9 +606,100 @@ function extendPath(index: RepositoryIndex, edgesFrom: Map<string, FlowEdge[]>, 
   return path;
 }
 
-export function discoverFlow(goal: string, index: RepositoryIndex): FlowPath {
-  const entries = findEntryPoints(index);
-  if (!entries.length) {
+/** Local names a file imports from a non-relative module (a package, not a file of the repository). */
+function externalImports(index: RepositoryIndex, path: string): Map<string, string> {
+  const imports = new Map<string, string>();
+  const text = index.files.get(path) ?? "";
+  for (const match of text.matchAll(/import\s+(?:type\s+)?([\w$]+)?\s*,?\s*(?:\{([^}]*)\})?\s*from\s*['"]([^'"]+)['"]/g)) {
+    const [, defaultName, named, module] = match;
+    if (!module || module.startsWith(".") || module.startsWith("/")) continue;
+    if (defaultName) imports.set(defaultName, module);
+    for (const entry of (named ?? "").split(",")) {
+      const local = /(?:\bas\s+)?([A-Za-z_$][\w$]*)\s*$/.exec(entry.trim().replace(/^type\s+/, ""))?.[1];
+      if (local) imports.set(local, module);
+    }
+  }
+  return imports;
+}
+
+/** A class's header up to the brace that opens its body (`class A extends B implements C`). */
+function classHeader(index: RepositoryIndex, d: Declaration): string {
+  const lines = (index.files.get(d.path) ?? "").split("\n").slice(d.startLine - 1, d.endLine);
+  const open = lines.findIndex((line) => line.includes("{"));
+  return lines.slice(0, open === -1 ? 1 : open + 1).join(" ");
+}
+
+/** True when the class text itself declares a member called `name` (a method, a property or a constructor property). */
+function declaresMember(index: RepositoryIndex, d: Declaration, name: string): boolean {
+  if (index.declarations.some((m) => m.path === d.path && m.container === d.symbol && m.symbol === name)) return true;
+  if (propertyTypesOf(index, d).has(name)) return true;
+  return new RegExp(`^\\s+(?:(?:public|private|protected|readonly|static|declare)\\s+)*${escapeRegExp(name)}\\b`, "m").test(declarationText(index, d));
+}
+
+/**
+ * The external type a dependency stands for, with the package it comes from — only from what the source
+ * itself states: the type is imported from a package, or it is a class of the repository that `extends` a
+ * class imported from a package. Returns null for anything else (never a guess from a name).
+ */
+function externalTypeOf(index: RepositoryIndex, callerPath: string, type: string, member: string): { base: string; module: string } | null {
+  const own = findTopLevel(index, type);
+  if (!own) {
+    const module = externalImports(index, callerPath).get(type);
+    return module ? { base: type, module } : null;
+  }
+  if (!isClassDeclaration(index, own) || declaresMember(index, own, member)) return null;
+  const base = /\bextends\s+([A-Za-z_$][\w$]*)/.exec(classHeader(index, own))?.[1];
+  const module = base ? externalImports(index, own.path).get(base) : undefined;
+  return base && module ? { base, module } : null;
+}
+
+/**
+ * The one call from `node` that leaves the repository and is about the goal — when the chain's last node
+ * has nothing left to follow inside the repository. Each dotted call is resolved through declared types
+ * as far as the source allows (the longest prefix that resolves); if what remains is not declared by the
+ * repository but belongs to an external type (see externalTypeOf), it is a candidate. Judged by the same
+ * relevance as any other next step (edgeRelevance's evidence: the called names, then the call's own
+ * arguments); zero or several equally relevant candidates mean no boundary is claimed.
+ */
+function externalBoundary(index: RepositoryIndex, edgesFrom: Map<string, FlowEdge[]>, node: CodeSymbol, goalTokens: Set<string>): ExternalCall | null {
+  if ((edgesFrom.get(nodeKey(node)) ?? []).length) return null;
+  const caller = declOf(index, node);
+  if (!caller || !hasCallableBody(index, caller)) return null;
+  const bodyLines = declarationText(index, caller).split("\n");
+  const body = bodyLines.join("\n");
+  const found: { call: ExternalCall; score: number }[] = [];
+  for (const match of body.matchAll(DOTTED_CALL)) {
+    const parts = match[1]!.split(".");
+    const receiver = parts.slice(0, -1);
+    for (let length = receiver.length; length >= (receiver[0] === "this" ? 2 : 1); length--) {
+      const dependency = resolveReceiverType(index, caller, receiver.slice(0, length));
+      if (!dependency) continue;
+      const members = parts.slice(length);
+      const external = externalTypeOf(index, caller.path, dependency, members[0]!);
+      if (external) {
+        const openIndex = match.index! + match[0]!.length - 1;
+        const argsText = parenSpan(body, openIndex);
+        const lineIndex = body.slice(0, match.index).split("\n").length - 1;
+        const names = new Set(members.flatMap(wordsOf));
+        const args = new Set(wordsOf(argsText));
+        let score = 0;
+        for (const token of goalTokens) score += anyRelated(names, token) ? 3 : anyRelated(args, token) ? 2 : 0;
+        found.push({ call: { from: node, line: caller.startLine + lineIndex, snippet: (bodyLines[lineIndex] ?? "").trim(), argsText, signature: signatureOf(index, caller).replace(/\s+/g, " ").replace(/\s*\{$/, "").trim(), receiver, dependency, base: external.base, module: external.module, members }, score });
+      }
+      break;
+    }
+  }
+  const ranked = found.filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score);
+  return ranked.length === 1 || (ranked.length > 1 && ranked[0]!.score > ranked[1]!.score) ? ranked[0]!.call : null;
+}
+
+function declOf(index: RepositoryIndex, s: CodeSymbol): Declaration | undefined {
+  return index.declarations.find((d) => d.path === s.path && d.symbol === s.symbol && d.container === s.container);
+}
+
+export function discoverFlow(goal: string, index: RepositoryIndex, intent: FlowIntent): FlowPath {
+  const entries = intent === "trace_request" ? findEntryPoints(index) : [];
+  if (intent === "trace_request" && !entries.length) {
     throw new Error("Nenhum ponto de entrada HTTP encontrado no SHA fixado (uma função exportada que recebe Request e devolve Response).");
   }
   const goalTokens = tokenizeGoal(goal);
@@ -479,6 +709,8 @@ export function discoverFlow(goal: string, index: RepositoryIndex): FlowPath {
   if (!scoredAll.length) throw new Error(`Nenhum símbolo do repositório no SHA fixado corresponde ao objetivo "${goal}".`);
 
   const edgesFrom = buildCallGraph(index, index.declarations);
+  const roots = intent === "trace_request" ? entries : outermostRelevant(index, scoredAll.map((entry) => entry.d), goalConcepts(goal), edgesFrom);
+  const rootKeys = new Set(roots.map(nodeKey));
 
   // A symbol's own name is often a weak, ambiguous signal on its own (many real methods on the
   // same relevant class share its class name; a generic verb like "execute" says nothing by
@@ -489,12 +721,14 @@ export function discoverFlow(goal: string, index: RepositoryIndex): FlowPath {
   // outrank a same-named read path that happens to score just as well one hop in.
   const candidates = scoredAll
     .map((entry) => {
-      const initial = shortestPath(entries, nodeKey(entry.d), edgesFrom, MAX_HOPS);
+      // A traced request must REACH the anchor from an HTTP entry; a free goal may start at the anchor itself.
+      const initial = intent === "other" && rootKeys.has(nodeKey(entry.d)) ? [] : shortestPath(roots, nodeKey(entry.d), edgesFrom, MAX_HOPS);
       if (!initial) return null;
       const anchor = toSymbol(entry.d);
-      const visited = [nodeKey(initial[0]!.from), ...initial.map((edge) => nodeKey(edge.to))];
+      const visited = [initial.length ? nodeKey(initial[0]!.from) : nodeKey(anchor), ...initial.map((edge) => nodeKey(edge.to))];
       const extension = extendPath(index, edgesFrom, anchor, goalTokens, visited, MAX_HOPS - initial.length);
       const edges = [...initial, ...extension];
+      if (!edges.length) return null;
       const chain = [edges[0]!.from, ...edges.map((edge) => edge.to)];
       // Both what each node IS (its own and its container's name) and what each call actually
       // PASSES matter: two sibling methods on the same relevant class (e.g. one that persists a
@@ -513,18 +747,20 @@ export function discoverFlow(goal: string, index: RepositoryIndex): FlowPath {
 
   if (!candidates.length) {
     throw new Error(
-      `O objetivo "${goal}" corresponde a ${scoredAll.map((entry) => (entry.d.container ? `${entry.d.container}.${entry.d.symbol}` : entry.d.symbol)).join(", ")} no SHA fixado, mas nenhum ponto de entrada HTTP alcança esse símbolo por chamadas comprovadas no código.`,
+      `O objetivo "${goal}" corresponde a ${scoredAll.map((entry) => (entry.d.container ? `${entry.d.container}.${entry.d.symbol}` : entry.d.symbol)).join(", ")} no SHA fixado, mas ${intent === "trace_request" ? "nenhum ponto de entrada HTTP alcança esse símbolo" : "nenhuma chamada comprovada no código o conecta a outro símbolo"} por chamadas comprovadas no código.`,
     );
   }
 
   const best = candidates[0]!;
-  return { goal, keywords: [...goalTokens], entry: best.edges[0]!.from, target: best.chain.at(-1)!, chain: best.chain, edges: best.edges };
+  const external = externalBoundary(index, edgesFrom, best.chain.at(-1)!, goalTokens);
+  return { goal, intent, keywords: [...goalTokens], entry: best.edges[0]!.from, target: best.chain.at(-1)!, chain: best.chain, edges: best.edges, external };
 }
 
-/** For a chain's terminal node, when it sits on an interface: how many concrete implementations
- *  exist in the pinned source. 0 or 2+ means the analysis cannot prove which one runs — the
- *  generator surfaces this explicitly instead of claiming the chain reaches a concrete operation. */
-export function interfaceImplementationCount(index: RepositoryIndex, node: CodeSymbol): number | null {
+/** For a chain's terminal node, when it sits on an interface: the concrete classes in the pinned
+ *  source that implement that method. Anything but exactly one means the analysis cannot prove
+ *  which one runs (it depends on runtime wiring) — the generator surfaces this explicitly, with
+ *  these names, instead of claiming the chain reaches a concrete operation. */
+export function interfaceImplementations(index: RepositoryIndex, node: CodeSymbol): string[] | null {
   if (!node.container || !isInterfaceDeclaration(index, node.path, node.container)) return null;
-  return implementationsOf(index, index.declarations, node.container, node.symbol).length;
+  return implementationsOf(index, index.declarations, node.container, node.symbol).flatMap((d) => (d.container ? [d.container] : []));
 }

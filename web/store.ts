@@ -44,6 +44,19 @@ function write(key: string, value: unknown): void {
   }
 }
 
+const REPO_KEY = "rr:v1:repo-url"; // like the learner id: survives content resets
+const GITHUB_URL = /^https:\/\/github\.com\/[^\s]{1,150}$/;
+
+/** The repository the developer last asked about, so the home form does not silently go back to the sample. */
+export function lastRepoUrl(): string | undefined {
+  const stored = read<unknown>(REPO_KEY, undefined);
+  return typeof stored === "string" && GITHUB_URL.test(stored) ? stored : undefined;
+}
+
+export function rememberRepoUrl(url: string): void {
+  if (GITHUB_URL.test(url)) write(REPO_KEY, url);
+}
+
 export class ProgressStore {
   private data: LocalJourney;
 

@@ -159,7 +159,7 @@ test("objetivo técnico gera fluxo HTTP até decisão persistida com referência
   const service = new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker));
   const store = new TargetedJourneyStore(root);
   const goal = "Quero compreender o fluxo completo de um ticket no ops-triage-ai, desde a entrada HTTP até a decisão e a persistência.";
-  const route = await service.generateRequestJourney(golden(), goal, index);
+  const route = await service.generateRequestJourney(golden(), goal, index, "trace_request");
   const stages = route.stages;
   expect(route.goal).toEqual({ kind: "trace_request", target: goal });
   expect(stages).toHaveLength(8);
@@ -193,7 +193,7 @@ test("rota HTTP sem percurso comprovado no gerador do ticket informa a limitaç�
   const service = new ModuleGenerationService(mkdtempSync(join(tmpdir(), "replay-other-route-")), new StagePlanner(), new StageGenerator(), new StageValidator(checker));
   // "ticket" keeps this goal routed to the hand-authored ticket-flow trace (looksLikeTicketFlowGoal),
   // which only ever proved one route; anything else it should still refuse instead of guessing.
-  await expect(service.generateRequestJourney(golden(), "GET /ticket/123", index)).rejects.toThrow("ainda não tem um percurso validado");
+  await expect(service.generateRequestJourney(golden(), "GET /ticket/123", index, "trace_request")).rejects.toThrow("ainda não tem um percurso validado");
 });
 
 test("rota antes sem percurso comprovado agora é descoberta genericamente (GET /triage/:id)", async () => {
@@ -201,12 +201,12 @@ test("rota antes sem percurso comprovado agora é descoberta genericamente (GET 
   // instead of the hand-authored ticket trace — and discovery finds the real handler for this
   // route (PersistedTriageService.getDecisionAudit), which the old hardcoded generator never knew.
   const service = new ModuleGenerationService(mkdtempSync(join(tmpdir(), "replay-generic-route-")), new StagePlanner(), new StageGenerator(), new StageValidator(checker));
-  const route = await service.generateRequestJourney(golden(), "GET /triage/123", index);
+  const route = await service.generateRequestJourney(golden(), "GET /triage/123", index, "trace_request");
   expect(route.stages.flatMap((stage) => stage.originalCodeRefs).some((ref) => ref.symbol === "getDecisionAudit")).toBe(true);
 });
 
 test("planejador aceita outra formulação do mesmo objetivo técnico", () => {
-  const plan = new StagePlanner().planRequest("Como POST /tickets/triage chega à decisão persistida?", golden(), index);
+  const plan = new StagePlanner().planRequest("Como POST /tickets/triage chega à decisão persistida?", golden(), index, "trace_request");
   if (plan.kind !== "request-trace") throw new Error("expected a request-trace plan");
   expect(plan.steps.map((step) => step.symbol)).toEqual([
     "parseTicketInput", "PersistedTriageService", "PrismaTriageRunRepository", "TriageTicket",

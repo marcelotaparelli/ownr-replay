@@ -22,7 +22,7 @@ test("tokenizeGoal expande o objetivo em português sem inventar palavras não r
 });
 
 test("descobre a cadeia real de autorização por análise estática, sem receita para autenticação", () => {
-  const flow = discoverFlow(AUTH_GOAL, index);
+  const flow = discoverFlow(AUTH_GOAL, index, "trace_request");
   expect(flow.chain.map((symbol) => symbol.symbol)).toEqual(["handleRequest", "routeRequest", "authorized"]);
   expect(flow.entry).toEqual({ path: "src/server.ts", symbol: "handleRequest", container: null, startLine: 29, endLine: 47 });
   expect(flow.target.symbol).toBe("authorized");
@@ -34,14 +34,14 @@ test("descobre a cadeia real de autorização por análise estática, sem receit
 });
 
 test("objetivo sem correspondência real no SHA fixado não inventa um fluxo", () => {
-  expect(() => discoverFlow("Quero entender como funciona o cache distribuído deste projeto.", index)).toThrow();
+  expect(() => discoverFlow("Quero entender como funciona o cache distribuído deste projeto.", index, "trace_request")).toThrow();
 });
 
 test("planejador e gerador produzem um percurso verificado para o objetivo de autenticação", async () => {
   const root = mkdtempSync(join(tmpdir(), "replay-discovered-flow-"));
   const service = new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker));
   const store = new TargetedJourneyStore(root);
-  const route = await service.generateRequestJourney(golden(), AUTH_GOAL, index);
+  const route = await service.generateRequestJourney(golden(), AUTH_GOAL, index, "trace_request");
   const stages = route.stages;
 
   expect(route.goal).toEqual({ kind: "trace_request", target: AUTH_GOAL });
@@ -60,7 +60,7 @@ test("planejador e gerador produzem um percurso verificado para o objetivo de au
   }
   expect(refs.some((ref) => ref.symbol === "authorized")).toBe(true);
 
-  expect(noveltyReport(stages).every((row) => row.newLines <= 5)).toBe(true);
+  expect(noveltyReport(stages).every((row) => row.newLines <= 5 || row.exception !== undefined)).toBe(true);
   store.saveRoute(golden(), route);
   expect(store.restore([golden()])[0]?.id).toBe(route.id);
 });
@@ -82,7 +82,7 @@ test("pedido pela API de trace_request abre o percurso de autenticação descobe
 const PERSISTENCE_GOAL = "Quero entender como uma decisão de triagem é persistida no banco de dados.";
 
 test("descoberta persegue a cadeia real até a escrita de fato, através da interface de repositório", () => {
-  const flow = discoverFlow(PERSISTENCE_GOAL, index);
+  const flow = discoverFlow(PERSISTENCE_GOAL, index, "trace_request");
   const labels = flow.chain.map((s) => (s.container ? `${s.container}.${s.symbol}` : s.symbol));
   // The chain must not stop at the first relevant hit (PersistedTriageService.execute) — it has
   // to keep following real, resolved calls through the repository's interface, to its one real
@@ -103,11 +103,12 @@ test("descobre e gera um percurso mais longo (persistência) sem restrição de 
   const root = mkdtempSync(join(tmpdir(), "replay-persistence-flow-"));
   const service = new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker));
   const store = new TargetedJourneyStore(root);
-  const route = await service.generateRequestJourney(golden(), PERSISTENCE_GOAL, index);
+  const route = await service.generateRequestJourney(golden(), PERSISTENCE_GOAL, index, "trace_request");
   const stages = route.stages;
 
   expect(route.goal).toEqual({ kind: "trace_request", target: PERSISTENCE_GOAL });
-  expect(stages).toHaveLength(5);
+  // One stage per node: depending on a contract and implementing it are separate steps.
+  expect(stages).toHaveLength(7);
   expect(stages.at(-1)?.kind).toBe("checkpoint");
   expect(stages.slice(0, -1).every((s) => s.kind === "micro")).toBe(true);
 
@@ -125,7 +126,7 @@ test("descobre e gera um percurso mais longo (persistência) sem restrição de 
   expect(stages.at(-1)?.checkpoint?.answer).toContain("injeção de dependência");
   expect(stages.at(-1)?.checkpoint?.answer).toContain("createDecision");
 
-  expect(noveltyReport(stages).every((row) => row.newLines <= 5)).toBe(true);
+  expect(noveltyReport(stages).every((row) => row.newLines <= 5 || row.exception !== undefined)).toBe(true);
   store.saveRoute(golden(), route);
   expect(store.restore([golden()])[0]?.id).toBe(route.id);
 });
@@ -133,13 +134,13 @@ test("descobre e gera um percurso mais longo (persistência) sem restrição de 
 test("jornada de autenticação anterior continua funcionando após a generalização", async () => {
   const root = mkdtempSync(join(tmpdir(), "replay-auth-regression-"));
   const service = new ModuleGenerationService(root, new StagePlanner(), new StageGenerator(), new StageValidator(checker));
-  const route = await service.generateRequestJourney(golden(), AUTH_GOAL, index);
+  const route = await service.generateRequestJourney(golden(), AUTH_GOAL, index, "trace_request");
   expect(route.stages.at(-1)?.checkpoint?.answer).toContain("authorized");
   expect(route.stages.some((s) => s.exercise?.supportFiles.some((f) => f.path === "guard.ts"))).toBe(true);
 });
 
 test("objetivo sem símbolo relevante explica a limitação em vez de inventar", () => {
-  expect(() => new StagePlanner().planRequest("Quero entender como funciona o cache distribuído deste projeto.", golden(), index)).toThrow();
+  expect(() => new StagePlanner().planRequest("Quero entender como funciona o cache distribuído deste projeto.", golden(), index, "trace_request")).toThrow();
 });
 
 test("resolução de tipo declarado: propriedade injetada via construtor e parâmetro de função", () => {

@@ -15,6 +15,7 @@ import { generateStructuredDecision, planStructuredDecision, type StructuredDeci
 import { generateRemoteClassifier, planRemoteClassifier, type RemoteClassifierPlan } from "./remote-classifier-generation.ts";
 import { generateRequestTrace, looksLikeTicketFlowGoal, planRequestTrace, type RequestTracePlan } from "./request-trace-generation.ts";
 import { generateDiscoveredFlow, planDiscoveredFlow, type DiscoveredFlowPlan } from "./discovered-flow-generation.ts";
+import type { FlowIntent } from "./flow-discovery.ts";
 
 /** One narrow provider contract. Other generators can replace this without entering the API or core. */
 export interface StageGenerationProvider {
@@ -84,21 +85,28 @@ function contractNarrative(idea: Idea, binding: Binding, previous: string, limit
   return stageNarrative({ previous, need, limitation, task, outcome, code, detail: `No projeto real, ${realSymbol} aparece em ${realPath}. O Replay pratica esta relação com uma versão menor.` });
 }
 
+/** The hand-authored legacy generators (contract, ticket trace) exist for this one repository only. */
+const isOpsTriageRepo = (journey: Journey): boolean => journey.repo.owner === "marcelotaparelli" && journey.repo.name === "ops-triage-ai";
+
 /** Planner reads declarations from the pinned source and returns pedagogy only, never stages. */
 export class StagePlanner {
   /**
-   * Ticket triage keeps its own hand-authored trace (looksLikeTicketFlowGoal): it predates
-   * discovery and spans a business flow no static analysis can reconstruct from code alone
-   * (DB writes, an LLM call). Any other technical goal about a request flow is planned instead
-   * by discovering a minimal, verified call chain from a real HTTP entry point — no per-goal
-   * recipe, no manual mapping of the goal to the code.
+   * Ticket triage in ops-triage-ai keeps its own hand-authored trace (looksLikeTicketFlowGoal): it
+   * predates discovery and spans a business flow no static analysis can reconstruct from code alone
+   * (DB writes, an LLM call). Any other technical goal about a request flow — in that repository or
+   * any other — is planned instead by discovering a minimal, verified call chain from a real HTTP
+   * entry point: no per-goal recipe, no manual mapping of the goal to the code.
+   *
+   * The learner's intent decides the plan, not only which planner runs: a traced request starts at
+   * a real HTTP entry (and fails without one); a free technical goal starts at the outermost
+   * symbol related to it (see discoverFlow).
    */
-  planRequest(goal: string, journey: Journey, index: RepositoryIndex): RequestTracePlan | DiscoveredFlowPlan {
-    if (looksLikeTicketFlowGoal(goal)) return planRequestTrace(goal, journey, index);
-    return planDiscoveredFlow(goal, journey, index);
+  planRequest(goal: string, journey: Journey, index: RepositoryIndex, intent: FlowIntent): RequestTracePlan | DiscoveredFlowPlan {
+    if (intent === "trace_request" && isOpsTriageRepo(journey) && looksLikeTicketFlowGoal(goal)) return planRequestTrace(goal, journey, index);
+    return planDiscoveredFlow(goal, intent, index);
   }
   plan(goal: string, journey: Journey, moduleId: string, index: RepositoryIndex): StagePlan {
-    if (journey.repo.owner !== "marcelotaparelli" || journey.repo.name !== "ops-triage-ai") throw new Error("Este gerador atende somente o repositório acompanhado nesta jornada.");
+    if (!isOpsTriageRepo(journey)) throw new Error("Este gerador atende somente o repositório acompanhado nesta jornada.");
     const module = journey.modules.find((m) => m.id === moduleId);
     const chapter = journey.stages.find((s) => s.moduleId === moduleId && s.kind === "chapter");
     if (!module || !chapter || module.stageIds.length !== 1) throw new Error("Este módulo não é um capítulo legado único.");
@@ -256,6 +264,12 @@ export function withGeneratedModule(journey: Journey, moduleId: string, generate
   return { ...journey, modules: journey.modules.map((m) => m.id === moduleId ? { ...m, stageIds: generated.map((s) => s.id) } : m), stages };
 }
 
+/** New lines a micro stage may add on its own; beyond it a justification (noveltyException) is required. */
+const NOVELTY_BUDGET = 5;
+/** Even a justified stage stops here: past it the answer is to decompose. Structural fidelity (a type, a
+ *  parameter and a class that only make sense together) may need more than the budget, never unbounded. */
+const NOVELTY_CEILING = 12;
+
 /** Validator checks the complete candidate before it can replace the legacy chapter. */
 export class StageValidator {
   constructor(private readonly checker: TypeChecker) {}
@@ -272,7 +286,7 @@ export class StageValidator {
         const before = i ? stages[i - 1]?.exercise?.solutionFiles[0]?.content ?? "" : "";
         const after = exercise.solutionFiles[0]?.content ?? "";
         const novel = noveltyLines(before, after).length;
-        if (novel > 5 && (!stage.noveltyException || novel >= 8)) problems.push(`${stage.id}: ${novel} linhas novas excedem o orçamento`);
+        if (novel > NOVELTY_BUDGET && (!stage.noveltyException || novel > NOVELTY_CEILING)) problems.push(`${stage.id}: ${novel} linhas novas excedem o orçamento`);
         if (exercise.starterFiles[0]?.content.trim() !== before.trim()) problems.push(`${stage.id}: workspace não cumulativo`);
         if (i && !stage.problem.includes(stages[i - 1]!.limitation ?? "\u0000")) problems.push(`${stage.id}: problema não nasce da limitação anterior`);
         const previousNodes = new Set(stages[i - 1]?.architecture?.nodes.map((n) => n.id) ?? []);
@@ -306,6 +320,15 @@ export class StageValidator {
   }
 }
 
+function discoveredFlowLabels(base: Journey, plan: DiscoveredFlowPlan): { description: string; moduleTitle: string } {
+  const nameOf = (node: { container: string | null; symbol: string }): string => (node.container ? `${node.container}.${node.symbol}` : node.symbol);
+  const where = `em ${base.repo.owner}/${base.repo.name}, seguindo só chamadas comprovadas no código fixado.`;
+  // A chain that leaves the repository ends at the real call into the package, not at the last node of the repository.
+  const end = plan.external ? `${plan.external.base}.${plan.external.members.join(".")}, do pacote ${plan.external.module}` : nameOf(plan.chain.at(-1)!);
+  if (plan.intent === "other") return { description: `De ${nameOf(plan.chain[0]!)} até ${end} ${where}`, moduleTitle: "Percurso técnico" };
+  return { description: `Da entrada HTTP até ${end} ${where}`, moduleTitle: "Fluxo descoberto" };
+}
+
 export class ModuleGenerationService {
   constructor(private readonly root: string, private readonly planner: StagePlanner, private readonly provider: StageGenerationProvider, private readonly validator: StageValidator) {}
   path(journeyId: string, moduleId: string): string { return join(this.root, journeyId, `${moduleId}.json`); }
@@ -333,15 +356,19 @@ export class ModuleGenerationService {
     return candidate;
   }
 
-  async generateRequestJourney(base: Journey, goal: string, index: RepositoryIndex): Promise<Journey> {
-    const plan = this.planner.planRequest(goal, base, index);
+  async generateRequestJourney(base: Journey, goal: string, index: RepositoryIndex, intent: FlowIntent): Promise<Journey> {
+    const plan = this.planner.planRequest(goal, base, index, intent);
     const generated = this.provider.generate(plan, base, index);
     const normalized = goal.trim().toLowerCase();
     const slug = normalized.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "fluxo";
-    const id = `${base.id}--${slug}-${createHash("sha256").update(normalized).digest("hex").slice(0, 8)}`;
+    // The intent is part of the identity: the same sentence traced and asked freely are different journeys.
+    // trace_request keeps its historical hash, so routes saved before intents existed keep their ids.
+    const identity = intent === "trace_request" ? normalized : `${intent}:${normalized}`;
+    const id = `${base.id}--${slug}-${createHash("sha256").update(identity).digest("hex").slice(0, 8)}`;
     const ids = generated.map((stage) => `${id}.${stage.id.split(".").at(-1)}`);
     const stages = generated.map((stage, i) => ({ ...stage, id: ids[i]!, tutorContext: { ...stage.tutorContext, previousStages: ids.slice(0, i) } }));
-    const route: Journey = { ...base, id, title: `${base.repo.name}: ${goal.trim()}`, description: "Da entrada HTTP à decisão e persistência, com referências ao código fixado.", goal: { kind: "trace_request", target: goal.trim() }, modules: [{ id: "flow", title: "Fluxo do ticket", stageIds: ids }], stages };
+    const { description, moduleTitle } = plan.kind === "discovered-flow" ? discoveredFlowLabels(base, plan) : { description: "Da entrada HTTP à decisão e persistência, com referências ao código fixado.", moduleTitle: "Fluxo do ticket" };
+    const route: Journey = { ...base, id, title: `${base.repo.name}: ${goal.trim()}`, description, goal: intent === "trace_request" ? { kind: "trace_request", target: goal.trim() } : { kind: "other", note: goal.trim() }, modules: [{ id: "flow", title: moduleTitle, stageIds: ids }], stages };
     await this.validator.validate(route, "flow", stages, index);
     return route;
   }

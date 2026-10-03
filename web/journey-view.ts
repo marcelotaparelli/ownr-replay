@@ -6,7 +6,7 @@ import { ApiError, api, type JourneyCard } from "./api.ts";
 import type { LearningGoal, LearningGoalKind, LearningTopic } from "../src/domain/learning-goal.ts";
 import { h } from "./dom.ts";
 import { mdInline } from "./md.ts";
-import type { ProgressStore } from "./store.ts";
+import { lastRepoUrl, rememberRepoUrl, type ProgressStore } from "./store.ts";
 
 const STATUS_ICON: Record<StageStatus, string> = {
   not_started: "○",
@@ -284,12 +284,18 @@ const TOPICS: { value: LearningTopic; label: string }[] = [
   { value: "integrations", label: "Integrações (LLM, HTTP)" },
 ];
 
+/** Only for a first visit: afterwards the form starts from the repository the developer last used. */
 const SAMPLE_REPO = "https://github.com/marcelotaparelli/ops-triage-ai";
+
+/** "owner/repo" as the developer typed it, for messages that must say which repository was used. */
+function repoLabel(repoUrl: string): string {
+  return repoUrl.trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$|\/$/, "");
+}
 
 /** Repo + what the developer wants to understand → a journey (planned per goal in the future). */
 export function renderHome(journeys: JourneyCard[], resume: { journey: JourneyCard; label: string } | undefined): HTMLElement {
   const message = h("div", { class: "goal-message", "aria-live": "polite" });
-  const url = h("input", { type: "url", name: "repoUrl", required: true, value: SAMPLE_REPO, placeholder: "https://github.com/owner/repo", "aria-label": "URL do repositório no GitHub" });
+  const url = h("input", { type: "url", name: "repoUrl", required: true, value: lastRepoUrl() ?? SAMPLE_REPO, placeholder: "https://github.com/owner/repo", "aria-label": "URL do repositório no GitHub" });
   const target = h("input", { type: "text", name: "target", maxlength: 300, placeholder: "ex.: HybridPolicy, src/server.ts", "aria-label": "Qual parte" });
   const topic = h("select", { name: "topic", "aria-label": "Tema" }, ...TOPICS.map((t) => h("option", { value: t.value }, t.label)));
   const note = h("textarea", { name: "note", rows: 2, maxlength: 300, placeholder: "O que você quer entender?", "aria-label": "Objetivo" });
@@ -331,9 +337,11 @@ export function renderHome(journeys: JourneyCard[], resume: { journey: JourneyCa
       ...(kind === "topic" ? { topic: topic.value as LearningTopic } : {}),
       ...(kind === "other" && note.value.trim() ? { note: note.value.trim() } : {}),
     };
-    message.replaceChildren(h("p", { class: "muted" }, "Verificando…"));
+    const repoUrl = url.value.trim();
+    rememberRepoUrl(repoUrl);
+    message.replaceChildren(h("p", { class: "muted" }, `Analisando repositório ${repoLabel(repoUrl)}…`));
     api
-      .createJourney(url.value, goal)
+      .createJourney(repoUrl, goal)
       .then(({ id, startOrder }) => {
         location.hash = startOrder ? stageHref(id, startOrder) : `#/j/${id}`;
       })
@@ -341,6 +349,7 @@ export function renderHome(journeys: JourneyCard[], resume: { journey: JourneyCa
         if (!(error instanceof ApiError)) return message.replaceChildren(h("p", { class: "fail" }, "Falha ao criar a jornada."));
         const fallback = fallbackId(error.body);
         message.replaceChildren(
+          h("p", { class: "muted" }, `Repositório: ${repoLabel(repoUrl)}`),
           h("p", {}, error.message),
           ...(fallback ? [h("a", { class: "btn", href: `#/j/${fallback}` }, "Aprender o projeto do zero →")] : []),
         );
